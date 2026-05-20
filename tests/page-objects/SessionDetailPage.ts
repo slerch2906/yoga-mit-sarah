@@ -15,35 +15,33 @@ export class SessionDetailPage {
   // ── Buchung ───────────────────────────────────────────────────────────────
 
   async book() {
-    await this.page.getByRole('button', { name: /jetzt anmelden|buchen|einschreiben/i }).click()
-    // Warte auf Erfolgsmeldung oder Status-Wechsel
+    await this.page.getByRole('button', { name: /für diese stunde eintragen|trotzdem eintragen/i }).click()
     await expect(
-      this.page.getByText(/angemeldet|buchung bestätigt|erfolgreich/i)
+      this.page.getByRole('heading', { name: /du bist dabei/i })
     ).toBeVisible({ timeout: 10_000 })
   }
 
   async expectBookedStatus() {
-    await expect(this.page.getByText(/angemeldet/i).first()).toBeVisible()
+    await expect(this.page.getByRole('heading', { name: /du bist dabei/i })).toBeVisible()
   }
 
   async expectNoBookButton() {
     await expect(
-      this.page.getByRole('button', { name: /jetzt anmelden|buchen/i })
+      this.page.getByRole('button', { name: /für diese stunde eintragen|trotzdem eintragen/i })
     ).not.toBeVisible()
   }
 
   // ── Abmeldung ─────────────────────────────────────────────────────────────
 
   async cancelBooking() {
-    await this.page.getByRole('button', { name: /abmelden|stornieren/i }).click()
-    // Bestätigungs-Dialog falls vorhanden
-    const confirmBtn = this.page.getByRole('button', { name: /bestätigen|ja.*abmelden|abmelden/i })
-    if (await confirmBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await confirmBtn.click()
-    }
-    await expect(
-      this.page.getByText(/abgemeldet|nicht angemeldet|anmelden/i).first()
-    ).toBeVisible({ timeout: 10_000 })
+    await this.page.getByRole('button', { name: /von dieser stunde abmelden/i }).click()
+    const confirmBtn = this.page.getByRole('button', { name: /ja, abmelden/i })
+    await confirmBtn.waitFor({ timeout: 5_000 })
+    await confirmBtn.click()
+    await this.page.waitForURL(
+      url => !new URL(url).pathname.startsWith('/kurse/'),
+      { timeout: 10_000 }
+    )
   }
 
   async expectCancellationMessage(type: 'early' | 'late') {
@@ -61,16 +59,16 @@ export class SessionDetailPage {
   // ── Warteliste ────────────────────────────────────────────────────────────
 
   async joinWaitlist() {
-    await this.page.getByRole('button', { name: /warteliste/i }).click()
+    await this.page.getByRole('button', { name: /auf die warteliste setzen/i }).click()
     await expect(
-      this.page.getByText(/warteliste|position|vorgemerkt/i)
+      this.page.getByText(/du stehst auf der warteliste/i)
     ).toBeVisible({ timeout: 10_000 })
   }
 
   async joinNotifyList() {
-    await this.page.getByRole('button', { name: /benachrichtig/i }).click()
+    await this.page.getByRole('button', { name: /benachrichtige mich/i }).click()
     await expect(
-      this.page.getByText(/benachrichtig|informiert/i)
+      this.page.getByText(/benachrichtigung aktiviert/i)
     ).toBeVisible({ timeout: 10_000 })
   }
 
@@ -82,8 +80,8 @@ export class SessionDetailPage {
 
   async expectFullMessage() {
     await expect(
-      this.page.getByText(/ausgebucht|voll|keine.*plätze/i)
-    ).toBeVisible()
+      this.page.getByText('Ausgebucht', { exact: true })
+    ).toBeVisible({ timeout: 15_000 })
   }
 
   // ── Abgesagte Stunde ──────────────────────────────────────────────────────

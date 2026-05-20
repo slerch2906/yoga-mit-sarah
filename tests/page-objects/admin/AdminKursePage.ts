@@ -98,18 +98,28 @@ export class AdminKursePage {
 
   // ── Kurs abbrechen ────────────────────────────────────────────────────────
 
-  async cancelCourse(courseName: string, reason = 'E2E Testabbruch') {
-    const card = this.page.locator('div, section', { hasText: courseName }).first()
-    await card.getByRole('button', { name: /kurs abbrechen|abbruch/i }).click()
+  async openCancelModal(courseName: string) {
+    const card = this.page.locator('.card', { hasText: courseName }).first()
+    await card.getByRole('button', { name: /abbrechen/i }).click()
+    await expect(this.page.getByText('Kurs abbrechen').first()).toBeVisible({ timeout: 5_000 })
+  }
 
-    const reasonInput = this.page.getByPlaceholder(/grund|begründung/i)
-    if (await reasonInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await reasonInput.fill(reason)
+  async fillCancelModal(reason: string, mode: 'all_refund' | 'yogi_choice') {
+    await this.page.getByPlaceholder(/z\.B\. Krankheit/i).fill(reason)
+    if (mode === 'all_refund') {
+      await this.page.getByText('Alle bekommen Geld zurück').click()
+    } else {
+      await this.page.getByText('Teilnehmer entscheiden selbst').click()
     }
+  }
 
-    await this.page.getByRole('button', { name: /bestätigen|kurs abbrechen/i }).click()
-    await expect(
-      this.page.getByText(/abgebrochen|archiviert|emails.*gesendet/i)
-    ).toBeVisible({ timeout: 15_000 })
+  async confirmCancelModal() {
+    // The app calls alert() after ALL DB operations complete, so waiting for the
+    // dialog event guarantees the DB is fully updated before we proceed.
+    const dialogPromise = this.page.waitForEvent('dialog', { timeout: 30_000 })
+    await this.page.getByRole('button', { name: /kurs abbrechen.*yogis informieren/i }).click()
+    const dialog = await dialogPromise
+    await dialog.accept()
+    await this.page.waitForTimeout(500)
   }
 }

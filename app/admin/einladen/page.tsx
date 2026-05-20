@@ -159,13 +159,6 @@ function EinladenInner() {
     <div className="max-w-md mx-auto min-h-screen">
       <AppHeader title="Einladen" isAdmin />
       <div className="px-4 py-4">
-        <div className="card mb-4" style={{ background: '#fdf3e7', borderColor: 'rgba(107,79,26,0.2)' }}>
-          <p className="text-sm leading-relaxed" style={{ color: '#6b4f1a' }}>
-            <i className="ti ti-bolt mr-1" />
-            Wenn du einen Kurs auswählst, berechnet die App automatisch die verbleibenden Stunden und gibt dem Yogi genau diese Credits.
-          </p>
-        </div>
-
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>

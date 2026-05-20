@@ -30,9 +30,9 @@ export class AdminYogisPage {
     email: string
     courseId?: string
   }) {
-    await this.page.getByLabel(/vorname/i).fill(options.firstName)
-    await this.page.getByLabel(/nachname/i).fill(options.lastName)
-    await this.page.getByLabel(/e-mail/i).fill(options.email)
+    await this.page.getByPlaceholder('Anna', { exact: true }).first().fill(options.firstName)
+    await this.page.getByPlaceholder('Müller', { exact: true }).first().fill(options.lastName)
+    await this.page.getByPlaceholder('anna@beispiel.de', { exact: true }).first().fill(options.email)
 
     if (options.courseId) {
       await this.page.getByRole('combobox').selectOption(options.courseId)
@@ -40,7 +40,7 @@ export class AdminYogisPage {
   }
 
   async submitInvite() {
-    await this.page.getByRole('button', { name: /einlad|erstellen|senden/i }).click()
+    await this.page.getByRole('button', { name: /einladungslink/i }).click()
     await expect(
       this.page.getByText(/einladung.*erstellt|link.*kopier|erfolgreich/i)
     ).toBeVisible({ timeout: 10_000 })
@@ -48,8 +48,8 @@ export class AdminYogisPage {
 
   async expectInviteLink() {
     await expect(
-      this.page.getByText(/einladungslink|link/i)
-    ).toBeVisible()
+      this.page.getByRole('button', { name: /link kopieren/i })
+    ).toBeVisible({ timeout: 8_000 })
   }
 
   // ── Kurs-Dropdown ─────────────────────────────────────────────────────────

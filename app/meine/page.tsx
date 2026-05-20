@@ -110,7 +110,7 @@ export default function MeinePage() {
         {/* Credits Detail-Anzeige – immer sichtbar */}
         {credits.length > 0 && (
           <div className="mb-4">
-            <p className="text-sm text-yoga-text/60 mb-2 font-semibold">Deine Credits</p>
+            <p className="section-label">Deine Credits</p>
             {credits.map(c => {
               const free = Math.max(0, c.total - c.used)
               return (
@@ -150,6 +150,9 @@ export default function MeinePage() {
           </div>
         )}
 
+        {enrollments.length > 0 && (
+          <p className="section-label">{enrollments.length === 1 ? 'Dein Kurs' : 'Deine Kurse'}</p>
+        )}
         {enrollments.map(enrol => {
           const sessions = courseSessions[enrol.course_id] || []
           const done = sessions.filter(s => new Date(s.date) < new Date() && s.myBooking?.status === 'active').length

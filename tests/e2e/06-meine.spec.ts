@@ -5,7 +5,7 @@
 import { test, expect } from '@playwright/test'
 import { MeinePage } from '../page-objects/MeinePage'
 import { createTestCourse, giveYogiSingleCredit, E2E_PREFIX } from '../utils/seed'
-import { getUserIdByEmail } from '../utils/db'
+import { getUserIdByEmail, getAdminClient } from '../utils/db'
 import * as dotenv from 'dotenv'
 
 dotenv.config({ path: '.env.test' })
@@ -38,8 +38,7 @@ test.describe('Meine Stunden', () => {
   })
 
   test('Kurs-Credits zeigen Kursnamen', async ({ page }) => {
-    const { createClient } = await import('@supabase/supabase-js')
-    const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    const db = await getAdminClient()
 
     const course = await createTestCourse({ name: `${E2E_PREFIX} Kreditkurs` })
     const expires = new Date(); expires.setDate(expires.getDate() + 90)
@@ -60,8 +59,7 @@ test.describe('Meine Stunden', () => {
   })
 
   test('Ausgeschlossene Stunden erscheinen NICHT in Meine', async ({ page }) => {
-    const { createClient } = await import('@supabase/supabase-js')
-    const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    const db = await getAdminClient()
 
     const courseName = `${E2E_PREFIX} Ausschluss-Test`
     const course = await createTestCourse({ name: courseName, sessionCount: 3, startDaysFromNow: 30 })
@@ -88,12 +86,13 @@ test.describe('Meine Stunden', () => {
     await meinePage.goto()
 
     // Kursstunden-Abschnitt für diesen Kurs prüfen
-    await expect(page.getByText(courseName)).toBeVisible()
+    await expect(page.getByText(courseName).first()).toBeVisible()
 
     // Die ausgeschlossene Session (index 1) darf NICHT sichtbar sein
     const excludedDate = course.sessionDates[1]
-    const day = new Date(excludedDate).getDate()
+    const [year, month, dayNum] = excludedDate.split('-').map(Number)
+    const formattedDate = new Date(year, month - 1, dayNum, 12, 0, 0).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })
     // Ausgeschlossene Termine werden in Meine nicht gezeigt
-    await meinePage.expectExcludedSessionNotVisible(String(day))
+    await meinePage.expectExcludedSessionNotVisible(formattedDate)
   })
 })

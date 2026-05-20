@@ -48,8 +48,10 @@ export class MeinePage {
     await expect(row.getByText(status)).toBeVisible()
   }
 
-  async expectExcludedSessionNotVisible(date: string) {
+  async expectExcludedSessionNotVisible(formattedDate: string) {
     // Ausgeschlossene Stunden sollen NICHT in Meine erscheinen
-    await expect(this.page.getByText(date)).not.toBeVisible()
+    await expect(
+      this.page.locator('.text-sm.font-bold', { hasText: formattedDate })
+    ).toHaveCount(0, { timeout: 5_000 })
   }
 }

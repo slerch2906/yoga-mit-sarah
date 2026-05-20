@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test'
 import { AdminKursePage } from '../../page-objects/admin/AdminKursePage'
 import { AdminDashboardPage } from '../../page-objects/admin/AdminDashboardPage'
 import { createTestCourse, giveYogiSingleCredit, E2E_PREFIX, futureDateStr } from '../../utils/seed'
-import { getUserIdByEmail, getCredit } from '../../utils/db'
+import { getUserIdByEmail, getCredit, getAdminClient } from '../../utils/db'
 import * as dotenv from 'dotenv'
 
 dotenv.config({ path: '.env.test' })
@@ -34,8 +34,7 @@ test.describe('Admin Kursverwaltung', () => {
   })
 
   test('Stunde absagen → wird als "Abgesagt" angezeigt, kein Buchungs-Button', async ({ page }) => {
-    const { createClient } = await import('@supabase/supabase-js')
-    const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    const db = await getAdminClient()
 
     // Direktes Absagen über DB (UI-Flow ist in Anwesenheits-Tests)
     await db.from('sessions').update({ is_cancelled: true, cancel_reason: 'E2E Test' }).eq('id', sessionId)
@@ -50,8 +49,7 @@ test.describe('Admin Kursverwaltung', () => {
       sessionCount: 2,
     })
 
-    const { createClient } = await import('@supabase/supabase-js')
-    const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    const db = await getAdminClient()
     await db.from('courses').update({ is_active: false }).eq('id', course.courseId)
 
     const dashboard = new AdminDashboardPage(page)
@@ -69,8 +67,7 @@ test.describe('Admin Kursverwaltung', () => {
   })
 
   test('Kurs-Rollover: Ausgeschlossene Stunden bekommen keine Buchungen', async ({ page }) => {
-    const { createClient } = await import('@supabase/supabase-js')
-    const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    const db = await getAdminClient()
 
     // Ursprungskurs mit 4 Sessions (1 wird ausgeschlossen)
     const originCourse = await createTestCourse({

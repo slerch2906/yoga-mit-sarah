@@ -50,7 +50,7 @@ test.describe('Buchung & Abmeldung', () => {
 
     // Stunde erscheint in "Meine"
     await meinePage.goto()
-    await meinePage.expectSessionVisible(process.env.TEST_YOGI1_EMAIL!) // Kursname erscheint in Meine
+    await meinePage.expectSessionVisible('[E2E] Testkurs')
   })
 
   test('Rechtzeitige Abmeldung (> 3h vorher) → Credit wird zurückgebucht', async ({ page }) => {
@@ -85,8 +85,8 @@ test.describe('Buchung & Abmeldung', () => {
   })
 
   test('Abgesagte Stunde zeigt Hinweis – keine Buchung möglich', async ({ page }) => {
-    const { createClient } = await import('@supabase/supabase-js')
-    const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    const { getAdminClient } = await import('../utils/db')
+    const db = await getAdminClient()
 
     // Session als abgesagt markieren
     const course = await createTestCourse({ startDaysFromNow: 20, sessionCount: 1 })

@@ -10,9 +10,9 @@ export class LoginPage {
 
   async login(email: string, password: string) {
     await this.page.getByPlaceholder(/e-mail|email/i).fill(email)
-    await this.page.getByPlaceholder(/passwort|password/i).fill(password)
+    await this.page.locator('input[type="password"]').fill(password)
     await this.page.getByRole('button', { name: /anmelden|einloggen|login/i }).click()
-    await this.page.waitForURL(/\/(kurse|admin)/, { timeout: 15_000 })
+    await this.page.waitForURL(url => new URL(url).pathname !== '/login', { timeout: 15_000 })
   }
 
   async expectLoginError() {
@@ -23,10 +23,9 @@ export class LoginPage {
 
   async logout() {
     await this.page.goto('/profil')
-    const logoutBtn = this.page.getByRole('button', { name: /abmelden|ausloggen|logout/i })
-    if (await logoutBtn.isVisible()) {
-      await logoutBtn.click()
-      await this.page.waitForURL(/login/)
-    }
+    const logoutBtn = this.page.getByRole('button', { name: /ausloggen/i })
+    await logoutBtn.waitFor({ timeout: 10_000 })
+    await logoutBtn.click()
+    await this.page.waitForURL(/\/login/, { timeout: 10_000 })
   }
 }

@@ -1,19 +1,12 @@
 /**
  * Testdaten anlegen und bereinigen.
- * Alle Testdaten haben den Prefix [E2E] im Namen und e2e. in der E-Mail.
+ * Alle Testdaten haben den Prefix [E2E] im Namen.
  */
 import { createClient } from '@supabase/supabase-js'
+import { getServiceClient, getAdminClient } from './db'
 
 export const E2E_PREFIX = '[E2E]'
 export const E2E_EMAIL_PREFIX = 'e2e.'
-
-function db() {
-  return createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  )
-}
 
 // ── Datum-Hilfsfunktionen ─────────────────────────────────────────────────────
 
@@ -33,9 +26,8 @@ function weekdayDE(dateStr: string): string {
 // ── Auth-Nutzer anlegen ───────────────────────────────────────────────────────
 
 export async function ensureTestUser(email: string, password: string, isAdmin = false) {
-  const client = db()
+  const client = getServiceClient()
 
-  // Prüfen ob User schon existiert
   const { data: existingUsers } = await client.auth.admin.listUsers()
   let user = existingUsers?.users?.find(u => u.email === email)
 
@@ -51,22 +43,26 @@ export async function ensureTestUser(email: string, password: string, isAdmin = 
 
   if (!user?.id) throw new Error(`User-ID für ${email} nicht gefunden`)
 
-  // Profil anlegen / aktualisieren
   const firstName = email.includes('admin') ? 'E2E' : 'Test'
   const lastName = email.includes('admin') ? 'Admin' : email.includes('yogi1') ? 'Yogi1' : 'Yogi2'
 
-  await client.from('profiles').upsert({
+  // Als dieser User einloggen um Profil anzulegen (RLS: auth.uid() = id)
+  const userClient = getServiceClient()
+  const { error: signInErr } = await userClient.auth.signInWithPassword({ email, password })
+  if (signInErr) throw new Error(`Login für ${email} fehlgeschlagen: ${signInErr.message}`)
+
+  await userClient.from('profiles').upsert({
     id: user.id,
     first_name: firstName,
     last_name: lastName,
     email,
     is_admin: isAdmin,
+    is_dummy: false,
     legal_accepted_at: new Date().toISOString(),
     legal_version: '2025-12',
   }, { onConflict: 'id' })
 
-  // AGB-Akzeptanz eintragen
-  await client.from('legal_acceptances').upsert({
+  await userClient.from('legal_acceptances').upsert({
     user_id: user.id,
     version: '2025-12',
     full_name: `${firstName} ${lastName}`,
@@ -89,7 +85,7 @@ export async function createTestCourse(options: {
   sessionCount?: number
   startDaysFromNow?: number
 } = {}): Promise<TestCourse> {
-  const client = db()
+  const db = await getAdminClient()
   const {
     name = `${E2E_PREFIX} Testkurs`,
     maxSpots = 3,
@@ -105,7 +101,7 @@ export async function createTestCourse(options: {
   const dateStart = dates[0]
   const dateEnd = dates[dates.length - 1]
 
-  const { data: course, error } = await client.from('courses').insert({
+  const { data: course, error } = await db.from('courses').insert({
     name,
     weekday: weekdayDE(dateStart),
     time_start: '18:30:00',
@@ -117,6 +113,7 @@ export async function createTestCourse(options: {
     location: 'E2E Teststudio',
     is_active: true,
     is_single: false,
+    is_open: true,
   }).select('id').single()
 
   if (error || !course) throw new Error(`Testkurs konnte nicht erstellt werden: ${error?.message}`)
@@ -129,7 +126,7 @@ export async function createTestCourse(options: {
     is_cancelled: false,
   }))
 
-  const { data: sessions, error: sessErr } = await client
+  const { data: sessions, error: sessErr } = await db
     .from('sessions').insert(sessionRows).select('id, date')
   if (sessErr || !sessions) throw new Error(`Sessions konnten nicht erstellt werden: ${sessErr?.message}`)
 
@@ -144,18 +141,16 @@ export async function createTestCourse(options: {
 export async function createFullCourse(yogi1Id: string, yogi2Id: string): Promise<TestCourse> {
   const course = await createTestCourse({
     name: `${E2E_PREFIX} Ausgebuchter Kurs`,
-    maxSpots: 1,   // Nur 1 Platz → nach Yogi1 voll
+    maxSpots: 1,
     sessionCount: 2,
     startDaysFromNow: 14,
   })
 
-  const client = db()
-
-  // Yogi1 einbuchen (belegt den einzigen Platz)
+  const db = await getAdminClient()
   const expires = new Date()
   expires.setDate(expires.getDate() + 90)
 
-  await client.from('credits').insert({
+  await db.from('credits').insert({
     user_id: yogi1Id,
     course_id: course.courseId,
     model: 'course',
@@ -164,11 +159,50 @@ export async function createFullCourse(yogi1Id: string, yogi2Id: string): Promis
     expires_at: expires.toISOString(),
   })
 
-  await client.from('enrollments').insert({ user_id: yogi1Id, course_id: course.courseId })
+  await db.from('enrollments').insert({ user_id: yogi1Id, course_id: course.courseId })
 
   for (const sessionId of course.sessionIds) {
-    await client.from('bookings').insert({
+    await db.from('bookings').insert({
       user_id: yogi1Id,
+      session_id: sessionId,
+      type: 'course',
+      status: 'active',
+    })
+  }
+
+  return course
+}
+
+/** Kurs mit einem eingebuchten Yogi anlegen (für Kursabbruch-Tests) */
+export async function createEnrolledCourse(userId: string, options: {
+  name?: string
+  sessionCount?: number
+} = {}): Promise<TestCourse> {
+  const course = await createTestCourse({
+    name: options.name || `${E2E_PREFIX} Abbruch-Kurs`,
+    maxSpots: 5,
+    sessionCount: options.sessionCount || 3,
+    startDaysFromNow: 14,
+  })
+
+  const db = await getAdminClient()
+  const expires = new Date()
+  expires.setDate(expires.getDate() + 180)
+
+  await db.from('credits').insert({
+    user_id: userId,
+    course_id: course.courseId,
+    model: 'course',
+    total: course.sessionIds.length,
+    used: 0,
+    expires_at: expires.toISOString(),
+  })
+
+  await db.from('enrollments').insert({ user_id: userId, course_id: course.courseId })
+
+  for (const sessionId of course.sessionIds) {
+    await db.from('bookings').insert({
+      user_id: userId,
       session_id: sessionId,
       type: 'course',
       status: 'active',
@@ -180,10 +214,10 @@ export async function createFullCourse(yogi1Id: string, yogi2Id: string): Promis
 
 /** Einzelstunden-Credits für einen Yogi anlegen */
 export async function giveYogiSingleCredit(userId: string, count = 5) {
-  const client = db()
+  const db = await getAdminClient()
   const expires = new Date()
   expires.setFullYear(expires.getFullYear() + 1)
-  const { data } = await client.from('credits').insert({
+  const { data } = await db.from('credits').insert({
     user_id: userId,
     course_id: null,
     model: 'single',
@@ -197,32 +231,29 @@ export async function giveYogiSingleCredit(userId: string, count = 5) {
 // ── Bereinigung ───────────────────────────────────────────────────────────────
 
 export async function cleanupAllE2EData() {
-  const client = db()
+  const db = await getAdminClient()
 
-  // Alle E2E-Kurse finden
-  const { data: courses } = await client.from('courses')
+  const { data: courses } = await db.from('courses')
     .select('id').like('name', `${E2E_PREFIX}%`)
 
   if (courses && courses.length > 0) {
     const courseIds = courses.map(c => c.id)
 
-    // Sessions finden
-    const { data: sessions } = await client.from('sessions')
+    const { data: sessions } = await db.from('sessions')
       .select('id').in('course_id', courseIds)
     const sessionIds = sessions?.map(s => s.id) ?? []
 
-    // Abhängige Daten löschen
     if (sessionIds.length > 0) {
-      await client.from('waitlist').delete().in('session_id', sessionIds)
-      await client.from('bookings').delete().in('session_id', sessionIds)
+      await db.from('waitlist').delete().in('session_id', sessionIds)
+      await db.from('bookings').delete().in('session_id', sessionIds)
     }
-    await client.from('enrollments').delete().in('course_id', courseIds)
-    await client.from('credits').delete().in('course_id', courseIds)
-    await client.from('sessions').delete().in('course_id', courseIds)
-    await client.from('courses').delete().in('id', courseIds)
+    await db.from('enrollments').delete().in('course_id', courseIds)
+    await db.from('credits').delete().in('course_id', courseIds)
+    await db.from('course_cancellation_responses').delete().in('course_id', courseIds)
+    await db.from('sessions').delete().in('course_id', courseIds)
+    await db.from('courses').delete().in('id', courseIds)
   }
 
-  // E2E-Nutzer bereinigen (Credits, Bookings, Waitlist-Einträge)
   const e2eEmails = [
     process.env.TEST_ADMIN_EMAIL!,
     process.env.TEST_YOGI1_EMAIL!,
@@ -230,15 +261,11 @@ export async function cleanupAllE2EData() {
   ].filter(Boolean)
 
   for (const email of e2eEmails) {
-    const { data: profile } = await client.from('profiles').select('id').eq('email', email).maybeSingle()
+    const { data: profile } = await db.from('profiles').select('id').eq('email', email).maybeSingle()
     if (!profile) continue
-
-    // Einzelstunden-Credits (ohne Kurs-Bindung) löschen
-    await client.from('credits').delete().eq('user_id', profile.id).is('course_id', null)
-    // Guthaben-Credits löschen
-    await client.from('credits').delete().eq('user_id', profile.id).eq('model', 'guthaben')
-    // Audit-Log-Einträge für diesen Nutzer löschen
-    await client.from('audit_log').delete().eq('user_id', profile.id)
+    await db.from('credits').delete().eq('user_id', profile.id).is('course_id', null)
+    await db.from('course_cancellation_responses').delete().eq('user_id', profile.id)
+    await db.from('audit_log').delete().eq('user_id', profile.id)
   }
 
   console.log('✅ Alle E2E-Testdaten bereinigt')

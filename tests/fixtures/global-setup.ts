@@ -30,11 +30,12 @@ async function saveAuthState(
   await page.waitForLoadState('networkidle')
 
   await page.getByPlaceholder(/e-mail|email/i).fill(email)
-  await page.getByPlaceholder(/passwort|password/i).fill(password)
+  await page.locator('input[type="password"]').fill(password)
   await page.getByRole('button', { name: /anmelden|einloggen|login/i }).click()
 
-  // Warten bis Weiterleitung erfolgt
-  await page.waitForURL(/\/(kurse|admin)/, { timeout: 15_000 })
+  // Warten bis Weiterleitung erfolgt (prüft PATH, nicht Domain!)
+  await page.waitForURL(url => new URL(url).pathname !== '/login', { timeout: 15_000 })
+  await page.waitForLoadState('networkidle')
 
   await context.storageState({ path: outFile })
   await browser.close()

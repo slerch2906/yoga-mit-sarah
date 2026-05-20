@@ -573,35 +573,40 @@ export default function AdminDashboard() {
         <p className="section-label">Stunden {weekLabel.toLowerCase()}</p>
         {sessions.length === 0 ? (
           <p className="text-sm text-yoga-text/40 text-center py-4">Keine Stunden diese Woche</p>
-        ) : sessions.map(s => (
-          <button key={s.id} onClick={() => loadSessionDetail(s)}
-            className={`w-full card mb-3 text-left hover:border-yoga-border2 ${s.is_cancelled ? 'opacity-40' : ''}`}>
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <div className="text-sm font-bold">{s.course?.name}</div>
-                <div className="text-xs text-yoga-text/55">
-                  {new Date(s.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })} · {s.time_start?.slice(0,5)} Uhr
+        ) : sessions.map(s => {
+          const isPast = new Date(`${s.date}T${s.time_start}`) < new Date()
+          return (
+            <button key={s.id} onClick={() => loadSessionDetail(s)}
+              className={`w-full card mb-3 text-left hover:border-yoga-border2 ${s.is_cancelled || isPast ? 'opacity-40' : ''}`}>
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <div className="text-sm font-bold">{s.course?.name}</div>
+                  <div className="text-xs text-yoga-text/55">
+                    {new Date(s.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })} · {s.time_start?.slice(0,5)} Uhr
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  {s.is_cancelled ? (
+                    <span className="badge badge-full">Abgesagt</span>
+                  ) : isPast ? (
+                    <span className="badge">Vergangen</span>
+                  ) : (
+                    <span className={`badge ${s.active_count >= s.course?.max_spots ? 'badge-full' : 'badge-free'}`}>
+                      {s.active_count}/{s.course?.max_spots}
+                    </span>
+                  )}
+                  <i className="ti ti-chevron-right text-sm text-yoga-text/30" />
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                {s.is_cancelled ? (
-                  <span className="badge badge-full">Abgesagt</span>
-                ) : (
-                  <span className={`badge ${s.active_count >= s.course?.max_spots ? 'badge-full' : 'badge-free'}`}>
-                    {s.active_count}/{s.course?.max_spots}
-                  </span>
-                )}
-                <i className="ti ti-chevron-right text-sm text-yoga-text/30" />
-              </div>
-            </div>
-            {!s.is_cancelled && (
-              <div className="flex gap-3 text-xs text-yoga-text/50">
-                <span><i className="ti ti-check mr-0.5" />{s.active_count} angemeldet</span>
-                {s.cancelled_count > 0 && <span><i className="ti ti-x mr-0.5" />{s.cancelled_count} ausgetragen</span>}
-              </div>
-            )}
-          </button>
-        ))}
+              {!s.is_cancelled && !isPast && (
+                <div className="flex gap-3 text-xs text-yoga-text/50">
+                  <span><i className="ti ti-check mr-0.5" />{s.active_count} angemeldet</span>
+                  {s.cancelled_count > 0 && <span><i className="ti ti-x mr-0.5" />{s.cancelled_count} ausgetragen</span>}
+                </div>
+              )}
+            </button>
+          )
+        })}
       </div>
       <BottomNav isAdmin />
     </div>

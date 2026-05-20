@@ -18,12 +18,14 @@ export class AdminDashboardPage {
   }
 
   async goToNextWeek() {
-    await this.page.getByRole('button', { name: /nächste/i }).click()
+    const btn = this.page.locator('button', { hasText: 'Vor' }).first()
+    await btn.waitFor({ state: 'visible', timeout: 10_000 })
+    await btn.click()
     await this.page.waitForLoadState('networkidle')
   }
 
   async expectWeekRange(pattern: RegExp) {
-    await expect(this.page.getByText(pattern)).toBeVisible()
+    await expect(this.page.getByText(pattern).first()).toBeVisible()
   }
 
   async expectStats(options: { bookings?: number }) {

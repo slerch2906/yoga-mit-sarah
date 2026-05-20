@@ -178,3 +178,59 @@ test.describe('Kurs abbrechen – Option 2b: Yogi wählt Erstattung', () => {
     expect(updated?.choice).toBe('erstattung')
   })
 })
+
+// ── Admin-Übersicht /admin/kursabbruch ────────────────────────────────────────
+
+test.describe('Kursabbruch Admin-Übersicht: /admin/kursabbruch zeigt Status pro Yogi', () => {
+  test.use({ storageState: 'tests/.auth/admin.json' })
+
+  let courseId: string
+  let yogi1Id: string
+  const COURSE_NAME = `${E2E_PREFIX} Abbruch-Uebersicht`
+
+  test.beforeAll(async () => {
+    yogi1Id = (await getUserIdByEmail(process.env.TEST_YOGI1_EMAIL!))!
+    const course = await createEnrolledCourse(yogi1Id, { name: COURSE_NAME })
+    courseId = course.courseId
+
+    // Kurs direkt via DB als yogi_choice abgebrochen anlegen
+    const db = await getAdminClient()
+    await db.from('courses').update({ is_cancelled: true, is_active: false }).eq('id', courseId)
+    const expiresAt = new Date(); expiresAt.setDate(expiresAt.getDate() + 7)
+    await db.from('course_cancellation_responses').insert({
+      user_id: yogi1Id,
+      course_id: courseId,
+      token: `e2e-test-${Date.now()}`,
+      choice: null,
+      refund_paid: false,
+      expires_at: expiresAt.toISOString(),
+      remaining_sessions: 3,
+    })
+  })
+
+  test.afterAll(async () => {
+    const db = await getAdminClient()
+    await db.from('course_cancellation_responses').delete().eq('course_id', courseId)
+    const { data: sessions } = await db.from('sessions').select('id').eq('course_id', courseId)
+    const ids = (sessions || []).map(s => s.id)
+    if (ids.length > 0) await db.from('bookings').delete().in('session_id', ids)
+    await db.from('enrollments').delete().eq('course_id', courseId)
+    await db.from('credits').delete().eq('course_id', courseId)
+    await db.from('sessions').delete().eq('course_id', courseId)
+    await db.from('courses').delete().eq('id', courseId)
+  })
+
+  test('Admin sieht Kursabbrüche mit Status: Offen / Guthaben / Erstattung', async ({ page }) => {
+    await page.goto('/admin/kursabbruch')
+    await page.waitForLoadState('networkidle')
+
+    // Kurs erscheint in der Liste
+    await expect(page.getByText(COURSE_NAME).first()).toBeVisible({ timeout: 8_000 })
+
+    // Status "Offen" für Yogi ohne Wahl
+    await expect(page.getByText(/offen/i).first()).toBeVisible({ timeout: 5_000 })
+
+    // Statistik am Ende ("0 Guthaben · 0 Erstattung · 1 Offen")
+    await expect(page.getByText(/0 erstattung/i)).toBeVisible({ timeout: 5_000 })
+  })
+})

@@ -5,7 +5,7 @@
 import { test, expect } from '@playwright/test'
 import { AdminKursePage } from '../../page-objects/admin/AdminKursePage'
 import { AdminDashboardPage } from '../../page-objects/admin/AdminDashboardPage'
-import { createTestCourse, giveYogiSingleCredit, E2E_PREFIX, futureDateStr } from '../../utils/seed'
+import { createTestCourse, createEnrolledCourse, giveYogiSingleCredit, E2E_PREFIX, futureDateStr } from '../../utils/seed'
 import { getUserIdByEmail, getCredit, getAdminClient } from '../../utils/db'
 import * as dotenv from 'dotenv'
 
@@ -150,5 +150,50 @@ test.describe('Admin Kursverwaltung', () => {
       credit?.total,
       'Workflow Rollover fehlgeschlagen: Credit-Anzahl stimmt nicht mit aktiven Sessions überein.'
     ).toBe(2) // 2 aktive Sessions, nicht 3
+  })
+})
+
+test.describe('Admin Kurse: Bearbeiten-Modal mit Teilnehmern', () => {
+  test.use({ storageState: 'tests/.auth/admin.json' })
+
+  let courseId: string
+  let yogi1Id: string
+  const ENROLLED_COURSE = `${E2E_PREFIX} Bearbeiten-Mit-Teiln`
+
+  test.beforeAll(async () => {
+    yogi1Id = (await getUserIdByEmail(process.env.TEST_YOGI1_EMAIL!))!
+    const course = await createEnrolledCourse(yogi1Id, { name: ENROLLED_COURSE, sessionCount: 2 })
+    courseId = course.courseId
+  })
+
+  test.afterAll(async () => {
+    const db = await getAdminClient()
+    const { data: sessions } = await db.from('sessions').select('id').eq('course_id', courseId)
+    const ids = (sessions || []).map(s => s.id)
+    if (ids.length > 0) await db.from('bookings').delete().in('session_id', ids)
+    await db.from('enrollments').delete().eq('course_id', courseId)
+    await db.from('credits').delete().eq('course_id', courseId)
+    await db.from('sessions').delete().eq('course_id', courseId)
+    await db.from('courses').delete().eq('id', courseId)
+  })
+
+  test('Kurs mit Teilnehmern: Bearbeiten-Modal zeigt Hinweis statt Absagen-Buttons', async ({ page }) => {
+    await page.goto('/admin/kurse')
+    await page.waitForLoadState('networkidle')
+
+    // Kurs-Karte finden und Bearbeiten öffnen
+    const card = page.locator('.card', { hasText: ENROLLED_COURSE }).first()
+    await expect(card).toBeVisible({ timeout: 8_000 })
+    await card.getByRole('button', { name: /bearbeiten/i }).click()
+
+    // Hinweis-Text erscheint
+    await expect(
+      page.getByText(/kurs hat teilnehmer.*termine verwalten/i)
+    ).toBeVisible({ timeout: 8_000 })
+
+    // Kein Ausschließen-Button für normale (nicht ausgeschlossene) Sessions
+    await expect(
+      page.getByRole('button', { name: /ausschließen/i })
+    ).not.toBeVisible({ timeout: 3_000 })
   })
 })

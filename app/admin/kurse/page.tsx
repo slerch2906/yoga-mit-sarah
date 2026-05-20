@@ -99,8 +99,9 @@ export default function AdminKursePage() {
     if (form.date_start && form.date_end && !form.is_single) {
       const dates = getDatesForCourse(form.weekday, form.date_start, form.date_end, 999, excludedDates)
       setPreviewDates(dates)
-      // Beim Bearbeiten: total_units aus DB behalten, nur beim Anlegen berechnen
-      if (!editCourse) {
+      // Beim Anlegen immer berechnen; beim Bearbeiten nur wenn keine Teilnehmer vorhanden
+      const courseHasEnrollments = editCourse && (editCourse.enrollments?.length || 0) > 0
+      if (!courseHasEnrollments) {
         setForm(f => ({ ...f, total_units: dates.length }))
       }
     }

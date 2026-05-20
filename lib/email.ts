@@ -1,0 +1,59 @@
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
+async function sendEmail(type: string, data: Record<string, any>): Promise<void> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'x-function-secret': process.env.NEXT_PUBLIC_EDGE_SECRET || '',
+      },
+      body: JSON.stringify({ type, data }),
+    })
+    const result = await res.json().catch(() => ({}))
+    console.log('Email sent:', type, res.status, result)
+  } catch (e) {
+    console.error('Email send error:', type, e)
+  }
+}
+
+export const Email = {
+  welcome: (data: { email: string; firstName: string; courseName?: string }) =>
+    sendEmail('welcome', data),
+
+  bookingConfirmed: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number }) =>
+    sendEmail('booking_confirmed', data),
+
+  bookingCancelled: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; creditReturned: boolean }) =>
+    sendEmail('booking_cancelled', data),
+
+  waitlistJoined: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; position: number }) =>
+    sendEmail('waitlist_joined', data),
+
+  waitlistPromoted: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string }) =>
+    sendEmail('waitlist_promoted', data),
+
+  sessionCancelled: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; reason?: string; replacementDate?: string; replacementTime?: string }) =>
+    sendEmail('session_cancelled', data),
+
+  sessionAdded: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number }) =>
+    sendEmail('session_added', data),
+
+  adminNewYogi: (data: { fullName: string; email: string; courseName?: string }) =>
+    sendEmail('admin_new_yogi', data),
+
+  invitationSent: (data: { email: string; firstName: string; inviteLink: string; courseName?: string }) =>
+    sendEmail('invitation_sent', data),
+
+  yogiEnrolledByAdmin: (data: { email: string; firstName: string; courseName: string; weekday: string; timeStart: string; durationMin: number; totalUnits?: number; dateStart?: string }) =>
+    sendEmail('yogi_enrolled_by_admin', data),
+
+  notifyPlaceFree: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; sessionId: string }) =>
+    sendEmail('notify_place_free', data),
+
+  courseTimeChanged: (data: { email: string; firstName: string; courseName: string; oldTime: string; newTime: string }) =>
+    sendEmail('course_time_changed', data),
+}

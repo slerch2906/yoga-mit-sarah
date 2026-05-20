@@ -1,0 +1,545 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter, useParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+import { getServerNow } from '@/lib/server-time'
+import { Email } from '@/lib/email'
+import { getCurrentUser } from '@/lib/auth'
+import AppHeader from '@/components/layout/AppHeader'
+import BottomNav from '@/components/layout/BottomNav'
+
+export default function SessionDetailPage() {
+  const { id } = useParams<{ id: string }>()
+  const [session, setSession] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
+  const [myBooking, setMyBooking] = useState<any>(null)
+  const [myWaitlist, setMyWaitlist] = useState<any>(null)
+  const [freeCredits, setFreeCredits] = useState(0)
+  const [bestCredit, setBestCredit] = useState<any>(null)
+  const [freeSpots, setFreeSpots] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [confirmed, setConfirmed] = useState(false)
+  const [showCancel, setShowCancel] = useState(false)
+  const router = useRouter()
+  const supabase = createClient()
+
+  useEffect(() => { loadData() }, [id])
+
+  async function loadData() {
+    const user = await getCurrentUser()
+    if (!user) { window.location.href = '/login'; return }
+
+    const [{ data: prof }, { data: sess }, { data: myBook }, { data: myWait }, { data: allCredits }] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', user.id).single(),
+      supabase.from('sessions').select('*, course:courses(*)').eq('id', id).single(),
+      supabase.from('bookings').select('*').eq('session_id', id).eq('user_id', user.id).eq('status', 'active').maybeSingle(),
+      supabase.from('waitlist').select('*').eq('session_id', id).eq('user_id', user.id).maybeSingle(),
+      supabase.from('credits').select('*').eq('user_id', user.id).gt('expires_at', new Date().toISOString()),
+    ])
+
+    const { count: bookingCount } = await supabase
+      .from('bookings').select('*', { count: 'exact', head: true })
+      .eq('session_id', id).eq('status', 'active')
+
+    setProfile(prof)
+    setSession(sess)
+    setMyBooking(myBook)
+    setMyWaitlist(myWait)
+    setFreeSpots(((sess as any)?.course?.max_spots || 0) - (bookingCount || 0))
+
+    // Freie Credits berechnen: nur Credits mit total > used
+    const available = (allCredits || []).filter(c => c.total > c.used)
+    const totalFree = available.reduce((sum, c) => sum + (c.total - c.used), 0)
+    setFreeCredits(totalFree)
+    // Besten Credit wählen: zuerst ablaufende
+    const sorted = available.sort((a, b) => new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime())
+    setBestCredit(sorted[0] || null)
+
+    setLoading(false)
+  }
+
+  function isWithin3Hours() {
+    if (!session) return false
+    const dt = new Date(`${session.date}T${session.time_start}`)
+    const diff = dt.getTime() - Date.now()
+    return diff < 3 * 60 * 60 * 1000 && diff > 0
+  }
+
+  function isPast() {
+    if (!session) return false
+    return new Date(`${session.date}T${session.time_start}`) < new Date()
+  }
+
+  function cancelDeadline() {
+    if (!session) return ''
+    const dt = new Date(`${session.date}T${session.time_start}`)
+    dt.setHours(dt.getHours() - 3)
+    return dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr'
+  }
+
+  async function handleBook() {
+    if (!bestCredit) return
+    setActionLoading(true)
+    const user = await getCurrentUser()
+
+    // Prüfe ob bereits eine (cancelled) Buchung existiert → dann updaten statt inserieren
+    const { data: existingBooking } = await supabase.from('bookings')
+      .select('*').eq('session_id', id).eq('user_id', user!.id).maybeSingle()
+
+    let error = null
+    if (existingBooking) {
+      // Bestehende Buchung reaktivieren
+      const { error: updateError } = await supabase.from('bookings').update({
+        status: 'active', credit_id: bestCredit.id,
+        cancelled_at: null, cancel_late: false
+      }).eq('id', existingBooking.id)
+      error = updateError
+    } else {
+      // Neue Buchung anlegen
+      const { error: insertError } = await supabase.from('bookings').insert({
+        user_id: user!.id, session_id: id,
+        credit_id: bestCredit.id, type: 'single', status: 'active'
+      })
+      error = insertError
+    }
+
+    if (!error) {
+      // Credit als verbraucht markieren (+1 used)
+      await supabase.from('credits').update({ used: bestCredit.used + 1 }).eq('id', bestCredit.id)
+      await supabase.from('audit_log').insert({
+        user_id: user!.id, action: 'booking_created',
+        details: { session_id: id, type: 'single', course_name: session?.course?.name, session_date: session?.date, session_time: session?.time_start }
+      })
+      // Buchungsbestätigung Email
+      try {
+        const { data: prof } = await supabase.from('profiles').select('email, first_name').eq('id', user!.id).single()
+        if (prof) await Email.bookingConfirmed({
+          email: prof.email,
+          firstName: prof.first_name || 'Yogi',
+          courseName: session?.course?.name || '',
+          date: session?.date || '',
+          timeStart: session?.time_start || '',
+          durationMin: session?.duration_min || 60,
+        })
+      } catch(e) {}
+      router.push(`/kurse/${id}/bestaetigung`)
+    } else {
+      alert('Fehler beim Buchen: ' + error.message)
+    }
+    setActionLoading(false)
+  }
+
+  async function handleCancel() {
+    setActionLoading(true)
+    const user = await getCurrentUser()
+    // Server-Zeit verwenden statt Browser-Zeit
+    const serverNow = await getServerNow()
+    const sessionStart = new Date(`${session.date}T${session.time_start}`)
+    const deadline3h = new Date(sessionStart.getTime() - 3 * 60 * 60 * 1000)
+    const late = serverNow > deadline3h
+
+    await supabase.from('bookings').update({
+      status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: late
+    }).eq('id', myBooking.id)
+
+    // Credit zurückgeben wenn rechtzeitig
+    if (!late) {
+      let creditId = myBooking.credit_id
+      // Falls credit_id nicht direkt gesetzt, Kurs-Credit nachschlagen
+      if (!creditId && session?.course_id) {
+        const { data: courseCredit } = await supabase.from('credits')
+          .select('id, used').eq('user_id', user!.id).eq('course_id', session.course_id)
+          .gt('expires_at', new Date().toISOString()).order('expires_at').limit(1).maybeSingle()
+        if (courseCredit) creditId = courseCredit.id
+      }
+      if (creditId) {
+        const { data: credit } = await supabase.from('credits').select('used').eq('id', creditId).single()
+        if (credit) await supabase.from('credits').update({ used: Math.max(0, credit.used - 1) }).eq('id', creditId)
+      }
+    }
+
+    await supabase.from('audit_log').insert({
+      user_id: user!.id, action: 'booking_cancelled',
+      details: { session_id: id, late, course_name: session?.course?.name, session_date: session?.date, session_time: session?.time_start }
+    })
+
+    // Email an Yogi senden
+    try {
+      const { data: prof } = await supabase.from('profiles')
+        .select('email, first_name').eq('id', user!.id).single()
+      if (prof?.email) {
+        await Email.bookingCancelled({
+          email: prof.email,
+          firstName: prof.first_name || 'Yogi',
+          courseName: session?.course?.name || '',
+          date: session?.date || '',
+          timeStart: session?.time_start || '',
+          durationMin: session?.duration_min || 75,
+          creditReturned: !late,
+        })
+      }
+    } catch (e) { console.error('Cancel email error:', e) }
+
+    // Warteliste: ersten Eintrag nachrücken lassen
+    try {
+      const { data: waitlistFirst } = await supabase
+        .from('waitlist').select('*, profile:profiles(email, first_name)')
+        .eq('session_id', id).eq('type', 'waitlist')
+        .order('position', { ascending: true }).limit(1).single()
+
+      if (waitlistFirst) {
+        // Credit einbuchen (immer vorhanden - Voraussetzung für Warteliste)
+        // Alle Credits laden und besten wählen (wie beim normalen Buchen)
+        const { data: allWaitCredits } = await supabase.from('credits')
+          .select('*').eq('user_id', waitlistFirst.user_id)
+          .gt('expires_at', new Date().toISOString())
+        const availableCredits = (allWaitCredits || []).filter(c => c.total > c.used)
+        const credit = availableCredits.sort((a: any, b: any) => 
+          new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime())[0] || null
+
+        if (credit && (credit.total - credit.used) > 0) {
+          await supabase.from('bookings').insert({
+            user_id: waitlistFirst.user_id, session_id: id,
+            credit_id: credit.id, type: 'single', status: 'active'
+          })
+          await supabase.from('credits').update({ used: credit.used + 1 }).eq('id', credit.id)
+        }
+
+        // Email senden
+        if (waitlistFirst.profile && !waitlistFirst.profile.is_dummy) {
+          await Email.waitlistPromoted({
+            email: waitlistFirst.profile.email,
+            firstName: waitlistFirst.profile.first_name || 'Yogi',
+            courseName: session?.course?.name || '',
+            date: session?.date || '',
+            timeStart: session?.time_start || '',
+          })
+        }
+
+        // Von Warteliste entfernen
+        await supabase.from('waitlist').delete().eq('id', waitlistFirst.id)
+      }
+
+      // Notify-User informieren NUR wenn niemand von der Warteliste nachrückte
+      if (!waitlistFirst) {
+        const { data: notifyUsers } = await supabase
+          .from('waitlist').select('*, profile:profiles(email, first_name)')
+          .eq('session_id', id).eq('type', 'notify')
+
+        if (notifyUsers && notifyUsers.length > 0) {
+          for (const nu of notifyUsers) {
+            if (nu.profile) {
+              await Email.notifyPlaceFree({
+                email: nu.profile.email,
+                firstName: nu.profile.first_name || 'Yogi',
+                courseName: session?.course?.name || '',
+                date: session?.date || '',
+                timeStart: session?.time_start || '',
+                sessionId: id,
+              })
+          }
+        // Notify-Einträge löschen nach Benachrichtigung
+          await supabase.from('waitlist').delete().eq('session_id', id).eq('type', 'notify')
+          }
+        }
+      } // end if(!waitlistFirst)
+    } catch(e) { console.error('Waitlist promotion error:', e) }
+
+    router.back()
+  }
+
+  async function handleWaitlist(type: 'waitlist' | 'notify') {
+    setActionLoading(true)
+    const user = await getCurrentUser()
+    const { data: prof } = await supabase.from('profiles').select('email, first_name').eq('id', user!.id).single()
+
+    if (type === 'notify') {
+      // Nur in waitlist mit type=notify eintragen für spätere Benachrichtigung
+      // KEIN position Eintrag - erscheint nicht als Wartelisten-Position
+      await supabase.from('waitlist').insert({
+        user_id: user!.id, session_id: id, type: 'notify', position: null
+      })
+      // Bestätigungs-Email: "Wir benachrichtigen dich wenn ein Platz frei wird"
+      // (keine separate Email nötig - Bestätigungsseite erklärt es)
+    } else {
+      // Auf Warteliste setzen
+      const { count } = await supabase.from('waitlist').select('*', { count: 'exact', head: true })
+        .eq('session_id', id).eq('type', 'waitlist')
+      await supabase.from('waitlist').insert({
+        user_id: user!.id, session_id: id, type: 'waitlist',
+        position: (count || 0) + 1
+      })
+      // Warteliste Email
+      try {
+        if (prof) await Email.waitlistJoined({
+          email: prof.email,
+          firstName: prof.first_name || 'Yogi',
+          courseName: session?.course?.name || '',
+          date: session?.date || '',
+          timeStart: session?.time_start || '',
+          position: (count || 0) + 1,
+        })
+      } catch(e) {}
+    }
+    router.push(`/kurse/${id}/bestaetigung?type=${type}`)
+    setActionLoading(false)
+  }
+
+  async function handleLeaveWaitlist() {
+    setActionLoading(true)
+    await supabase.from('waitlist').delete().eq('id', myWaitlist.id)
+    router.push('/kurse')
+  }
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" /></div>
+  if (!session) return null
+
+  const course = (session as any).course
+  const past = isPast()
+  const within3h = isWithin3Hours()
+  const deadline = cancelDeadline()
+
+  return (
+    <div className="max-w-md mx-auto min-h-screen">
+      <AppHeader title="" isAdmin={profile?.is_admin} />
+
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-yoga-border bg-yoga-bg">
+        <button onClick={() => router.back()}
+          className="flex items-center gap-1 text-sm text-yoga-text/60 mb-2.5 hover:opacity-80">
+          <i className="ti ti-arrow-left" /> Zurück
+        </button>
+        <h2 className="text-lg font-bold mb-1">{course?.name}</h2>
+        <p className="text-sm text-yoga-text/55 mb-2">
+          {new Date(session.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · {session.time_start?.slice(0,5)} Uhr · {session.duration_min} min
+        </p>
+        {course?.location && (
+          <p className="text-sm text-yoga-text/50 mb-1"><i className="ti ti-map-pin mr-1" />{course.location}</p>
+        )}
+        {course?.difficulty && (
+          <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-yoga-gray text-yoga-text/60 font-semibold">{course.difficulty}</span>
+        )}
+        {past && (
+          <span className="inline-block mt-2 text-xs px-2 py-1 rounded-full bg-yoga-gray text-yoga-text/50 font-semibold">
+            Diese Stunde ist bereits vergangen
+          </span>
+        )}
+      </div>
+
+      <div className="px-4 py-4">
+        {/* Info grid */}
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <div className="info-tile">
+            <div className="lbl">{myBooking ? 'Dein Status' : 'Freie Plätze'}</div>
+            <div className={`val ${myBooking ? 'text-yoga-green-text' : freeSpots <= 0 ? 'text-yoga-red-text' : ''}`}>
+              {myBooking ? 'Angemeldet ' : past ? '—' : freeSpots <= 0 ? 'Ausgebucht' : `${freeSpots} frei`}
+            </div>
+          </div>
+          <div className="info-tile">
+            <div className="lbl">Abmeldefrist</div>
+            <div className={`val ${within3h && !past ? 'text-yoga-amber-text' : ''}`}>
+              {past ? 'Vergangen' : deadline}
+            </div>
+          </div>
+          <div className="info-tile">
+            <div className="lbl">Deine Credits</div>
+            <div className={`val ${freeCredits === 0 ? 'text-yoga-red-text' : ''}`}>
+              {freeCredits} verfügbar
+            </div>
+          </div>
+          <div className="info-tile">
+            <div className="lbl">Warteliste</div>
+            <div className="val">{myWaitlist ? (myWaitlist.type === 'notify' ? 'Benachrichtigung aktiv' : `Pos. ${myWaitlist.position}`) : '—'}</div>
+          </div>
+        </div>
+
+        {/* Kursbeschreibung */}
+        {(course?.description || course?.bring_along) && (
+          <div className="card mb-4">
+            {course?.description && (
+              <div className="mb-3">
+                <p className="text-xs text-yoga-text/40 uppercase tracking-wider font-bold mb-1">Über diesen Kurs</p>
+                <p className="text-sm text-yoga-text/80 leading-relaxed">{course.description}</p>
+              </div>
+            )}
+            {course?.bring_along && (
+              <div>
+                <p className="text-xs text-yoga-text/40 uppercase tracking-wider font-bold mb-1">Was mitbringen</p>
+                <p className="text-sm text-yoga-text/80 leading-relaxed"><i className="ti ti-backpack mr-1" />{course.bring_along}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* VERGANGEN – gesperrt */}
+        {past && (
+          <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-4 mb-4 text-center">
+            <i className="ti ti-lock text-2xl text-yoga-text/30 block mb-2" />
+            <p className="text-sm text-yoga-text/50">Diese Stunde ist bereits vergangen und kann nicht mehr gebucht oder geändert werden.</p>
+          </div>
+        )}
+
+        {/* ANGEMELDET */}
+        {!past && myBooking && !showCancel && (
+          <>
+            <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
+              <p className="text-sm text-yoga-text/80 leading-relaxed">
+                Du bist angemeldet. Abmeldung kostenlos bis <strong>{deadline}</strong> – danach gilt die Stunde als wahrgenommen.
+              </p>
+            </div>
+            <button onClick={() => setShowCancel(true)} className="btn-danger mb-2">
+              <i className="ti ti-calendar-minus mr-1" /> Von dieser Stunde abmelden
+            </button>
+            <button onClick={() => router.back()} className="btn-ghost">Zurück</button>
+          </>
+        )}
+
+        {/* ABMELDE-BESTÄTIGUNG */}
+        {!past && myBooking && showCancel && (
+          <>
+            <div className={`rounded-yoga p-3 mb-4 ${within3h ? 'bg-yoga-red-bg text-yoga-red-text' : 'bg-yoga-green-bg text-yoga-green-text'}`}>
+              <p className="text-sm font-semibold mb-1">
+                {within3h ? ' Zu spät für kostenlose Abmeldung' : 'Rechtzeitige Abmeldung'}
+              </p>
+              <p className="text-sm leading-relaxed opacity-90">
+                {within3h ? 'Credit wird nicht zurückgebucht.' : 'Dein Credit wird zurückgebucht.'}
+              </p>
+            </div>
+            <button onClick={handleCancel} className="btn-danger mb-2" disabled={actionLoading}>
+              {actionLoading ? 'Wird abgemeldet...' : 'Ja, abmelden'}
+            </button>
+            <button onClick={() => setShowCancel(false)} className="btn-ghost">Abbrechen</button>
+          </>
+        )}
+
+        {/* NICHT ANGEMELDET + KEIN WARTELISTENEINTRAG */}
+        {!past && !myBooking && !myWaitlist && (
+          <>
+            {/* Kurs gesperrt für externe Buchungen */}
+            {!course?.is_open && freeSpots > 0 && freeCredits > 0 && (
+              <div className="bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga p-4 mb-4">
+                <p className="text-sm font-bold text-yoga-amber-text mb-1">
+                  <i className="ti ti-lock mr-1" /> Kurs noch nicht freigegeben
+                </p>
+                <p className="text-sm text-yoga-amber-text/90 leading-relaxed">
+                  Dieser Kurs ist noch nicht für Einzelstunden-Buchungen freigegeben. Bitte wende dich an Sarah.
+                </p>
+              </div>
+            )}
+            {course?.is_open && freeSpots > 0 && freeCredits > 0 ? (
+              <>
+                {within3h ? (
+                  <>
+                    <div className="bg-amber-50 border border-yoga-amber-text/30 rounded-yoga p-3 mb-4">
+                      <p className="text-sm font-bold text-yoga-amber-text mb-2">
+                        <i className="ti ti-alert-triangle mr-1" /> Innerhalb der 3-Stunden-Frist
+                      </p>
+                      <p className="text-sm text-yoga-amber-text/90 leading-relaxed">
+                        Kurs beginnt in weniger als 3 Stunden. Abmeldung danach <strong>nicht möglich</strong> – Credit verfällt auch bei Nichterscheinen.
+                      </p>
+                    </div>
+                    <div className="bg-yoga-red-bg border border-yoga-red-text/20 rounded-yoga p-3 mb-4">
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} className="mt-0.5 w-5 h-5" />
+                        <span className="text-sm text-yoga-red-text leading-relaxed">
+                          Ich verstehe, dass mein Credit verfällt und ich mich nicht mehr abmelden kann.
+                        </span>
+                      </label>
+                    </div>
+                    <button onClick={handleBook} disabled={!confirmed || actionLoading}
+                      className={`btn-primary mb-2 ${!confirmed ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      style={{ background: confirmed ? '#8a6020' : undefined }}>
+                      {actionLoading ? 'Wird eingetragen...' : 'Trotzdem eintragen'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
+                      <p className="text-sm text-yoga-text/80 leading-relaxed">
+                        Abmeldung kostenlos bis <strong>{deadline}</strong> – Credit kommt zurück.
+                      </p>
+                    </div>
+                    <button onClick={handleBook} className="btn-primary mb-2" disabled={actionLoading}>
+                      {actionLoading ? 'Wird eingetragen...' : 'Für diese Stunde eintragen'}
+                    </button>
+                  </>
+                )}
+                <button onClick={() => router.back()} className="btn-ghost">Abbrechen</button>
+              </>
+            ) : (
+              <>
+                {freeCredits === 0 && (
+                  <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
+                    <p className="text-sm text-yoga-text/80">
+                      Du hast keine freien Credits. Bitte wende dich an Sarah.
+                    </p>
+                  </div>
+                )}
+                {freeSpots <= 0 && (
+                  <>
+                    {freeCredits === 0 ? (
+                      // Kein Credit: nur Benachrichtigung möglich
+                      <>
+                        <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
+                          <p className="text-sm font-semibold text-yoga-text/80 mb-1">
+                            <i className="ti ti-list-x mr-1" /> Warteliste nicht möglich
+                          </p>
+                          <p className="text-sm text-yoga-text/60 leading-relaxed">
+                            Du hast keine freien Credits. Wenn du nachrückst würdest du keinen Platz belegen können. Du kannst dich aber benachrichtigen lassen – vielleicht hast du dann einen Credit.
+                          </p>
+                        </div>
+                        <button onClick={() => handleWaitlist('notify')} className="btn-secondary mb-2" disabled={actionLoading}>
+                          <i className="ti ti-bell mr-1" /> Benachrichtige mich wenn ein Platz frei wird
+                        </button>
+                      </>
+                    ) : (
+                      // Hat Credits: Warteliste + Benachrichtigung
+                      <>
+                        <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
+                          <p className="text-sm text-yoga-text/80 leading-relaxed">
+                            Diese Stunde ist ausgebucht. Du kannst dich auf die Warteliste setzen oder benachrichtigt werden wenn ein Platz frei wird.
+                          </p>
+                        </div>
+                        <button onClick={() => handleWaitlist('waitlist')} className="btn-primary mb-2" disabled={actionLoading}>
+                          <i className="ti ti-list mr-1" /> Auf die Warteliste setzen
+                        </button>
+                        <button onClick={() => handleWaitlist('notify')} className="btn-secondary mb-2" disabled={actionLoading}>
+                          <i className="ti ti-bell mr-1" /> Benachrichtige mich wenn ein Platz frei wird
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+                <button onClick={() => router.back()} className="btn-ghost">Zurück</button>
+              </>
+            )}
+          </>
+        )}
+
+        {/* AUF WARTELISTE */}
+        {!past && myWaitlist && (
+          <>
+            <div className="bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga p-3 mb-4">
+              <p className="text-sm font-bold text-yoga-amber-text mb-1">
+                {myWaitlist.type === 'waitlist' ? `Du bist auf Position ${myWaitlist.position} der Warteliste` : 'Du wirst benachrichtigt'}
+              </p>
+              <p className="text-sm text-yoga-amber-text/90 leading-relaxed">
+                {myWaitlist.type === 'waitlist'
+                  ? 'Du rückst automatisch nach wenn ein Platz frei wird. Du hast dann 1 Stunde Zeit dich kostenlos abzumelden.'
+                  : 'Sobald ein Platz frei wird, bekommst du eine Benachrichtigung.'}
+              </p>
+            </div>
+            <button onClick={handleLeaveWaitlist} className="btn-danger mb-2" disabled={actionLoading}>
+              {myWaitlist.type === 'waitlist' ? 'Von Warteliste austragen' : 'Benachrichtigung deaktivieren'}
+            </button>
+            <button onClick={() => router.back()} className="btn-ghost">Zurück</button>
+          </>
+        )}
+      </div>
+
+      <BottomNav isAdmin={profile?.is_admin} />
+    </div>
+  )
+}

@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --yoga-bg:      #cfcbca;
+  --yoga-text:    #443c3c;
+  --yoga-card:    #dedad9;
+  --yoga-card2:   #e8e4e3;
+  --yoga-border:  rgba(68,60,60,0.15);
+  --yoga-border2: rgba(68,60,60,0.25);
+  --yoga-gray:    rgba(68,60,60,0.07);
+}
+
+* { box-sizing: border-box; }
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-family: 'Mulish', sans-serif;
+  background-color: var(--yoga-bg);
+  color: var(--yoga-text);
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--yoga-border2); border-radius: 2px; }
+
+@layer components {
+  .card { @apply bg-yoga-card rounded-yoga border border-yoga-border p-4; }
+
+  .btn-primary {
+    @apply w-full bg-yoga-text text-yoga-bg rounded-yoga py-3.5 text-base font-bold
+           transition-opacity hover:opacity-90 active:opacity-80 cursor-pointer border-0;
+  }
+  .btn-secondary {
+    @apply w-full bg-transparent text-yoga-text rounded-yoga py-3.5 text-sm font-semibold
+           border border-yoga-border2 transition-opacity hover:opacity-80 cursor-pointer;
+  }
+  .btn-danger {
+    @apply w-full bg-yoga-red-bg text-yoga-red-text rounded-yoga py-3.5 text-sm font-semibold
+           border-0 transition-opacity hover:opacity-90 cursor-pointer;
+  }
+  .btn-ghost {
+    @apply w-full bg-yoga-gray text-yoga-text rounded-yoga py-3.5 text-sm font-semibold
+           border-0 transition-opacity hover:opacity-80 cursor-pointer;
+  }
+
+  .badge { @apply text-sm px-3 py-1 rounded-full font-semibold whitespace-nowrap; }
+  .badge-free     { @apply bg-yoga-green-bg text-yoga-green-text; }
+  .badge-full     { @apply bg-yoga-red-bg text-yoga-red-text; }
+  .badge-wait     { @apply bg-yoga-amber-bg text-yoga-amber-text; }
+  .badge-mine     { @apply bg-black/10 text-yoga-text; }
+  .badge-enrolled { @apply bg-black/10 text-yoga-text; }
+  .badge-done     { @apply bg-yoga-green-bg text-yoga-green-text; }
+  .badge-left     { @apply bg-yoga-amber-bg text-yoga-amber-text; }
+
+  .section-label {
+    @apply text-sm font-bold text-yoga-text/40 tracking-widest uppercase mb-2;
+  }
+
+  .field-input {
+    @apply w-full bg-yoga-card border border-yoga-border2 rounded-yoga px-4 py-3.5
+           text-base font-medium text-yoga-text outline-none
+           focus:border-yoga-text/40 transition-colors;
+  }
+  .field-label { @apply text-sm text-yoga-text/60 mb-1.5 block font-semibold; }
+
+  .bottom-nav {
+    @apply fixed bottom-0 left-0 right-0 flex border-t border-yoga-border2
+           bg-yoga-bg max-w-md mx-auto;
+  }
+  .nav-item {
+    @apply flex-1 flex flex-col items-center py-3 text-yoga-text/40
+           text-xs font-semibold gap-1 cursor-pointer transition-opacity;
+  }
+  .nav-item i { @apply text-2xl; }
+  .nav-item.active { @apply text-yoga-text opacity-100; }
+
+  .app-header {
+    @apply flex items-center gap-3 px-4 py-4 border-b border-yoga-border2
+           bg-yoga-bg sticky top-0 z-10;
+  }
+
+  .info-tile { @apply bg-yoga-card rounded-yoga border border-yoga-border p-3; }
+  .info-tile .lbl { @apply text-xs text-yoga-text/45 uppercase tracking-wider mb-1; }
+  .info-tile .val { @apply text-lg font-bold text-yoga-text; }
+}

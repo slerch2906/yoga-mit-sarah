@@ -80,6 +80,10 @@ export default function PasswortResetPage() {
               className="btn-primary w-full disabled:opacity-40">
               {loading ? 'Wird gespeichert...' : 'Passwort speichern'}
             </button>
+            <button onClick={() => router.push('/profil')} disabled={loading}
+              className="btn-secondary w-full">
+              Abbrechen
+            </button>
           </div>
         )}
       </div>

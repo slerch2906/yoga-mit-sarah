@@ -127,3 +127,54 @@ test.describe('Kurs abbrechen – Option 2: Yogi entscheidet (yogi_choice)', () 
     expect(updated?.choice).toBe('guthaben')
   })
 })
+
+// ── Option 2b: Yogi wählt Erstattung ─────────────────────────────────────────
+
+test.describe('Kurs abbrechen – Option 2b: Yogi wählt Erstattung', () => {
+  test.use({ storageState: 'tests/.auth/admin.json' })
+
+  let courseId: string
+  let yogi2Id: string
+  const COURSE_NAME = `${E2E_PREFIX} Abbruch-Erstattung`
+
+  test.beforeAll(async () => {
+    yogi2Id = (await getUserIdByEmail(process.env.TEST_YOGI2_EMAIL!))!
+    const course = await createEnrolledCourse(yogi2Id, { name: COURSE_NAME })
+    courseId = course.courseId
+  })
+
+  test('Admin bricht Kurs ab (yogi_choice) → Token mit null-Wahl angelegt', async ({ page }) => {
+    const kursePage = new AdminKursePage(page)
+    await kursePage.goto()
+
+    await kursePage.openCancelModal(COURSE_NAME)
+    await kursePage.fillCancelModal('E2E Erstattungstest', 'yogi_choice')
+    await kursePage.confirmCancelModal()
+
+    const response = await getCancellationResponse(yogi2Id, courseId)
+    expect(response?.token, 'Token sollte angelegt worden sein').toBeTruthy()
+    expect(response?.choice, 'Wahl sollte noch nicht getroffen sein').toBeNull()
+  })
+
+  test('Yogi besucht Token-Link und wählt Erstattung → kein Guthaben-Credit, choice = erstattung', async ({ page }) => {
+    const response = await getCancellationResponse(yogi2Id, courseId)
+    expect(response?.token, 'Token muss für diesen Test vorhanden sein').toBeTruthy()
+
+    await page.goto(`/kursabbruch/${response!.token}`)
+    await page.waitForLoadState('networkidle')
+
+    // Erstattungs-Option wählen
+    await page.getByText('Geld zurück').click()
+
+    // Bestätigungsmeldung sichtbar
+    await expect(page.getByText(/erstattung beantragt/i)).toBeVisible({ timeout: 10_000 })
+
+    // Kein Guthaben-Credit darf angelegt worden sein
+    const credit = await getGuthabenCredit(yogi2Id)
+    expect(credit, 'Bei Erstattungswahl darf kein Guthaben-Credit angelegt werden').toBeNull()
+
+    // Wahl korrekt in DB gespeichert
+    const updated = await getCancellationResponse(yogi2Id, courseId)
+    expect(updated?.choice).toBe('erstattung')
+  })
+})

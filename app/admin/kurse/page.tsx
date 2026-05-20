@@ -528,16 +528,16 @@ export default function AdminKursePage() {
 
     // Email senden
     if (yogi.email && !yogi.is_dummy) {
-      await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sess?.access_token}` },
-        body: JSON.stringify({ type: 'yogi_enrolled_by_admin', data: {
-          email: yogi.email, firstName: yogi.first_name || 'Yogi',
-          courseName: course.name, weekday: course.weekday,
-          timeStart: course.time_start, durationMin: course.duration_min || 75,
-          totalUnits: sessionCount, dateStart: course.date_start,
-        }})
-      }).catch(() => {})
+      await Email.yogiEnrolledByAdmin({
+        email: yogi.email,
+        firstName: yogi.first_name || 'Yogi',
+        courseName: course.name,
+        weekday: course.weekday,
+        timeStart: course.time_start,
+        durationMin: course.duration_min || 75,
+        totalUnits: sessionCount,
+        dateStart: course.date_start,
+      })
     }
 
     setAddingYogiToCourse(false)
@@ -611,9 +611,10 @@ export default function AdminKursePage() {
       })
     }
 
-    // 3) Sessions des neuen Kurses laden
+    // 3) Sessions des neuen Kurses laden – nur aktive (keine ausgeschlossenen)
     const { data: futureSessions } = await supabase
       .from('sessions').select('id').eq('course_id', newCourse.id)
+      .eq('is_cancelled', false)
     const sessionIds = (futureSessions || []).map((s: any) => s.id)
     const targetCourse = newCourse
     const credits = activeDates.length  // nur aktive Sessions, keine ausgeschlossenen

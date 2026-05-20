@@ -346,13 +346,6 @@ export default function AdminKursePage() {
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 14)
     const appUrl = 'https://kurse.yogamitsarah.me'
-    // Session holen für Email-Auth
-    let adminSess: any = null
-    try {
-      const { data } = await supabase.auth.getSession()
-      adminSess = data.session
-    } catch (e) { console.error('Session error:', e) }
-
     for (const enroll of (enrollments || [])) {
       const prof = enroll.profile as any
       if (!prof) continue
@@ -392,30 +385,17 @@ export default function AdminKursePage() {
         remaining_sessions: remainingCount,
       })
 
-      // Email senden
+      // Email senden (via lib/email.ts mit korrektem x-function-secret Header)
       if (prof.email) {
-        await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-email`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json',
-            'Authorization': `Bearer ${adminSess?.access_token}` },
-          body: JSON.stringify({
-            type: 'course_cancelled',
-            data: {
-              email: prof.email,
-              firstName: prof.first_name || 'Yogi',
-              courseName: cancellingCourse.name,
-              reason: cancelReason,
-              remainingSessions: remainingCount,
-              refundMode: cancelRefundMode,
-              guthabenUrl: cancelRefundMode === 'yogi_choice' ? `${appUrl}/kursabbruch/${token}` : null,
-            }
-          })
-        }).then(async res => {
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}))
-            console.error('Email failed:', err)
-          }
-        }).catch(console.error)
+        await Email.courseCancelled({
+          email: prof.email,
+          firstName: prof.first_name || 'Yogi',
+          courseName: cancellingCourse.name,
+          reason: cancelReason,
+          remainingSessions: remainingCount,
+          refundMode: cancelRefundMode!,
+          guthabenUrl: cancelRefundMode === 'yogi_choice' ? `${appUrl}/kursabbruch/${token}` : null,
+        })
       }
     }
 

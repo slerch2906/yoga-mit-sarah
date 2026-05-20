@@ -55,10 +55,12 @@ export default function MeinePage() {
           const { data: myBookings } = await supabase
             .from('bookings').select('*').eq('user_id', user.id)
             .in('session_id', (sessions || []).map((s: any) => s.id))
-          // ALLE Kursstunden anzeigen, inkl. ausgetragene – nur Booking-Status merken
-          sessionsMap[enrol.course_id] = (sessions || []).map((s: any) => ({
-            ...s, myBooking: myBookings?.find((b: any) => b.session_id === s.id),
-          }))
+          // Ausgeschlossene Stunden nie anzeigen; abgesagte anzeigen (ausgegraut)
+          sessionsMap[enrol.course_id] = (sessions || [])
+            .filter((s: any) => s.cancel_reason !== 'excluded')
+            .map((s: any) => ({
+              ...s, myBooking: myBookings?.find((b: any) => b.session_id === s.id),
+            }))
         }
         setCourseSessions(sessionsMap)
       }
@@ -166,21 +168,25 @@ export default function MeinePage() {
                 </button>
               </div>
               <p className="section-label">Kursstunden</p>
-              {/* ALLE Kursstunden anzeigen, angemeldet UND ausgetragen */}
-              {sessions.map(s => (
-                <button key={s.id} onClick={() => router.push(`/kurse/${s.id}`)}
-                  className="w-full card flex items-center gap-2.5 mb-1.5 text-left">
-                  <div className="flex-shrink-0 w-20">
-                    <div className="text-sm font-bold">{new Date(s.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })}</div>
-                    <div className="text-xs text-yoga-text/50">{s.time_start?.slice(0,5)} Uhr</div>
-                  </div>
-                  <div className="w-px h-6 bg-yoga-border2 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold truncate">{enrol.course?.name}</div>
-                  </div>
-                  {getStatusBadge(s)}
-                </button>
-              ))}
+              {/* Kursstunden: ausgeschlossene gefiltert, abgesagte ausgegraut */}
+              {sessions.map(s => {
+                const isCancelled = s.is_cancelled
+                return (
+                  <button key={s.id}
+                    onClick={() => router.push(`/kurse/${s.id}`)}
+                    className={`w-full card flex items-center gap-2.5 mb-1.5 text-left ${isCancelled ? 'opacity-50 cursor-default' : ''}`}>
+                    <div className="flex-shrink-0 w-20">
+                      <div className="text-sm font-bold">{new Date(s.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })}</div>
+                      <div className="text-xs text-yoga-text/50">{s.time_start?.slice(0,5)} Uhr</div>
+                    </div>
+                    <div className="w-px h-6 bg-yoga-border2 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold truncate">{enrol.course?.name}</div>
+                    </div>
+                    {getStatusBadge(s)}
+                  </button>
+                )
+              })}
             </div>
           )
         })}

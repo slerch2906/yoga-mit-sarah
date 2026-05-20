@@ -56,4 +56,7 @@ export const Email = {
 
   courseTimeChanged: (data: { email: string; firstName: string; courseName: string; oldTime: string; newTime: string }) =>
     sendEmail('course_time_changed', data),
+
+  courseCancelled: (data: { email: string; firstName: string; courseName: string; reason: string; remainingSessions: number; refundMode: string; guthabenUrl: string | null }) =>
+    sendEmail('course_cancelled', data),
 }

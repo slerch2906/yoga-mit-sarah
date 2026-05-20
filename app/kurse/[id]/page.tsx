@@ -381,8 +381,18 @@ export default function SessionDetailPage() {
           </div>
         )}
 
+        {/* ABGESAGT – keine Buchung möglich */}
+        {!past && session.is_cancelled && (
+          <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-4 mb-4 text-center">
+            <i className="ti ti-calendar-cancel text-2xl text-yoga-text/30 block mb-2" />
+            <p className="text-sm font-semibold text-yoga-text/50 mb-1">Diese Stunde wurde abgesagt</p>
+            <p className="text-sm text-yoga-text/40">Buchungen und Warteliste sind nicht möglich.</p>
+            <button onClick={() => router.back()} className="btn-ghost mt-3">Zurück</button>
+          </div>
+        )}
+
         {/* ANGEMELDET */}
-        {!past && myBooking && !showCancel && (
+        {!past && !session.is_cancelled && myBooking && !showCancel && (
           <>
             <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
               <p className="text-sm text-yoga-text/80 leading-relaxed">
@@ -397,7 +407,7 @@ export default function SessionDetailPage() {
         )}
 
         {/* ABMELDE-BESTÄTIGUNG */}
-        {!past && myBooking && showCancel && (
+        {!past && !session.is_cancelled && myBooking && showCancel && (
           <>
             <div className={`rounded-yoga p-3 mb-4 ${within3h ? 'bg-yoga-red-bg text-yoga-red-text' : 'bg-yoga-green-bg text-yoga-green-text'}`}>
               <p className="text-sm font-semibold mb-1">
@@ -415,7 +425,7 @@ export default function SessionDetailPage() {
         )}
 
         {/* NICHT ANGEMELDET + KEIN WARTELISTENEINTRAG */}
-        {!past && !myBooking && !myWaitlist && (
+        {!past && !session.is_cancelled && !myBooking && !myWaitlist && (
           <>
             {/* Kurs gesperrt für externe Buchungen */}
             {!course?.is_open && freeSpots > 0 && freeCredits > 0 && (
@@ -519,7 +529,7 @@ export default function SessionDetailPage() {
         )}
 
         {/* AUF WARTELISTE */}
-        {!past && myWaitlist && (
+        {!past && !session.is_cancelled && myWaitlist && (
           <>
             <div className="bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga p-3 mb-4">
               <p className="text-sm font-bold text-yoga-amber-text mb-1">

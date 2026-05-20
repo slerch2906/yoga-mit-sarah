@@ -29,15 +29,15 @@ test.describe('Spät-Abmeldung: Innerhalb 3h vor Stundenbeginn', () => {
     // Alte Credits aufräumen
     await db.from('credits').delete().eq('user_id', yogi1Id).eq('model', 'single')
 
-    // Kurs für heute anlegen, Session in 1h (innerhalb der 3h-Stornofrist)
-    const now = new Date()
-    const sessionTime = new Date(now.getTime() + 60 * 60 * 1000) // +1h
-    const dateStr = now.toISOString().split('T')[0]
+    // Session in 1h (innerhalb der 3h-Stornofrist)
+    // Datum aus lokalen Komponenten der sessionTime ableiten (sonst Tag-Wechsel-Bug)
+    const sessionTime = new Date(Date.now() + 60 * 60 * 1000) // +1h
+    const dateStr = `${sessionTime.getFullYear()}-${String(sessionTime.getMonth()+1).padStart(2,'0')}-${String(sessionTime.getDate()).padStart(2,'0')}`
     const timeStr = sessionTime.toTimeString().slice(0, 8)
 
     const { data: course } = await db.from('courses').insert({
       name: `${E2E_PREFIX} Spaet-Abmeldung-Test`,
-      weekday: now.toLocaleDateString('de-DE', { weekday: 'long' }),
+      weekday: sessionTime.toLocaleDateString('de-DE', { weekday: 'long' }),
       time_start: timeStr,
       duration_min: 60,
       max_spots: 5,
@@ -123,14 +123,13 @@ test.describe('Spät-Abmeldung: UI zeigt Stornofrist-Warnung', () => {
     // Sauberer Ausgangszustand
     await db.from('credits').delete().eq('user_id', yogi1Id).eq('model', 'single')
 
-    const now = new Date()
-    const sessionTime = new Date(now.getTime() + 90 * 60 * 1000) // +90min
-    const dateStr = now.toISOString().split('T')[0]
+    const sessionTime = new Date(Date.now() + 90 * 60 * 1000) // +90min
+    const dateStr = `${sessionTime.getFullYear()}-${String(sessionTime.getMonth()+1).padStart(2,'0')}-${String(sessionTime.getDate()).padStart(2,'0')}`
     const timeStr = sessionTime.toTimeString().slice(0, 8)
 
     const { data: course } = await db.from('courses').insert({
       name: `${E2E_PREFIX} Stornofrist-Warnung`,
-      weekday: now.toLocaleDateString('de-DE', { weekday: 'long' }),
+      weekday: sessionTime.toLocaleDateString('de-DE', { weekday: 'long' }),
       time_start: timeStr,
       duration_min: 60,
       max_spots: 5,

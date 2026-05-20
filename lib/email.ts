@@ -59,4 +59,10 @@ export const Email = {
 
   courseCancelled: (data: { email: string; firstName: string; courseName: string; reason: string; remainingSessions: number; refundMode: string; guthabenUrl: string | null }) =>
     sendEmail('course_cancelled', data),
+
+  adminCourseCancelledSummary: (data: { courseName: string; reason: string; remainingSessions: number; yogis: Array<{firstName: string; lastName: string; email: string}> }) =>
+    sendEmail('admin_course_cancelled_summary', data),
+
+  adminYogiChoice: (data: { userId: string; courseName: string; choice: 'guthaben' | 'erstattung'; remainingSessions: number }) =>
+    sendEmail('admin_yogi_choice', data),
 }

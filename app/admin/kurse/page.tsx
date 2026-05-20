@@ -400,6 +400,23 @@ export default function AdminKursePage() {
       }
     }
 
+    // Admin-Übersicht per Mail (nur bei all_refund)
+    if (cancelRefundMode === 'all_refund') {
+      const yogiList = (enrollments || [])
+        .filter((e: any) => !e.profile?.is_dummy && e.profile?.email)
+        .map((e: any) => ({
+          firstName: e.profile.first_name || '',
+          lastName: e.profile.last_name || '',
+          email: e.profile.email,
+        }))
+      await Email.adminCourseCancelledSummary({
+        courseName: cancellingCourse.name,
+        reason: cancelReason,
+        remainingSessions: remainingCount,
+        yogis: yogiList,
+      })
+    }
+
     await supabase.from('audit_log').insert({
       action: 'course_cancelled',
       details: { course_id: cancellingCourse.id, course_name: cancellingCourse.name, reason: cancelReason, refund_mode: cancelRefundMode, remaining_sessions: remainingCount }

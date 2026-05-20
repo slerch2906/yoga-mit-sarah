@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { Email } from '@/lib/email'
 
 export default function KursabbruchPage() {
   const { token } = useParams<{ token: string }>()
@@ -67,6 +68,14 @@ export default function KursabbruchPage() {
 
     setDone(choice)
     setChoosing(false)
+
+    // Admin benachrichtigen (fire-and-forget)
+    Email.adminYogiChoice({
+      userId: entry.user_id,
+      courseName: entry.course?.name || '',
+      choice,
+      remainingSessions: entry.remaining_sessions,
+    }).catch(() => {})
   }
 
   if (loading) return (

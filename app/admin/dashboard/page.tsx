@@ -589,7 +589,7 @@ export default function AdminDashboard() {
                   {s.is_cancelled ? (
                     <span className="badge badge-full">Abgesagt</span>
                   ) : isPast ? (
-                    <span className="badge">Vergangen</span>
+                    <span className="badge bg-yoga-gray text-yoga-text/40">Vergangen</span>
                   ) : (
                     <span className={`badge ${s.active_count >= s.course?.max_spots ? 'badge-full' : 'badge-free'}`}>
                       {s.active_count}/{s.course?.max_spots}

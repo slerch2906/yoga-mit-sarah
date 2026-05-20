@@ -345,7 +345,7 @@ export default function AdminKursePage() {
 
     // 4) Pro Yogi: aufräumen + Token + Email
     const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + 14)
+    expiresAt.setDate(expiresAt.getDate() + 7)
     const appUrl = 'https://kurse.yogamitsarah.me'
     for (const enroll of (enrollments || [])) {
       const prof = enroll.profile as any
@@ -1114,7 +1114,7 @@ export default function AdminKursePage() {
               <button onClick={() => setCancelRefundMode('yogi_choice')}
                 className={`w-full text-left p-3 rounded-yoga border-2 cursor-pointer transition-all ${cancelRefundMode === 'yogi_choice' ? 'border-yoga-text bg-yoga-bg' : 'border-yoga-border bg-transparent'}`}>
                 <div className="text-sm font-semibold"> Teilnehmer entscheiden selbst</div>
-                <div className="text-xs text-yoga-text/60 mt-0.5">Email mit Auswahl: Guthaben (2 Jahre) oder Geld zurück. 14 Tage Zeit.</div>
+                <div className="text-xs text-yoga-text/60 mt-0.5">Email mit Auswahl: Guthaben (2 Jahre) oder Geld zurück. 7 Tage Zeit.</div>
               </button>
             </div>
 

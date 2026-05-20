@@ -114,17 +114,20 @@ test.describe('Einladungs-Erinnerung senden', () => {
     await page.goto('/admin/einladungen')
     await page.waitForLoadState('networkidle')
 
-    // Einladung in der Liste finden
-    const invRow = page.locator('div, tr', { hasText: REMINDER_EMAIL }).first()
-    await expect(invRow).toBeVisible({ timeout: 8_000 })
+    // Einladung in der Liste finden – möglichst kleinster matchender Container
+    const emailText = page.getByText(REMINDER_EMAIL).first()
+    await expect(emailText).toBeVisible({ timeout: 8_000 })
+
+    // Zur Karten-Container hochnavigieren (Eltern-Element mit Erinnerungs-Button)
+    const invCard = emailText.locator('xpath=ancestor::*[descendant::button[contains(., "Erinnerung")]][1]')
 
     // Erinnerungs-Button klicken
-    const reminderBtn = invRow.getByRole('button', { name: /erinnerung/i })
-    await expect(reminderBtn).toBeVisible()
+    const reminderBtn = invCard.getByRole('button', { name: /erinnerung/i }).first()
+    await expect(reminderBtn).toBeVisible({ timeout: 5_000 })
     await reminderBtn.click()
 
-    // Button wechselt auf "Gesendet"
-    await expect(invRow.getByText(/gesendet/i)).toBeVisible({ timeout: 10_000 })
+    // Button wechselt auf "Gesendet" (innerhalb derselben Karte)
+    await expect(invCard.getByText(/gesendet/i).first()).toBeVisible({ timeout: 10_000 })
   })
 
   test('Erinnerungs-Email kommt an (Mailtrap)', async () => {

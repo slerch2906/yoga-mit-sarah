@@ -64,7 +64,7 @@ body {
   }
 
   .field-input {
-    @apply w-full bg-yoga-card border border-yoga-border2 rounded-yoga px-4 py-3.5
+    @apply w-full bg-white border border-yoga-border2 rounded-yoga px-4 py-3.5
            text-base font-medium text-yoga-text outline-none
            focus:border-yoga-text/40 transition-colors;
   }

@@ -53,7 +53,7 @@ export default function AdminDashboard() {
     // Weekly sessions
     const { data: sessionData } = await supabase
       .from('sessions')
-      .select('*, course:courses(name, max_spots), bookings!bookings_session_id_fkey(id, status, user_id, profile:profiles(first_name, last_name))')
+      .select('*, course:courses(name, max_spots, is_active), bookings!bookings_session_id_fkey(id, status, user_id, profile:profiles(first_name, last_name))')
       .gte('date', weekStart.toISOString().split('T')[0])
       .lte('date', weekEnd.toISOString().split('T')[0])
       .order('date').order('time_start')
@@ -74,11 +74,13 @@ export default function AdminDashboard() {
     const { count: waitCount } = await supabase.from('waitlist')
       .select('*', { count: 'exact', head: true })
 
-    setSessions((sessionData || []).map((s: any) => ({
-      ...s,
-      active_count: s.bookings.filter((b: any) => b.status === 'active').length,
-      cancelled_count: s.bookings.filter((b: any) => b.status === 'cancelled').length,
-    })))
+    setSessions((sessionData || [])
+      .filter((s: any) => s.course?.is_active !== false)
+      .map((s: any) => ({
+        ...s,
+        active_count: s.bookings.filter((b: any) => b.status === 'active').length,
+        cancelled_count: s.bookings.filter((b: any) => b.status === 'cancelled').length,
+      })))
     setStats({ bookings: bookCount || 0, cancellations: cancelCount || 0, waitlist: waitCount || 0 })
 
     // Ungelesene Benachrichtigungen laden

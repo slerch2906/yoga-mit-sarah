@@ -17,19 +17,37 @@ export default function LoginPage() {
   const [resetSent, setResetSent] = useState(false)
   const supabase = createClient()
 
-  // Beim Laden der Login-Seite immer alte Session komplett löschen
+  // Beim Laden der Login-Seite lokalen Session-State aufräumen.
+  // WICHTIG: scope: 'local' (nicht 'global') – sonst werden auch laufende
+  // Passwort-Recovery-Sessions invalidiert, falls Yogi parallel Reset-Link öffnet.
+  // Außerdem: nur Supabase-State löschen, nicht localStorage/sessionStorage komplett –
+  // damit andere Tabs (z.B. /profil/passwort mit Recovery-Token) intakt bleiben.
   useEffect(() => {
+    // Falls Supabase einen Recovery-Token ins URL-Fragment legt (#access_token=...&type=recovery),
+    // diesen Tab statt der Login-Seite zu /profil/passwort weiterleiten.
+    if (typeof window !== 'undefined' && window.location.hash.includes('type=recovery')) {
+      window.location.replace('/profil/passwort' + window.location.hash)
+      return
+    }
+
     const supabase = createClient()
-    supabase.auth.signOut({ scope: 'global' }).catch(() => {})
-    // Alle Supabase Cookies löschen
+    supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+    // Nur Supabase-Cookies des aktuellen Tabs löschen
     document.cookie.split(';').forEach(c => {
       const key = c.trim().split('=')[0]
       if (key.includes('supabase') || key.includes('sb-')) {
         document.cookie = `${key}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`
       }
     })
-    localStorage.clear()
-    sessionStorage.clear()
+    // Nur Supabase-Keys aus Storage löschen, nicht ALLES
+    try {
+      Object.keys(localStorage).forEach(k => {
+        if (k.includes('supabase') || k.startsWith('sb-')) localStorage.removeItem(k)
+      })
+      Object.keys(sessionStorage).forEach(k => {
+        if (k.includes('supabase') || k.startsWith('sb-')) sessionStorage.removeItem(k)
+      })
+    } catch {}
   }, [])
 
   async function handleLogin(e: React.FormEvent) {

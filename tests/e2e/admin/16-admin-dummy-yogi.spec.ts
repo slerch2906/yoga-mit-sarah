@@ -9,7 +9,7 @@
 import { test, expect } from '@playwright/test'
 import { createTestCourse, E2E_PREFIX } from '../../utils/seed'
 import {
-  getUserIdByEmail, getAdminClient, getActiveBooking,
+  getUserIdByEmail, getAdminClient, getActiveBooking, getServiceClient,
 } from '../../utils/db'
 import * as dotenv from 'dotenv'
 
@@ -21,24 +21,31 @@ test.describe('Dummy-Yogi: Anlage + Einbuchung', () => {
   let dummyYogiId: string
   let sessionId: string
   let courseId: string
+  const dummyEmail = `e2e.dummy.${Date.now()}@test.yogamitsarah.me`
 
   test.beforeAll(async () => {
-    const db = await getAdminClient()
+    // Auth-User anlegen (Voraussetzung für profiles wegen FK auth.users)
+    const service = getServiceClient()
+    const { data: auth, error: authErr } = await service.auth.admin.createUser({
+      email: dummyEmail,
+      password: `DummyPass_${Date.now()}!`,
+      email_confirm: true,
+    })
+    if (authErr || !auth.user) throw new Error(`Auth-User Anlage: ${authErr?.message}`)
+    dummyYogiId = auth.user.id
 
-    // Dummy-Yogi anlegen (ohne Auth-User)
-    const dummyId = crypto.randomUUID()
-    const { data: prof, error } = await db.from('profiles').insert({
-      id: dummyId,
+    // Profil mit is_dummy=true – email auf null setzen weil Dummy keine Mails bekommt
+    const db = await getAdminClient()
+    const { error } = await db.from('profiles').insert({
+      id: dummyYogiId,
       first_name: 'E2E',
       last_name: 'Dummy',
       email: null,
       is_admin: false,
       is_dummy: true,
       legal_accepted_at: new Date().toISOString(),
-    }).select('id').single()
-
-    if (error) throw new Error(`Dummy-Yogi Anlage fehlgeschlagen: ${error.message}`)
-    dummyYogiId = prof!.id
+    })
+    if (error) throw new Error(`Dummy-Profil Anlage fehlgeschlagen: ${error.message}`)
 
     // Testkurs
     const course = await createTestCourse({
@@ -58,6 +65,8 @@ test.describe('Dummy-Yogi: Anlage + Einbuchung', () => {
     await db.from('bookings').delete().eq('session_id', sessionId)
     await db.from('sessions').delete().eq('id', sessionId)
     await db.from('courses').delete().eq('id', courseId)
+    // Auth-User löschen
+    try { await getServiceClient().auth.admin.deleteUser(dummyYogiId) } catch {}
   })
 
   test('Dummy-Yogi existiert mit is_dummy=true und email=null', async () => {

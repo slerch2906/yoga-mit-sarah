@@ -24,10 +24,10 @@ test.describe('Anwesenheit: Übersicht', () => {
     // Header sichtbar
     await expect(page.getByRole('heading', { name: /anwesenheit/i }).first()).toBeVisible({ timeout: 8_000 })
 
-    // Entweder Liste oder "Heute keine Stunden"
+    // Entweder Liste oder "Heute keine Stunden" – mehrere matches möglich (Mobile+Desktop)
     await expect(
       page.getByText(/heutige stunden/i).first()
-        .or(page.getByText(/heute keine stunden/i))
+        .or(page.getByText(/heute keine stunden/i).first())
     ).toBeVisible({ timeout: 5_000 })
   })
 })

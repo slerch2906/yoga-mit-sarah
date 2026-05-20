@@ -519,7 +519,7 @@ export default function AdminYogiDetailPage() {
                           {free} von {c.total} Credits frei
                         </div>
                         <div className="text-xs text-yoga-text/50 mt-0.5">
-                          {c.model === 'course' ? `Kurs: ${c.course?.name || '—'}` : c.model === 'tenpack' ? 'Punktekarte' : 'Quartal'} ·
+                          {c.model === 'course' ? `Credits aus Kurs: ${c.course?.name || '—'}` : c.model === 'guthaben' ? 'Guthaben aus Kursabbruch' : c.model === 'single' ? 'Credits aus Punktekarte' : c.model === 'tenpack' ? 'Punktekarte' : 'Quartal'} ·
                           {isExpired ? ' Abgelaufen' : ` verfällt ${new Date(c.expires_at).getFullYear() > 2090 ? 'nie' : new Date(c.expires_at).toLocaleDateString('de-DE')}`}
                         </div>
                       </div>

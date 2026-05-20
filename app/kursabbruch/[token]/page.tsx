@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Email } from '@/lib/email'
 
 export default function KursabbruchPage() {
   const { token } = useParams<{ token: string }>()
@@ -31,51 +30,23 @@ export default function KursabbruchPage() {
   async function handleChoice(choice: 'guthaben' | 'erstattung') {
     if (entry?.choice) return // bereits gewählt
     setChoosing(true)
-    const now = new Date().toISOString()
 
-    // Atomar updaten – nur wenn noch keine Wahl getroffen wurde
-    const { data: updated, error } = await supabase
-      .from('course_cancellation_responses')
-      .update({ choice, responded_at: now })
-      .eq('token', token)
-      .is('choice', null)
-      .select()
-      .maybeSingle()
+    const res = await fetch(`/api/kursabbruch/${token}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ choice }),
+    })
+    const json = await res.json().catch(() => ({}))
 
-    if (!updated || error) {
-      // Zwischenzeitlich von jemand anderem geklickt
-      const { data: refetch } = await supabase
-        .from('course_cancellation_responses')
-        .select('choice').eq('token', token).maybeSingle()
-      setDone(refetch?.choice as 'guthaben' | 'erstattung')
+    if (!res.ok) {
+      setError('Fehler beim Speichern. Bitte versuche es erneut.')
       setChoosing(false)
       return
     }
 
-    // Bei Guthaben: Credits anlegen (2 Jahre gültig, course_id null, model 'guthaben')
-    if (choice === 'guthaben') {
-      const expiry = new Date()
-      expiry.setFullYear(expiry.getFullYear() + 2)
-      await supabase.from('credits').insert({
-        user_id: entry.user_id,
-        course_id: null,
-        model: 'guthaben',
-        total: entry.remaining_sessions,
-        used: 0,
-        expires_at: expiry.toISOString(),
-      })
-    }
-
-    setDone(choice)
+    // alreadyChosen: jemand hat in der Zwischenzeit geklickt
+    setDone((json.alreadyChosen ?? choice) as 'guthaben' | 'erstattung')
     setChoosing(false)
-
-    // Admin benachrichtigen (fire-and-forget)
-    Email.adminYogiChoice({
-      userId: entry.user_id,
-      courseName: entry.course?.name || '',
-      choice,
-      remainingSessions: entry.remaining_sessions,
-    }).catch(() => {})
   }
 
   if (loading) return (
@@ -150,6 +121,7 @@ export default function KursabbruchPage() {
               </button>
             </div>
 
+            {error && <p className="text-sm text-red-500 text-center mt-2">{error}</p>}
             <p className="text-xs text-yoga-text/40 text-center mt-4">
               Frist: {new Date(entry.expires_at).toLocaleDateString('de-DE')}
             </p>

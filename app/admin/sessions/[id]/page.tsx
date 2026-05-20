@@ -77,10 +77,7 @@ export default function AdminSessionPage() {
       status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false
     }).eq('id', bookingId)
 
-    if (creditId) {
-      const { data: credit } = await supabase.from('credits').select('used').eq('id', creditId).single()
-      if (credit) await supabase.from('credits').update({ used: Math.max(0, credit.used - 1) }).eq('id', creditId)
-    }
+    // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
 
     await supabase.from('audit_log').insert({
       action: 'booking_cancelled_by_admin',
@@ -108,7 +105,7 @@ export default function AdminSessionPage() {
           user_id: waitlistFirst.user_id, session_id: sessionId, type: 'single', status: 'active',
           credit_id: waitCredit.id, cancelled_at: null, cancel_late: false,
         }, { onConflict: 'user_id,session_id' })
-        await supabase.from('credits').update({ used: waitCredit.used + 1 }).eq('id', waitCredit.id)
+        // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
       }
       if (waitlistFirst.profile?.email) {
         await Email.waitlistPromoted({
@@ -158,7 +155,7 @@ export default function AdminSessionPage() {
       alert('Buchung konnte nicht angelegt werden.')
       return
     }
-    await supabase.from('credits').update({ used: credit.used + 1 }).eq('id', credit.id)
+    // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
     await supabase.from('audit_log').insert({
       action: 'admin_added_yogi_to_session',
       details: { user_id: yogi.id, session_id: id, credit_id: credit.id }
@@ -250,7 +247,7 @@ export default function AdminSessionPage() {
 
       if (bookingError) { skippedCount++; continue }
 
-      await supabase.from('credits').update({ used: credit.used + 1 }).eq('id', booking.credit_id)
+      // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
       enrolledCount++
 
       if (booking.profile?.email) {
@@ -325,16 +322,9 @@ export default function AdminSessionPage() {
           type: booking.type,
           status: 'active',
         })
-      } else if (booking.credit_id) {
-        // Credit zurückgeben
-        const { data: credit } = await supabase.from('credits')
-          .select('used').eq('id', booking.credit_id).single()
-        if (credit) {
-          await supabase.from('credits')
-            .update({ used: Math.max(0, credit.used - 1) })
-            .eq('id', booking.credit_id)
-        }
       }
+      // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
+      // (bei Cancellation und/oder neuer Buchung im Ersatztermin)
 
       // Email an Yogi
       if (booking.profile?.email) {

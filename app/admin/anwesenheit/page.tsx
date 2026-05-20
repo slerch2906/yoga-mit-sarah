@@ -53,10 +53,7 @@ function AnwesenheitInner() {
 
     for (const b of bookings) {
       await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString() }).eq('id', b.id)
-      if (b.credit_id) {
-        const { data: credit } = await supabase.from('credits').select('used').eq('id', b.credit_id).single()
-        if (credit) await supabase.from('credits').update({ used: Math.max(0, credit.used - 1) }).eq('id', b.credit_id)
-      }
+      // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
       // Email an jeden Yogi
       if (b.profile?.email) {
         await Email.sessionCancelled({

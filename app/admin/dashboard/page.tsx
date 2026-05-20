@@ -103,10 +103,7 @@ export default function AdminDashboard() {
       status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false
     }).eq('id', bookingId)
 
-    if (creditId) {
-      const { data: credit } = await supabase.from('credits').select('used').eq('id', creditId).single()
-      if (credit) await supabase.from('credits').update({ used: Math.max(0, credit.used - 1) }).eq('id', creditId)
-    }
+    // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
 
     await supabase.from('audit_log').insert({
       action: 'booking_cancelled_by_admin',
@@ -136,7 +133,7 @@ export default function AdminDashboard() {
           user_id: waitlistFirst.user_id, session_id: sessionId, type: 'single', status: 'active',
           credit_id: credit.id
         })
-        await supabase.from('credits').update({ used: credit.used + 1 }).eq('id', credit.id)
+        // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
       }
       if (waitlistFirst.profile && !waitlistFirst.profile.is_dummy) {
         await Email.waitlistPromoted({
@@ -222,9 +219,9 @@ export default function AdminDashboard() {
         user_id: yogi.id, total: 1, used: 1, expires_at: expiry.toISOString(), model: 'single', course_id: null
       }).select('id').single()
       creditId = nc?.id || null
-    } else {
-      await supabase.from('credits').update({ used: freeCredit.used + 1 }).eq('id', creditId)
     }
+    // credit.used wird durch trg_sync_credit_used aktualisiert (außer bei frisch erstelltem
+    // Quick-Credit oben, der mit used=1 direkt initialisiert wird)
     await supabase.from('bookings').insert({
       user_id: yogi.id, session_id: selectedSession.id, credit_id: creditId, type: 'single', status: 'active'
     })
@@ -251,12 +248,7 @@ export default function AdminDashboard() {
       await supabase.from('bookings').update({
         status: 'cancelled', cancelled_at: new Date().toISOString()
       }).eq('id', b.id)
-
-      // Credit freigeben (used - 1)
-      if (b.credit_id) {
-        const { data: credit } = await supabase.from('credits').select('used').eq('id', b.credit_id).single()
-        if (credit) await supabase.from('credits').update({ used: Math.max(0, credit.used - 1) }).eq('id', b.credit_id)
-      }
+      // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
     }
 
     // Ersatztermin anlegen?
@@ -281,11 +273,7 @@ export default function AdminDashboard() {
             user_id: b.user_id, session_id: newSession.id,
             credit_id: b.credit_id, type: b.type, status: 'active'
           })
-          // Credit wieder verbrauchen
-          if (b.credit_id) {
-            const { data: credit } = await supabase.from('credits').select('used').eq('id', b.credit_id).single()
-            if (credit) await supabase.from('credits').update({ used: credit.used + 1 }).eq('id', b.credit_id)
-          }
+          // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
         }
       }
     }

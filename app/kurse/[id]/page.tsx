@@ -109,8 +109,7 @@ export default function SessionDetailPage() {
     }
 
     if (!error) {
-      // Credit als verbraucht markieren (+1 used)
-      await supabase.from('credits').update({ used: bestCredit.used + 1 }).eq('id', bestCredit.id)
+      // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
       await supabase.from('audit_log').insert({
         user_id: user!.id, action: 'booking_created',
         details: { session_id: id, type: 'single', course_name: session?.course?.name, session_date: session?.date, session_time: session?.time_start }
@@ -147,21 +146,7 @@ export default function SessionDetailPage() {
       status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: late
     }).eq('id', myBooking.id)
 
-    // Credit zurückgeben wenn rechtzeitig
-    if (!late) {
-      let creditId = myBooking.credit_id
-      // Falls credit_id nicht direkt gesetzt, Kurs-Credit nachschlagen
-      if (!creditId && session?.course_id) {
-        const { data: courseCredit } = await supabase.from('credits')
-          .select('id, used').eq('user_id', user!.id).eq('course_id', session.course_id)
-          .gt('expires_at', new Date().toISOString()).order('expires_at').limit(1).maybeSingle()
-        if (courseCredit) creditId = courseCredit.id
-      }
-      if (creditId) {
-        const { data: credit } = await supabase.from('credits').select('used').eq('id', creditId).single()
-        if (credit) await supabase.from('credits').update({ used: Math.max(0, credit.used - 1) }).eq('id', creditId)
-      }
-    }
+    // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
 
     await supabase.from('audit_log').insert({
       user_id: user!.id, action: 'booking_cancelled',

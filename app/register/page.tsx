@@ -164,7 +164,7 @@ function RegisterInner() {
           status: 'active',
         }))
         await supabase.from('bookings').insert(bookings)
-        await supabase.from('credits').update({ used: sessions.length }).eq('id', creditData.id)
+        // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
       }
 
       await supabase.from('admin_notifications').insert({

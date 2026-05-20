@@ -35,8 +35,9 @@ test.describe('Dummy-Yogi: Anlage + Einbuchung', () => {
     dummyYogiId = auth.user.id
 
     // Profil mit is_dummy=true – email auf null setzen weil Dummy keine Mails bekommt
+    // UPSERT weil der on_auth_user_created Trigger schon ein Profile angelegt hat
     const db = await getAdminClient()
-    const { error } = await db.from('profiles').insert({
+    const { error } = await db.from('profiles').upsert({
       id: dummyYogiId,
       first_name: 'E2E',
       last_name: 'Dummy',
@@ -44,7 +45,7 @@ test.describe('Dummy-Yogi: Anlage + Einbuchung', () => {
       is_admin: false,
       is_dummy: true,
       legal_accepted_at: new Date().toISOString(),
-    })
+    }, { onConflict: 'id' })
     if (error) throw new Error(`Dummy-Profil Anlage fehlgeschlagen: ${error.message}`)
 
     // Testkurs

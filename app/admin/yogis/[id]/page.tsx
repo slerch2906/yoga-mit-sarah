@@ -87,6 +87,9 @@ export default function AdminYogiDetailPage() {
     // Warteliste entfernen
     await supabase.from('waitlist').delete().eq('user_id', id)
 
+    // DSGVO: audit_log Einträge anonymisieren (PII aus details JSONB entfernen)
+    await supabase.rpc('anonymize_user_audit_logs', { target_user_id: id }).catch(() => {})
+
     // Auth User löschen + Sessions invalidieren
     try {
       const deleteRes = await fetch('/api/delete-account', {
@@ -103,9 +106,10 @@ export default function AdminYogiDetailPage() {
       console.error('Delete account error:', e)
     }
 
+    // DSGVO: kein Klartext-Name/Email im audit_log – nur abstrakter Vorgang
     await supabase.from('audit_log').insert({
       action: 'yogi_anonymized_dsgvo',
-      details: { anonymized_user_id: id, original_email: email, original_name: fullName }
+      details: { anonymized_user_id: id }
     })
 
     // Email an dich: Drive-PDF löschen

@@ -251,6 +251,9 @@ export default function ProfilPage() {
     // 3) Warteliste + offene Buchungen entfernen
     await supabase.from('waitlist').delete().eq('user_id', user.id)
 
+    // 3b) Audit-Log Einträge anonymisieren (DSGVO – PII aus details JSONB entfernen)
+    await supabase.rpc('anonymize_user_audit_logs', { target_user_id: user.id }).catch(() => {})
+
     // 4) Admin informieren (inkl. Drive-Hinweis)
     await supabase.from('admin_notifications').insert({
       type: 'account_deleted_dsgvo',

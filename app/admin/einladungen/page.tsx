@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { Email } from '@/lib/email'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -34,31 +35,13 @@ export default function EinladungenPage() {
     setSendingReminder(inv.id)
     try {
       const link = `${window.location.origin}/register?token=${inv.token}`
-      // getSession für Token
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token || ''
-      const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-email`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          type: 'invitation_reminder',
-          data: {
-            email: inv.email,
-            firstName: inv.first_name || 'Yogi',
-            courseName: inv.course?.name || null,
-            inviteLink: link,
-          }
-        })
+      // Über lib/email.ts → setzt korrekt x-function-secret + anon Bearer
+      await Email.invitationReminder({
+        email: inv.email,
+        firstName: inv.first_name || 'Yogi',
+        courseName: inv.course?.name || undefined,
+        inviteLink: link,
       })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        alert('Fehler beim Senden: ' + (err.error || res.status))
-        setSendingReminder(null)
-        return
-      }
       setReminderSent(prev => new Set([...prev, inv.id]))
     } catch (e) {
       alert('Netzwerkfehler: ' + String(e))

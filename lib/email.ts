@@ -48,6 +48,9 @@ export const Email = {
   invitationSent: (data: { email: string; firstName: string; inviteLink: string; courseName?: string }) =>
     sendEmail('invitation_sent', data),
 
+  invitationReminder: (data: { email: string; firstName: string; inviteLink: string; courseName?: string }) =>
+    sendEmail('invitation_reminder', data),
+
   yogiEnrolledByAdmin: (data: { email: string; firstName: string; courseName: string; weekday: string; timeStart: string; durationMin: number; totalUnits?: number; dateStart?: string }) =>
     sendEmail('yogi_enrolled_by_admin', data),
 

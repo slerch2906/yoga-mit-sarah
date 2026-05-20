@@ -56,61 +56,32 @@ function BestaetigungInner() {
       })
     }
 
-    // Warteliste: ersten Eintrag nachrücken lassen
+    // Wartelisten-Nachrücken + Notify-Versand server-side via SECURITY DEFINER RPC
+    // (verhindert dass Yogi fremde profile.email direkt liest – DSGVO)
     try {
-      const { data: waitlistFirst } = await supabase
-        .from('waitlist').select('*, profile:profiles(email, first_name)')
-        .eq('session_id', id).eq('type', 'waitlist')
-        .order('position', { ascending: true }).limit(1).single()
+      const { data: result } = await supabase.rpc('process_cancellation_with_waitlist', { p_session_id: id })
 
-      if (waitlistFirst) {
-        // Alle Credits laden und besten wählen (wie beim normalen Buchen)
-        const { data: allWaitCredits } = await supabase.from('credits')
-          .select('*').eq('user_id', waitlistFirst.user_id)
-          .gt('expires_at', new Date().toISOString())
-        const availableCredits = (allWaitCredits || []).filter(c => c.total > c.used)
-        const credit = availableCredits.sort((a: any, b: any) => 
-          new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime())[0] || null
-
-        if (credit && (credit.total - credit.used) > 0) {
-          await supabase.from('bookings').insert({
-            user_id: waitlistFirst.user_id, session_id: id,
-            credit_id: credit.id, type: 'single', status: 'active'
-          })
-          await supabase.from('credits').update({ used: credit.used + 1 }).eq('id', credit.id)
-        }
-
-        if (waitlistFirst.profile && !waitlistFirst.profile.is_dummy) {
-          await Email.waitlistPromoted({
-            email: waitlistFirst.profile.email,
-            firstName: waitlistFirst.profile.first_name || 'Yogi',
-            courseName: session?.course?.name || '',
-            date: session?.date || '',
-            timeStart: session?.time_start || '',
-          })
-        }
-
-        await supabase.from('waitlist').delete().eq('id', waitlistFirst.id)
+      if (result?.promoted?.email) {
+        await Email.waitlistPromoted({
+          email: result.promoted.email,
+          firstName: result.promoted.first_name || 'Yogi',
+          courseName: result.promoted.course_name || '',
+          date: result.promoted.date || '',
+          timeStart: result.promoted.time_start || '',
+        })
       }
 
-      // Notify-User informieren
-      const { data: notifyUsers } = await supabase
-        .from('waitlist').select('*, profile:profiles(email, first_name)')
-        .eq('session_id', id).eq('type', 'notify')
-      if (notifyUsers && notifyUsers.length > 0) {
-        for (const nu of notifyUsers) {
-          if (nu.profile) {
-            await Email.notifyPlaceFree({
-              email: nu.profile.email,
-              firstName: nu.profile.first_name || 'Yogi',
-              courseName: session?.course?.name || '',
-              date: session?.date || '',
-              timeStart: session?.time_start || '',
-              sessionId: id,
-            })
-          }
+      for (const nu of (result?.notify_users || [])) {
+        if (nu?.email) {
+          await Email.notifyPlaceFree({
+            email: nu.email,
+            firstName: nu.first_name || 'Yogi',
+            courseName: nu.course_name || '',
+            date: nu.date || '',
+            timeStart: nu.time_start || '',
+            sessionId: nu.session_id || id,
+          })
         }
-        await supabase.from('waitlist').delete().eq('session_id', id).eq('type', 'notify')
       }
     } catch(e) { console.error('Waitlist promotion error:', e) }
 

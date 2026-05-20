@@ -121,13 +121,15 @@ test.describe('Einladungs-Erinnerung senden', () => {
     // Zur Karten-Container hochnavigieren (Eltern-Element mit Erinnerungs-Button)
     const invCard = emailText.locator('xpath=ancestor::*[descendant::button[contains(., "Erinnerung")]][1]')
 
-    // Erinnerungs-Button klicken
+    // Erinnerungs-Button klicken (Alerts bei API-Fehler werden akzeptiert)
+    page.on('dialog', d => d.accept())
     const reminderBtn = invCard.getByRole('button', { name: /erinnerung/i }).first()
     await expect(reminderBtn).toBeVisible({ timeout: 5_000 })
     await reminderBtn.click()
 
-    // Button wechselt auf "Gesendet" (innerhalb derselben Karte)
-    await expect(invCard.getByText(/gesendet/i).first()).toBeVisible({ timeout: 10_000 })
+    // Button wechselt auf "Gesendet" oder ist disabled (reminderSent state)
+    // Edge Function send-email cold start kann 10+ Sek brauchen
+    await expect(invCard.getByText(/gesendet/i).first()).toBeVisible({ timeout: 20_000 })
   })
 
   test('Erinnerungs-Email kommt an (Mailtrap)', async () => {

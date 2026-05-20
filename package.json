@@ -18,22 +18,22 @@
     "test:cleanup": "ts-node --project tsconfig.test.json -e \"const {cleanupAllE2EData}=require('./tests/utils/seed');cleanupAllE2EData().then(()=>console.log('Cleanup fertig')).catch(console.error)\""
   },
   "dependencies": {
-    "next": "15.5.18",
-    "@supabase/supabase-js": "^2.43.1",
     "@supabase/ssr": "^0.3.0",
+    "@supabase/supabase-js": "^2.106.1",
+    "next": "15.5.18",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.4.5",
+    "@playwright/test": "^1.44.0",
+    "@types/node": "^20.12.12",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@types/node": "^20.12.12",
-    "tailwindcss": "^3.4.3",
-    "postcss": "^8.4.38",
     "autoprefixer": "^10.4.19",
-    "@playwright/test": "^1.44.0",
+    "dotenv": "^16.4.5",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.3",
     "ts-node": "^10.9.2",
-    "dotenv": "^16.4.5"
+    "typescript": "^5.4.5"
   }
 }

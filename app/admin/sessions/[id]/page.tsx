@@ -218,25 +218,41 @@ export default function AdminSessionPage() {
 
     if (!newSession) { setAddingReplacement(false); return }
 
-    // Alle damals Angemeldeten einbuchen
+    let enrolledCount = 0
+    let skippedCount = 0
+
     for (const booking of (cancelledBookings || [])) {
       if (!booking.credit_id) continue
-      // Credit prüfen ob noch gültig
+
+      // Credit prüfen: muss existieren, noch gültig sein und freies Guthaben haben
       const { data: credit } = await supabase.from('credits')
         .select('*').eq('id', booking.credit_id).maybeSingle()
-      if (!credit) continue
 
-      await supabase.from('bookings').insert({
+      const creditAvailable = credit
+        && (credit.total - credit.used) > 0
+        && new Date(credit.expires_at) > new Date()
+
+      if (!creditAvailable) {
+        skippedCount++
+        continue
+      }
+
+      // Upsert: falls Yogi bereits eine Buchung für diese neue Session hat (Duplikat-Schutz)
+      const { error: bookingError } = await supabase.from('bookings').upsert({
         user_id: booking.user_id,
         session_id: newSession.id,
         credit_id: booking.credit_id,
         type: booking.type || 'course',
         status: 'active',
-      })
-      // Credit wieder als verbraucht markieren
-      await supabase.from('credits').update({ used: credit.used + 1 }).eq('id', credit.id)
+        cancelled_at: null,
+        cancel_late: false,
+      }, { onConflict: 'user_id,session_id' })
 
-      // Email an Yogi
+      if (bookingError) { skippedCount++; continue }
+
+      await supabase.from('credits').update({ used: credit.used + 1 }).eq('id', booking.credit_id)
+      enrolledCount++
+
       if (booking.profile?.email) {
         await Email.sessionAdded({
           email: booking.profile.email,
@@ -256,13 +272,17 @@ export default function AdminSessionPage() {
         replacement_session_id: newSession.id,
         course: session?.course?.name,
         date: lateReplacementDate,
-        yogis_enrolled: (cancelledBookings || []).length,
+        yogis_enrolled: enrolledCount,
+        yogis_skipped: skippedCount,
       }
     })
 
     setAddingReplacement(false)
     setShowAddReplacement(false)
-    alert(`Ersatztermin angelegt! ${(cancelledBookings || []).length} Yogis wurden eingebucht und informiert.`)
+    const skipNote = skippedCount > 0
+      ? ` ${skippedCount} Yogi(s) nicht eingebucht – Credit bereits in einer anderen Stunde verwendet.`
+      : ''
+    alert(`Ersatztermin angelegt! ${enrolledCount} Yogi(s) eingebucht und informiert.${skipNote}`)
     loadData()
   }
 

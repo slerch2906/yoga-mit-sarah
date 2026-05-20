@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { fullLogout } from '@/lib/logout'
+import { Email } from '@/lib/email'
 
 const ADMIN_EMAIL = 'slerch2906@gmail.com'
 
@@ -55,9 +56,7 @@ export default function LoginPage() {
   async function handleReset(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/profil/passwort`,
-    })
+    await Email.passwordResetRequest({ email })
     setResetSent(true)
     setLoading(false)
   }

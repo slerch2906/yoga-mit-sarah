@@ -495,7 +495,7 @@ export default function AdminYogiDetailPage() {
               const isExpired = new Date(c.expires_at) < new Date()
               return (
                 <div key={c.id} className={`card mb-2 ${isExpired ? 'opacity-50' : ''}`}>
-                  {editingCredit?.id === c.id ? (
+                  {editingCredit?.id === c.id && c.model === 'tenpack' ? (
                     <div>
                       <p className="text-sm font-semibold mb-2">Credits anpassen</p>
                       <p className="text-xs text-yoga-text/50 mb-2">Bereits verbraucht: {c.used}</p>
@@ -522,17 +522,22 @@ export default function AdminYogiDetailPage() {
                           {c.model === 'course' ? `Credits aus Kurs: ${c.course?.name || '—'}` : c.model === 'guthaben' ? 'Guthaben aus Kursabbruch' : c.model === 'single' ? 'Credits aus Punktekarte' : c.model === 'tenpack' ? 'Punktekarte' : 'Quartal'} ·
                           {isExpired ? ' Abgelaufen' : ` verfällt ${new Date(c.expires_at).getFullYear() > 2090 ? 'nie' : new Date(c.expires_at).toLocaleDateString('de-DE')}`}
                         </div>
+                        {c.model !== 'tenpack' && (
+                          <div className="text-xs text-yoga-text/30 mt-0.5">Nur Lesezugriff</div>
+                        )}
                       </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => { setEditingCredit(c); setEditCreditAmount(c.total) }}
-                          className="text-xs border border-yoga-border2 rounded-full px-2 py-1 hover:opacity-80">
-                          <i className="ti ti-edit" />
-                        </button>
-                        <button onClick={() => handleDeleteCredit(c.id)}
-                          className="text-xs bg-yoga-red-bg text-yoga-red-text border-0 rounded-full px-2 py-1 cursor-pointer hover:opacity-80">
-                          <i className="ti ti-trash" />
-                        </button>
-                      </div>
+                      {c.model === 'tenpack' && (
+                        <div className="flex gap-2">
+                          <button onClick={() => { setEditingCredit(c); setEditCreditAmount(c.total) }}
+                            className="text-xs border border-yoga-border2 rounded-full px-2 py-1 hover:opacity-80">
+                            <i className="ti ti-edit" />
+                          </button>
+                          <button onClick={() => handleDeleteCredit(c.id)}
+                            className="text-xs bg-yoga-red-bg text-yoga-red-text border-0 rounded-full px-2 py-1 cursor-pointer hover:opacity-80">
+                            <i className="ti ti-trash" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

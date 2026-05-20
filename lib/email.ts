@@ -68,4 +68,7 @@ export const Email = {
 
   adminGuthabenVerrechnet: (data: { yogiName: string; yogiEmail: string; courseName: string; guthabenAmount: number }) =>
     sendEmail('admin_guthaben_verrechnet', data),
+
+  passwordResetRequest: (data: { email: string }) =>
+    sendEmail('password_reset_request', data),
 }

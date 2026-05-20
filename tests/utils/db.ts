@@ -76,6 +76,22 @@ export async function getGuthabenCredit(userId: string) {
   return data
 }
 
+export async function getCourseCredit(userId: string, courseId: string) {
+  const db = await getAdminClient()
+  const { data } = await db.from('credits')
+    .select('*').eq('user_id', userId).eq('course_id', courseId).eq('model', 'course')
+    .maybeSingle()
+  return data
+}
+
+export async function countGuthabenCredits(userId: string): Promise<number> {
+  const db = await getAdminClient()
+  const { count } = await db.from('credits')
+    .select('id', { count: 'exact' })
+    .eq('user_id', userId).eq('model', 'guthaben')
+  return count ?? 0
+}
+
 // ── Waitlist ─────────────────────────────────────────────────────────────────
 
 export async function getWaitlistEntry(userId: string, sessionId: string) {

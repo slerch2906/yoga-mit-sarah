@@ -212,6 +212,22 @@ export async function createEnrolledCourse(userId: string, options: {
   return course
 }
 
+/** Guthaben-Credits (aus Kursabbruch) für einen Yogi anlegen */
+export async function giveYogiGuthaben(userId: string, amount: number) {
+  const db = await getAdminClient()
+  const expires = new Date()
+  expires.setFullYear(expires.getFullYear() + 2)
+  const { data } = await db.from('credits').insert({
+    user_id: userId,
+    course_id: null,
+    model: 'guthaben',
+    total: amount,
+    used: 0,
+    expires_at: expires.toISOString(),
+  }).select('id').single()
+  return data?.id
+}
+
 /** Einzelstunden-Credits für einen Yogi anlegen */
 export async function giveYogiSingleCredit(userId: string, count = 5) {
   const db = await getAdminClient()

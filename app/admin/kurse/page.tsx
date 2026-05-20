@@ -530,7 +530,7 @@ export default function AdminKursePage() {
     expiresAt.setDate(expiresAt.getDate() + 8)
     await supabase.from('credits').insert({
       user_id: yogi.id, course_id: course.id,
-      model: 'course', total: sessionCount, used: 0,
+      model: 'course', total: sessionCount, used: sessionCount,
       expires_at: expiresAt.toISOString()
     })
 

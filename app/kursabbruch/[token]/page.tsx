@@ -83,7 +83,7 @@ export default function KursabbruchPage() {
             </p>
             <p className="text-sm text-yoga-text/60">
               {done === 'guthaben'
-                ? `Deine ${entry.remaining_sessions} Credits sind 2 Jahre gültig und werden beim nächsten Kurs verrechnet.`
+                ? `Deine ${entry.remaining_sessions} Credits sind 2 Jahre gültig und werden beim nächsten Kurs angerechnet. Das Guthaben ist nur für neue Kurse verwendbar, nicht für Einzelstunden.`
                 : 'Sarah meldet sich bei dir wegen der Erstattung.'}
             </p>
           </div>
@@ -109,7 +109,10 @@ export default function KursabbruchPage() {
                 className="w-full p-4 rounded-yoga border-2 border-yoga-border2 text-left hover:border-yoga-text transition-colors cursor-pointer bg-transparent">
                 <div className="text-base font-bold mb-0.5"> Guthaben behalten</div>
                 <div className="text-xs text-yoga-text/60">
-                  {entry.remaining_sessions} Credits, 2 Jahre gültig. Beim nächsten Kurs verrechnet.
+                  {entry.remaining_sessions} Credits, 2 Jahre gültig. Wird beim nächsten Kurs angerechnet.
+                </div>
+                <div className="text-xs text-yoga-text/40 mt-1">
+                  Nur für ganze Kurse verwendbar, nicht für Einzelstunden.
                 </div>
               </button>
               <button onClick={() => handleChoice('erstattung')} disabled={choosing}

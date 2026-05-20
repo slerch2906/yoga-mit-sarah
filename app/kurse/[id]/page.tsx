@@ -17,6 +17,7 @@ export default function SessionDetailPage() {
   const [myWaitlist, setMyWaitlist] = useState<any>(null)
   const [freeCredits, setFreeCredits] = useState(0)
   const [bestCredit, setBestCredit] = useState<any>(null)
+  const [hasGuthabenOnly, setHasGuthabenOnly] = useState(false)
   const [freeSpots, setFreeSpots] = useState(0)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
@@ -49,10 +50,12 @@ export default function SessionDetailPage() {
     setMyWaitlist(myWait)
     setFreeSpots(((sess as any)?.course?.max_spots || 0) - (bookingCount || 0))
 
-    // Freie Credits berechnen: nur Credits mit total > used
-    const available = (allCredits || []).filter(c => c.total > c.used)
+    // Freie Credits berechnen: Guthaben (aus Kursabbruch) ist nur für neue Kurse, nicht für Einzelstunden
+    const available = (allCredits || []).filter(c => c.total > c.used && c.model !== 'guthaben')
     const totalFree = available.reduce((sum, c) => sum + (c.total - c.used), 0)
     setFreeCredits(totalFree)
+    const guthabenOnly = totalFree === 0 && (allCredits || []).some(c => c.model === 'guthaben' && c.total > c.used)
+    setHasGuthabenOnly(guthabenOnly)
     // Besten Credit wählen: zuerst ablaufende
     const sorted = available.sort((a, b) => new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime())
     setBestCredit(sorted[0] || null)
@@ -480,7 +483,14 @@ export default function SessionDetailPage() {
               </>
             ) : (
               <>
-                {freeCredits === 0 && (
+                {hasGuthabenOnly ? (
+                  <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
+                    <p className="text-sm font-semibold text-yoga-text/80 mb-1">Kurs-Guthaben vorhanden</p>
+                    <p className="text-sm text-yoga-text/70 leading-relaxed">
+                      Du hast noch Kurs-Guthaben aus einem abgesagten Kurs. Dieses Guthaben kann nur für neue <strong>Kurse</strong> verwendet werden, nicht für Einzelstunden. Bitte wende dich an Sarah.
+                    </p>
+                  </div>
+                ) : freeCredits === 0 && (
                   <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
                     <p className="text-sm text-yoga-text/80">
                       Du hast keine freien Credits. Bitte wende dich an Sarah.

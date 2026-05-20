@@ -543,6 +543,22 @@ export default function AdminKursePage() {
       })
     }
 
+    // Guthaben (aus Kursabbruch) verrechnen und Admin informieren
+    const now = new Date().toISOString()
+    const { data: guthabenCredits } = await supabase.from('credits')
+      .select('id, total, used').eq('user_id', yogi.id).eq('model', 'guthaben').gt('expires_at', now)
+    const guthabenTotal = (guthabenCredits || []).reduce((sum: number, c: any) => sum + Math.max(0, c.total - c.used), 0)
+    if (guthabenTotal > 0) {
+      const ids = (guthabenCredits || []).map((c: any) => c.id)
+      await supabase.from('credits').delete().in('id', ids)
+      await Email.adminGuthabenVerrechnet({
+        yogiName: `${yogi.first_name || ''} ${yogi.last_name || ''}`.trim(),
+        yogiEmail: yogi.email || '',
+        courseName: course.name,
+        guthabenAmount: guthabenTotal,
+      })
+    }
+
     // Email senden
     if (yogi.email && !yogi.is_dummy) {
       await Email.yogiEnrolledByAdmin({
@@ -1313,21 +1329,31 @@ export default function AdminKursePage() {
             {addYogiSearch.length >= 2 && addYogiResults.length === 0 && (
               <p className="text-sm text-yoga-text/40 text-center py-3">Kein Yogi gefunden</p>
             )}
-            {addYogiResults.map(yogi => (
-              <div key={yogi.id} className="flex items-center justify-between py-3 border-b border-yoga-border">
-                <div>
-                  <div className="text-sm font-semibold">
-                    {yogi.first_name} {yogi.last_name}
-                    {yogi.is_dummy && <span className="ml-2 text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">Dummy</span>}
+            {addYogiResults.map(yogi => {
+              const now = new Date()
+              const guthaben = (yogi.credits || []).reduce((sum: number, c: any) =>
+                c.model === 'guthaben' && new Date(c.expires_at) > now ? sum + Math.max(0, c.total - c.used) : sum, 0)
+              return (
+                <div key={yogi.id} className="flex items-center justify-between py-3 border-b border-yoga-border">
+                  <div>
+                    <div className="text-sm font-semibold">
+                      {yogi.first_name} {yogi.last_name}
+                      {yogi.is_dummy && <span className="ml-2 text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">Dummy</span>}
+                    </div>
+                    <div className="text-xs text-yoga-text/50">{yogi.email || 'Kein Login'}</div>
+                    {guthaben > 0 && (
+                      <div className="text-xs text-yoga-amber-text mt-0.5">
+                        {guthaben} Guthaben wird beim Hinzufügen verrechnet
+                      </div>
+                    )}
                   </div>
-                  <div className="text-xs text-yoga-text/50">{yogi.email || 'Kein Login'}</div>
+                  <button onClick={() => addYogiToCourse(yogi)} disabled={addingYogiToCourse}
+                    className="text-xs bg-yoga-text text-yoga-bg rounded-full px-3 py-1.5 font-semibold border-0 cursor-pointer disabled:opacity-40">
+                    {addingYogiToCourse ? '...' : 'Hinzufügen'}
+                  </button>
                 </div>
-                <button onClick={() => addYogiToCourse(yogi)} disabled={addingYogiToCourse}
-                  className="text-xs bg-yoga-text text-yoga-bg rounded-full px-3 py-1.5 font-semibold border-0 cursor-pointer disabled:opacity-40">
-                  {addingYogiToCourse ? '...' : 'Hinzufügen'}
-                </button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

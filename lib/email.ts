@@ -65,4 +65,7 @@ export const Email = {
 
   adminYogiChoice: (data: { userId: string; courseName: string; choice: 'guthaben' | 'erstattung'; remainingSessions: number }) =>
     sendEmail('admin_yogi_choice', data),
+
+  adminGuthabenVerrechnet: (data: { yogiName: string; yogiEmail: string; courseName: string; guthabenAmount: number }) =>
+    sendEmail('admin_guthaben_verrechnet', data),
 }

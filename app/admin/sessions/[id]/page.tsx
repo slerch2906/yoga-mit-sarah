@@ -48,7 +48,17 @@ export default function AdminSessionPage() {
 
   function getFreeCredits(yogi: any) {
     return (yogi.credits || []).reduce((sum: number, c: any) => {
+      if (c.model === 'guthaben') return sum // Guthaben nur für Kurse, nicht Einzelstunden
       if (new Date(c.expires_at) > new Date()) return sum + Math.max(0, c.total - c.used)
+      return sum
+    }, 0)
+  }
+
+  function getGuthabenCredits(yogi: any): number {
+    const now = new Date()
+    return (yogi.credits || []).reduce((sum: number, c: any) => {
+      if (c.model !== 'guthaben') return sum
+      if (new Date(c.expires_at) > now) return sum + Math.max(0, c.total - c.used)
       return sum
     }, 0)
   }
@@ -56,7 +66,7 @@ export default function AdminSessionPage() {
   function getBestCredit(yogi: any) {
     const now = new Date()
     return (yogi.credits || [])
-      .filter((c: any) => new Date(c.expires_at) > now && (c.total - c.used) > 0)
+      .filter((c: any) => c.model !== 'guthaben' && new Date(c.expires_at) > now && (c.total - c.used) > 0)
       .sort((a: any, b: any) => new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime())[0] || null
   }
 
@@ -458,6 +468,7 @@ export default function AdminSessionPage() {
             )}
             {yogiResults.map(yogi => {
               const free = getFreeCredits(yogi)
+              const guthaben = getGuthabenCredits(yogi)
               return (
                 <div key={yogi.id} className="flex items-center justify-between py-3 border-b border-yoga-border">
                   <div>
@@ -466,6 +477,11 @@ export default function AdminSessionPage() {
                       {yogi.is_dummy && <span className="ml-2 text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">Dummy</span>}
                     </div>
                     <div className="text-xs text-yoga-text/50">{yogi.email || 'Kein Login'}</div>
+                    {guthaben > 0 && free === 0 && (
+                      <div className="text-xs text-yoga-amber-text mt-0.5">
+                        {guthaben} Guthaben – nur für Kurse verwendbar
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`text-xs font-semibold ${free > 0 ? 'text-yoga-green-text' : 'text-yoga-red-text'}`}>
@@ -487,17 +503,30 @@ export default function AdminSessionPage() {
       {quickCreditYogi && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
           <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10">
-            <h3 className="text-base font-bold mb-2">Keine Credits vorhanden</h3>
-            <p className="text-sm text-yoga-text/60 mb-4">
-              <strong>{quickCreditYogi.first_name} {quickCreditYogi.last_name}</strong> hat keine freien Credits.
-              Soll ein Einzelstunden-Credit vergeben und direkt eingebucht werden?
-            </p>
-            <div className="flex gap-2">
-              <button onClick={() => setQuickCreditYogi(null)}
-                className="flex-1 btn-secondary text-sm">Abbrechen</button>
-              <button onClick={() => handleQuickCredit(quickCreditYogi)}
-                className="flex-1 btn-primary text-sm">Credit vergeben & einbuchen</button>
-            </div>
+            {getGuthabenCredits(quickCreditYogi) > 0 ? (
+              <>
+                <h3 className="text-base font-bold mb-2">Nur Kurs-Guthaben vorhanden</h3>
+                <p className="text-sm text-yoga-text/60 mb-4">
+                  <strong>{quickCreditYogi.first_name} {quickCreditYogi.last_name}</strong> hat {getGuthabenCredits(quickCreditYogi)} Guthaben aus einem abgesagten Kurs. Dieses Guthaben kann <strong>nur für neue Kurse</strong> verwendet werden, nicht für Einzelstunden.
+                </p>
+                <button onClick={() => setQuickCreditYogi(null)}
+                  className="w-full btn-secondary text-sm">Schließen</button>
+              </>
+            ) : (
+              <>
+                <h3 className="text-base font-bold mb-2">Keine Credits vorhanden</h3>
+                <p className="text-sm text-yoga-text/60 mb-4">
+                  <strong>{quickCreditYogi.first_name} {quickCreditYogi.last_name}</strong> hat keine freien Credits.
+                  Soll ein Einzelstunden-Credit vergeben und direkt eingebucht werden?
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={() => setQuickCreditYogi(null)}
+                    className="flex-1 btn-secondary text-sm">Abbrechen</button>
+                  <button onClick={() => handleQuickCredit(quickCreditYogi)}
+                    className="flex-1 btn-primary text-sm">Credit vergeben & einbuchen</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

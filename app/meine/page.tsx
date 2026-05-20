@@ -40,7 +40,12 @@ export default function MeinePage() {
 
       if (prof && !prof.legal_accepted_at) { router.push('/rechtliches'); return }
       setProfile(prof)
-      setEnrollments(enrols || [])
+      // Beendete Kurse (date_end < heute) für Yogi ausblenden – Credits bleiben sichtbar via expires_at
+      const today = new Date().toISOString().split('T')[0]
+      const activeEnrols = (enrols || []).filter((e: any) =>
+        !e.course?.date_end || e.course.date_end >= today
+      )
+      setEnrollments(activeEnrols)
       setSingleBookings(singles || [])
       setCredits(crds || [])
 
@@ -108,7 +113,7 @@ export default function MeinePage() {
       <AppHeader title="Meine" isAdmin={profile?.is_admin} />
       <div className="px-4 py-4">
         {/* Credits Detail-Anzeige – immer sichtbar */}
-        {credits.length > 0 && (
+        {credits.length > 0 ? (
           <div className="mb-4">
             <p className="section-label">Deine Credits</p>
             {credits.map(c => {
@@ -127,7 +132,10 @@ export default function MeinePage() {
                         </span>
                       </div>
                       {c.model === 'guthaben' && free > 0 && (
-                        <div className="text-xs text-yoga-amber-text mt-1"> Guthaben aus abgesagtem Kurs</div>
+                        <>
+                          <div className="text-xs text-yoga-amber-text mt-1">Guthaben aus abgesagtem Kurs</div>
+                          <div className="text-xs text-yoga-text/50 mt-0.5 italic">Nicht für Einzelstunden, nur verrechenbar mit neuem Kurs</div>
+                        </>
                       )}
                       {free === 0
                         ? <div className="text-xs text-yoga-text/40 mt-1">Alle Credits verbraucht</div>
@@ -147,6 +155,13 @@ export default function MeinePage() {
                 </div>
               )
             })}
+          </div>
+        ) : (
+          <div className="mb-4">
+            <p className="section-label">Deine Credits</p>
+            <div className="card text-center py-4">
+              <p className="text-sm text-yoga-text/50">Keine Credits</p>
+            </div>
           </div>
         )}
 

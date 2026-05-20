@@ -439,14 +439,7 @@ export default function SessionDetailPage() {
               </>
             ) : (
               <>
-                {hasGuthabenOnly ? (
-                  <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
-                    <p className="text-sm font-semibold text-yoga-text/80 mb-1">Kurs-Guthaben vorhanden</p>
-                    <p className="text-sm text-yoga-text/70 leading-relaxed">
-                      Du hast noch Kurs-Guthaben aus einem abgesagten Kurs. Dieses Guthaben kann nur für neue <strong>Kurse</strong> verwendet werden, nicht für Einzelstunden. Bitte wende dich an Sarah.
-                    </p>
-                  </div>
-                ) : freeCredits === 0 && (
+                {freeCredits === 0 && (
                   <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
                     <p className="text-sm text-yoga-text/80">
                       Du hast keine freien Credits. Bitte wende dich an Sarah.

@@ -775,6 +775,16 @@ export default function AdminKursePage() {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
+                    {getCourseStatus(c) === 'beendet' && (
+                      <span className="badge" style={{background:'var(--yoga-red-bg)', color:'var(--yoga-red-text)'}}>
+                        Beendet
+                      </span>
+                    )}
+                    {getCourseStatus(c) === 'läuft' && !c.is_single && (
+                      <span className="badge" style={{background:'var(--yoga-green-bg)', color:'var(--yoga-green-text)'}}>
+                        Läuft
+                      </span>
+                    )}
                     <span className={`badge ${c.is_single ? 'badge-wait' : 'badge-free'}`}>
                       {c.is_single ? 'Einzelstunde' : 'Kurs'}
                     </span>

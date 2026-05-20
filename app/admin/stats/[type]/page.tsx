@@ -32,13 +32,15 @@ export default function AdminStatsPage() {
       setItems(data || [])
     } else {
       const action = type === 'buchungen' ? 'booking_created' : 'booking_cancelled'
-      const since = new Date()
-      since.setDate(since.getDate() - 30)
+      // Diese Woche: ab Montag 00:00 Lokalzeit
+      const now = new Date()
+      const dayOfWeek = (now.getDay() + 6) % 7 // 0 = Montag
+      const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek, 0, 0, 0)
       const { data } = await supabase
         .from('audit_log')
         .select('*, profile:profiles!audit_log_user_id_fkey(first_name, last_name, email)')
         .eq('action', action)
-        .gte('created_at', since.toISOString())
+        .gte('created_at', monday.toISOString())
         .order('created_at', { ascending: false })
         .limit(100)
       setItems(data || [])
@@ -65,10 +67,10 @@ export default function AdminStatsPage() {
       <div className="px-4 py-4">
 
         {type === 'buchungen' && (
-          <p className="text-xs text-yoga-text/40 mb-4">Letzte 30 Tage</p>
+          <p className="text-xs text-yoga-text/40 mb-4">Diese Woche</p>
         )}
         {type === 'abmeldungen' && (
-          <p className="text-xs text-yoga-text/40 mb-4">Letzte 30 Tage</p>
+          <p className="text-xs text-yoga-text/40 mb-4">Diese Woche</p>
         )}
         {type === 'warteliste' && (
           <p className="text-xs text-yoga-text/40 mb-4">Aktuelle Einträge</p>

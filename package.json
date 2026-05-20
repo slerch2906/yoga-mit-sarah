@@ -5,7 +5,17 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test:setup": "ts-node --project tsconfig.test.json scripts/setup-test-users.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:auth": "playwright test tests/e2e/01-auth.spec.ts",
+    "test:e2e:booking": "playwright test tests/e2e/02-booking.spec.ts",
+    "test:e2e:waitlist": "playwright test tests/e2e/03-waitlist.spec.ts",
+    "test:e2e:admin": "playwright test tests/e2e/admin/",
+    "test:e2e:meine": "playwright test tests/e2e/06-meine.spec.ts",
+    "test:cleanup": "ts-node --project tsconfig.test.json -e \"const {cleanupAllE2EData}=require('./tests/utils/seed');cleanupAllE2EData().then(()=>console.log('Cleanup fertig')).catch(console.error)\""
   },
   "dependencies": {
     "next": "15.5.18",
@@ -21,6 +31,9 @@
     "@types/node": "^20.12.12",
     "tailwindcss": "^3.4.3",
     "postcss": "^8.4.38",
-    "autoprefixer": "^10.4.19"
+    "autoprefixer": "^10.4.19",
+    "@playwright/test": "^1.44.0",
+    "ts-node": "^10.9.2",
+    "dotenv": "^16.4.5"
   }
 }

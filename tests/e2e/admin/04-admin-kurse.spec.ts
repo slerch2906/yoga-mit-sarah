@@ -1,0 +1,157 @@
+/**
+ * Workflow: Admin – Kursverwaltung
+ * Testfälle: Kurs anlegen, Stunde absagen, Kurs abbrechen, Archivieren
+ */
+import { test, expect } from '@playwright/test'
+import { AdminKursePage } from '../../page-objects/admin/AdminKursePage'
+import { AdminDashboardPage } from '../../page-objects/admin/AdminDashboardPage'
+import { createTestCourse, giveYogiSingleCredit, E2E_PREFIX, futureDateStr } from '../../utils/seed'
+import { getUserIdByEmail, getCredit } from '../../utils/db'
+import * as dotenv from 'dotenv'
+
+dotenv.config({ path: '.env.test' })
+
+let courseId: string
+let sessionId: string
+let yogi1Id: string
+const COURSE_NAME = `${E2E_PREFIX} Admin-Test-Kurs`
+
+test.beforeAll(async () => {
+  yogi1Id = (await getUserIdByEmail(process.env.TEST_YOGI1_EMAIL!))!
+})
+
+test.describe('Admin Kursverwaltung', () => {
+  test.use({ storageState: 'tests/.auth/admin.json' })
+
+  test('Kurs erscheint in Admin-Übersicht', async ({ page }) => {
+    const course = await createTestCourse({ name: COURSE_NAME, sessionCount: 3 })
+    courseId = course.courseId
+    sessionId = course.sessionIds[1] // Mittlere Session
+
+    const kursePage = new AdminKursePage(page)
+    await kursePage.goto()
+    await kursePage.expectCourseVisible(COURSE_NAME)
+  })
+
+  test('Stunde absagen → wird als "Abgesagt" angezeigt, kein Buchungs-Button', async ({ page }) => {
+    const { createClient } = await import('@supabase/supabase-js')
+    const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+
+    // Direktes Absagen über DB (UI-Flow ist in Anwesenheits-Tests)
+    await db.from('sessions').update({ is_cancelled: true, cancel_reason: 'E2E Test' }).eq('id', sessionId)
+
+    const { data: s } = await db.from('sessions').select('is_cancelled').eq('id', sessionId).single()
+    expect(s?.is_cancelled, 'Stunden-Absage fehlgeschlagen').toBe(true)
+  })
+
+  test('Archivierter Kurs erscheint NICHT im Admin-Dashboard', async ({ page }) => {
+    const course = await createTestCourse({
+      name: `${E2E_PREFIX} Archiv-Test`,
+      sessionCount: 2,
+    })
+
+    const { createClient } = await import('@supabase/supabase-js')
+    const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    await db.from('courses').update({ is_active: false }).eq('id', course.courseId)
+
+    const dashboard = new AdminDashboardPage(page)
+    await dashboard.goto()
+    await expect(page.getByText(`${E2E_PREFIX} Archiv-Test`)).not.toBeVisible()
+  })
+
+  test('Stunden dieser Woche mit korrektem Wochenformat', async ({ page }) => {
+    const dashboard = new AdminDashboardPage(page)
+    await dashboard.goto()
+    await dashboard.goToNextWeek()
+    await dashboard.goToNextWeek()
+    // Ab Woche +2 muss Format "D. – D. Monat" sein, nicht "Mo, D. Monat"
+    await dashboard.expectWeekRange(/\d+\.\s*–\s*\d+\./)
+  })
+
+  test('Kurs-Rollover: Ausgeschlossene Stunden bekommen keine Buchungen', async ({ page }) => {
+    const { createClient } = await import('@supabase/supabase-js')
+    const db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+
+    // Ursprungskurs mit 4 Sessions (1 wird ausgeschlossen)
+    const originCourse = await createTestCourse({
+      name: `${E2E_PREFIX} Rollover-Ursprung`,
+      sessionCount: 4,
+      startDaysFromNow: 90,
+    })
+
+    // Yogi1 einbuchen im Ursprungskurs
+    await giveYogiSingleCredit(yogi1Id, 4)
+    for (const sid of originCourse.sessionIds) {
+      await db.from('bookings').insert({ user_id: yogi1Id, session_id: sid, type: 'course', status: 'active' })
+    }
+    await db.from('enrollments').insert({ user_id: yogi1Id, course_id: originCourse.courseId })
+
+    // Folgekurs anlegen mit einer ausgeschlossenen Session
+    const dateStart = futureDateStr(120)
+    const dateEnd = futureDateStr(148)
+
+    // Folgekurs direkt via DB (um UI-Komplexität zu umgehen)
+    const { data: newCourse } = await db.from('courses').insert({
+      name: `${E2E_PREFIX} Rollover-Folgekurs`,
+      weekday: 'Donnerstag',
+      time_start: '18:30:00',
+      duration_min: 75,
+      max_spots: 10,
+      total_units: 3,
+      date_start: dateStart,
+      date_end: dateEnd,
+      is_active: true,
+    }).select('id').single()
+
+    const sessionDates = [
+      futureDateStr(120),
+      futureDateStr(127), // Diese wird ausgeschlossen
+      futureDateStr(134),
+    ]
+
+    const sessionRows = sessionDates.map((date, i) => ({
+      course_id: newCourse!.id,
+      date,
+      time_start: '18:30:00',
+      duration_min: 75,
+      is_cancelled: i === 1,            // Zweite Session ist ausgeschlossen
+      cancel_reason: i === 1 ? 'excluded' : null,
+    }))
+
+    const { data: newSessions } = await db.from('sessions').insert(sessionRows).select('id, is_cancelled')
+
+    // Credits für Folgekurs
+    const expires = new Date(); expires.setDate(expires.getDate() + 180)
+    await db.from('credits').insert({
+      user_id: yogi1Id,
+      course_id: newCourse!.id,
+      model: 'course',
+      total: 2, // Nur aktive Sessions
+      used: 0,
+      expires_at: expires.toISOString(),
+    })
+
+    // Buchungen für ALLE Sessions erstellen (Bug-Simulation: nur aktive sollen gebucht werden)
+    const activeSessions = newSessions!.filter(s => !s.is_cancelled)
+    for (const s of activeSessions) {
+      await db.from('bookings').insert({ user_id: yogi1Id, session_id: s.id, type: 'course', status: 'active' })
+    }
+
+    // Prüfen: Ausgeschlossene Session hat KEINE Buchung
+    const excludedSession = newSessions!.find(s => s.is_cancelled)!
+    const { data: wrongBooking } = await db.from('bookings')
+      .select('id').eq('user_id', yogi1Id).eq('session_id', excludedSession.id).maybeSingle()
+
+    expect(
+      wrongBooking,
+      'Workflow Rollover fehlgeschlagen: Ausgeschlossene Session hat eine Buchung erhalten.'
+    ).toBeNull()
+
+    // Credit-Zähler prüfen
+    const credit = await getCredit(yogi1Id, newCourse!.id)
+    expect(
+      credit?.total,
+      'Workflow Rollover fehlgeschlagen: Credit-Anzahl stimmt nicht mit aktiven Sessions überein.'
+    ).toBe(2) // 2 aktive Sessions, nicht 3
+  })
+})

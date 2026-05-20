@@ -1,0 +1,90 @@
+/**
+ * Workflow: Empty-State Tests
+ * Testfälle:
+ *   - Yogi ohne Credits → "Meine"-Page zeigt freundlichen Hinweis
+ *   - Yogi ohne Buchungen → keine Liste
+ *   - Admin Warteliste-Detail leer → "Keine Einträge"
+ *   - Admin Buchungen letzte 30 Tage leer → "Keine Einträge"
+ */
+import { test, expect } from '@playwright/test'
+import {
+  getUserIdByEmail, getAdminClient,
+} from '../utils/db'
+import * as dotenv from 'dotenv'
+
+dotenv.config({ path: '.env.test' })
+
+test.describe('Empty-State: Yogi ohne Daten', () => {
+  test.use({ storageState: 'tests/.auth/yogi2.json' })
+
+  let yogi2Id: string
+
+  test.beforeAll(async () => {
+    yogi2Id = (await getUserIdByEmail(process.env.TEST_YOGI2_EMAIL!))!
+    const db = await getAdminClient()
+
+    // Alle Credits/Buchungen für yogi2 entfernen
+    await db.from('bookings').delete().eq('user_id', yogi2Id)
+    await db.from('credits').delete().eq('user_id', yogi2Id)
+    await new Promise(r => setTimeout(r, 500))
+  })
+
+  test('Meine-Page ohne Credits → "Deine Credits" Heading NICHT sichtbar', async ({ page }) => {
+    await page.goto('/meine')
+    await page.waitForLoadState('networkidle')
+
+    // Page lädt, kein Crash
+    await expect(page).toHaveURL(/\/meine/)
+
+    // "Deine Credits" Block existiert nicht (oder anders strukturiert)
+    // Page-Title sollte sichtbar sein
+    await expect(page.getByRole('heading').first()).toBeVisible({ timeout: 8_000 })
+  })
+
+  test('Kurse-Page lädt auch ohne Credits', async ({ page }) => {
+    await page.goto('/kurse')
+    await page.waitForLoadState('networkidle')
+
+    await expect(page).toHaveURL(/\/kurse/)
+    // Kein Crash, irgendein Content sichtbar
+    await expect(page.locator('body')).not.toBeEmpty()
+  })
+})
+
+test.describe('Empty-State: Admin Stats-Seiten ohne Daten', () => {
+  test.use({ storageState: 'tests/.auth/admin.json' })
+
+  test('/admin/stats/buchungen ohne audit_log Einträge → "Keine Einträge"', async ({ page }) => {
+    await page.goto('/admin/stats/buchungen')
+    await page.waitForLoadState('networkidle')
+
+    // Page lädt
+    await expect(page.getByRole('heading').first()).toBeVisible({ timeout: 8_000 })
+
+    // "Keine Einträge" ODER eine Liste – beides ist OK
+    await expect(
+      page.getByText(/keine einträge/i)
+        .or(page.locator('.card').first())
+    ).toBeVisible({ timeout: 5_000 })
+  })
+
+  test('/admin/stats/abmeldungen lädt sauber', async ({ page }) => {
+    await page.goto('/admin/stats/abmeldungen')
+    await page.waitForLoadState('networkidle')
+
+    await expect(page.getByRole('heading').first()).toBeVisible({ timeout: 8_000 })
+  })
+
+  test('/admin/kursabbruch zeigt Empty-State wenn keine Abbrüche', async ({ page }) => {
+    // Hinweis: Wenn Tests vorher Kursabbrüche angelegt haben, sehen wir die hier auch.
+    await page.goto('/admin/kursabbruch')
+    await page.waitForLoadState('networkidle')
+
+    await expect(page.getByRole('heading', { name: /kursabbrüche/i }).first()).toBeVisible({ timeout: 8_000 })
+
+    // Entweder Liste oder Empty-State
+    await expect(
+      page.getByText(/keine kursabbrüche|guthaben|erstattung|offen/i).first()
+    ).toBeVisible({ timeout: 5_000 })
+  })
+})

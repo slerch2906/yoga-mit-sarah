@@ -312,15 +312,6 @@ export default function ProfilPage() {
             <i className="ti ti-arrow-left" /> Zurück zum Dashboard
           </button>
         )}
-        {totalFreeCredits > 0 && (
-          <div className="card mb-4">
-            <div className="text-3xl font-bold">{totalFreeCredits}</div>
-            <div className="text-sm text-yoga-text/50 mt-1">
-              freie Credits{firstExpiry && ` · verfallen am ${new Date(firstExpiry.expires_at).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })}`}
-            </div>
-          </div>
-        )}
-
         <p className="section-label">Meine Daten</p>
         <div className="card mb-4 p-0 overflow-hidden">
           {fields.map((f, i) => (

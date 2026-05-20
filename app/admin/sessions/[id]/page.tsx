@@ -70,14 +70,94 @@ export default function AdminSessionPage() {
       .sort((a: any, b: any) => new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime())[0] || null
   }
 
+  async function cancelBookingForYogi(bookingId: string, creditId: string | null, sessionId: string) {
+    if (!confirm('Yogi aus dieser Stunde austragen und Credit zurückgeben?')) return
+
+    await supabase.from('bookings').update({
+      status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false
+    }).eq('id', bookingId)
+
+    if (creditId) {
+      const { data: credit } = await supabase.from('credits').select('used').eq('id', creditId).single()
+      if (credit) await supabase.from('credits').update({ used: Math.max(0, credit.used - 1) }).eq('id', creditId)
+    }
+
+    await supabase.from('audit_log').insert({
+      action: 'booking_cancelled_by_admin',
+      details: { booking_id: bookingId, session_id: sessionId }
+    })
+
+    const { data: sess } = await supabase
+      .from('sessions').select('date, time_start, course:courses(name)')
+      .eq('id', sessionId).single()
+
+    const { data: waitlistFirst } = await supabase.from('waitlist')
+      .select('*, profile:profiles(email, first_name)')
+      .eq('session_id', sessionId).eq('type', 'waitlist')
+      .order('position').limit(1).maybeSingle()
+
+    if (waitlistFirst) {
+      const { data: allWaitCredits } = await supabase.from('credits')
+        .select('*').eq('user_id', waitlistFirst.user_id)
+        .gt('expires_at', new Date().toISOString())
+      const availableCredits = (allWaitCredits || []).filter((c: any) => c.total > c.used)
+      const waitCredit = availableCredits.sort((a: any, b: any) =>
+        new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime())[0] || null
+      if (waitCredit && (waitCredit.total - waitCredit.used) > 0) {
+        await supabase.from('bookings').upsert({
+          user_id: waitlistFirst.user_id, session_id: sessionId, type: 'single', status: 'active',
+          credit_id: waitCredit.id, cancelled_at: null, cancel_late: false,
+        }, { onConflict: 'user_id,session_id' })
+        await supabase.from('credits').update({ used: waitCredit.used + 1 }).eq('id', waitCredit.id)
+      }
+      if (waitlistFirst.profile?.email) {
+        await Email.waitlistPromoted({
+          email: waitlistFirst.profile.email,
+          firstName: waitlistFirst.profile.first_name || 'Yogi',
+          courseName: (sess?.course as any)?.name || '',
+          date: sess?.date || '',
+          timeStart: sess?.time_start || '',
+        })
+      }
+      await supabase.from('waitlist').delete().eq('id', waitlistFirst.id)
+    }
+
+    const { data: notifyUsers } = await supabase.from('waitlist')
+      .select('*, profile:profiles(email, first_name)')
+      .eq('session_id', sessionId).eq('type', 'notify')
+    if (notifyUsers && notifyUsers.length > 0) {
+      for (const nu of notifyUsers) {
+        if (nu.profile?.email) {
+          await Email.notifyPlaceFree({
+            email: nu.profile.email,
+            firstName: nu.profile.first_name || 'Yogi',
+            courseName: (sess?.course as any)?.name || '',
+            date: sess?.date || '',
+            timeStart: sess?.time_start || '',
+            sessionId,
+          })
+        }
+      }
+      await supabase.from('waitlist').delete().eq('session_id', sessionId).eq('type', 'notify')
+    }
+
+    loadData()
+  }
+
   async function handleAddYogi(yogi: any) {
     const credit = getBestCredit(yogi)
     if (!credit) { setQuickCreditYogi(yogi); return }
     setAddingYogi(true)
-    await supabase.from('bookings').insert({
+    const { error: bookingError } = await supabase.from('bookings').upsert({
       user_id: yogi.id, session_id: id,
-      credit_id: credit.id, type: 'single', status: 'active'
-    })
+      credit_id: credit.id, type: 'single', status: 'active',
+      cancelled_at: null, cancel_late: false,
+    }, { onConflict: 'user_id,session_id' })
+    if (bookingError) {
+      setAddingYogi(false)
+      alert('Buchung konnte nicht angelegt werden.')
+      return
+    }
     await supabase.from('credits').update({ used: credit.used + 1 }).eq('id', credit.id)
     await supabase.from('audit_log').insert({
       action: 'admin_added_yogi_to_session',
@@ -88,17 +168,17 @@ export default function AdminSessionPage() {
   }
 
   async function handleQuickCredit(yogi: any) {
-    // 1 Credit sofort vergeben + einbuchen
     const expiry = new Date(); expiry.setFullYear(expiry.getFullYear() + 1)
     const { data: newCredit } = await supabase.from('credits').insert({
       user_id: yogi.id, total: 1, used: 1,
       expires_at: expiry.toISOString(), model: 'single', course_id: null
     }).select('id, used').single()
     if (!newCredit) return
-    await supabase.from('bookings').insert({
+    await supabase.from('bookings').upsert({
       user_id: yogi.id, session_id: id,
-      credit_id: newCredit.id, type: 'single', status: 'active'
-    })
+      credit_id: newCredit.id, type: 'single', status: 'active',
+      cancelled_at: null, cancel_late: false,
+    }, { onConflict: 'user_id,session_id' })
     setQuickCreditYogi(null); setShowAddYogi(false)
     setYogiSearch(''); setYogiResults([])
     loadData()

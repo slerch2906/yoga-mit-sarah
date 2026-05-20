@@ -539,18 +539,18 @@ export default function AdminDashboard() {
 
         {/* Wöchentliche Stats */}
         <div className="grid grid-cols-3 gap-2 mb-5">
-          <div className="card text-center">
-            <div className="text-2xl font-bold">{stats.bookings}</div>
-            <div className="text-xs text-yoga-text/50">Buchungen</div>
-          </div>
-          <div className="card text-center">
-            <div className="text-2xl font-bold">{stats.cancellations}</div>
-            <div className="text-xs text-yoga-text/50">Abmeldungen</div>
-          </div>
-          <div className="card text-center">
-            <div className="text-2xl font-bold">{stats.waitlist}</div>
-            <div className="text-xs text-yoga-text/50">Warteliste</div>
-          </div>
+          {[
+            { key: 'buchungen', label: 'Buchungen', value: stats.bookings },
+            { key: 'abmeldungen', label: 'Abmeldungen', value: stats.cancellations },
+            { key: 'warteliste', label: 'Warteliste', value: stats.waitlist },
+          ].map(tile => (
+            <button key={tile.key}
+              onClick={() => router.push(`/admin/stats/${tile.key}`)}
+              className="card text-center cursor-pointer hover:border-yoga-border2 active:opacity-70 transition-opacity">
+              <div className="text-2xl font-bold">{tile.value}</div>
+              <div className="text-xs text-yoga-text/50">{tile.label}</div>
+            </button>
+          ))}
         </div>
 
         {/* Schnellzugriff */}

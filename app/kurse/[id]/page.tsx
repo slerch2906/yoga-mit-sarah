@@ -224,31 +224,21 @@ export default function SessionDetailPage() {
     const user = await getCurrentUser()
     const { data: prof } = await supabase.from('profiles').select('email, first_name').eq('id', user!.id).single()
 
-    if (type === 'notify') {
-      // Nur in waitlist mit type=notify eintragen für spätere Benachrichtigung
-      // KEIN position Eintrag - erscheint nicht als Wartelisten-Position
-      await supabase.from('waitlist').insert({
-        user_id: user!.id, session_id: id, type: 'notify', position: null
-      })
-      // Bestätigungs-Email: "Wir benachrichtigen dich wenn ein Platz frei wird"
-      // (keine separate Email nötig - Bestätigungsseite erklärt es)
-    } else {
-      // Auf Warteliste setzen
-      const { count } = await supabase.from('waitlist').select('*', { count: 'exact', head: true })
-        .eq('session_id', id).eq('type', 'waitlist')
-      await supabase.from('waitlist').insert({
-        user_id: user!.id, session_id: id, type: 'waitlist',
-        position: (count || 0) + 1
-      })
-      // Warteliste Email
+    // Atomic Insert via SECURITY DEFINER RPC (verhindert dass Yogi alle waitlist-Counts lesen muss)
+    const { data: result } = await supabase.rpc('join_waitlist', {
+      p_session_id: id, p_type: type,
+    })
+    const position = result?.position ?? 0
+
+    if (type === 'waitlist' && prof) {
       try {
-        if (prof) await Email.waitlistJoined({
+        await Email.waitlistJoined({
           email: prof.email,
           firstName: prof.first_name || 'Yogi',
           courseName: session?.course?.name || '',
           date: session?.date || '',
           timeStart: session?.time_start || '',
-          position: (count || 0) + 1,
+          position,
         })
       } catch(e) {}
     }

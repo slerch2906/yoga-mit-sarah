@@ -22,6 +22,12 @@ function addDays(date: Date, days: number) {
 function fmt(d: Date) {
   return `${WEEKDAYS[d.getDay()]}, ${d.getDate()}. ${MONTHS[d.getMonth()]}`
 }
+function formatWeekRange(start: Date): string {
+  const end = new Date(start); end.setDate(end.getDate() + 6)
+  const sm = MONTHS[start.getMonth()], em = MONTHS[end.getMonth()]
+  if (start.getMonth() === end.getMonth()) return `${start.getDate()}. – ${end.getDate()}. ${sm}`
+  return `${start.getDate()}. ${sm} – ${end.getDate()}. ${em}`
+}
 
 export default function AdminDashboard() {
   const [weekOffset, setWeekOffset] = useState(0)
@@ -333,7 +339,7 @@ export default function AdminDashboard() {
   const weekLabel = weekOffset === 0 ? 'Diese Woche'
     : weekOffset === 1 ? 'Nächste Woche'
     : weekOffset === -1 ? 'Vorherige Woche'
-    : fmt(weekStart)
+    : formatWeekRange(weekStart)
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" /></div>
 

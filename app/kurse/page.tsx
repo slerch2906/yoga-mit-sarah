@@ -135,14 +135,18 @@ export default function KursePage() {
         </button>
       </div>
 
-      {myNextSession && (
-        <div className="mx-4 mt-2 bg-yoga-gray border border-yoga-border rounded-yoga px-3 py-2 flex items-center gap-2">
-          <i className="ti ti-circle-check text-base opacity-50" />
-          <p className="text-sm text-yoga-text/75">
-            Angemeldet: <strong>{formatDate(new Date(myNextSession.date))} · {myNextSession.time_start?.slice(0,5)}</strong>
-          </p>
-        </div>
-      )}
+      {(() => {
+        const bookedCount = sessions.filter(s => s.my_booking).length
+        if (!bookedCount) return null
+        return (
+          <div className="mx-4 mt-2 bg-yoga-gray border border-yoga-border rounded-yoga px-3 py-2 flex items-center gap-2">
+            <i className="ti ti-circle-check text-base opacity-50" />
+            <p className="text-sm text-yoga-text/75">
+              Du hast <strong>{bookedCount} {bookedCount === 1 ? 'Stunde' : 'Stunden'}</strong> in dieser Woche
+            </p>
+          </div>
+        )
+      })()}
 
       <div className="px-4 pb-4 mt-3">
         {loading ? (

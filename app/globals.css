@@ -31,7 +31,7 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--yoga-border2); border-radius: 2px; }
 
 @layer components {
-  .card { @apply bg-yoga-card rounded-yoga border border-yoga-border p-4; }
+  .card { @apply bg-white rounded-yoga border border-yoga-border p-4; }
 
   .btn-primary {
     @apply w-full bg-yoga-text text-yoga-bg rounded-yoga py-3.5 text-base font-bold
@@ -86,7 +86,7 @@ body {
            bg-yoga-bg sticky top-0 z-10;
   }
 
-  .info-tile { @apply bg-yoga-card rounded-yoga border border-yoga-border p-3; }
+  .info-tile { @apply bg-white rounded-yoga border border-yoga-border p-3; }
   .info-tile .lbl { @apply text-xs text-yoga-text/45 uppercase tracking-wider mb-1; }
   .info-tile .val { @apply text-lg font-bold text-yoga-text; }
 }

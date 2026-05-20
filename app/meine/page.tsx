@@ -110,6 +110,7 @@ export default function MeinePage() {
         {/* Credits Detail-Anzeige – immer sichtbar */}
         {credits.length > 0 && (
           <div className="mb-4">
+            <p className="text-sm text-yoga-text/60 mb-2 font-semibold">Deine Credits</p>
             {credits.map(c => {
               const free = Math.max(0, c.total - c.used)
               return (

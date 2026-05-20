@@ -23,7 +23,7 @@ function EinladenInner() {
 
   async function loadCourses() {
     const { data } = await supabase.from('courses')
-      .select('id, name, total_units, date_start, date_end, is_single, sessions(id, date, is_cancelled)')
+      .select('id, name, weekday, total_units, date_start, date_end, is_single, sessions(id, date, is_cancelled)')
       .eq('is_active', true).order('name')
     setCourses(data || [])
   }
@@ -194,7 +194,7 @@ function EinladenInner() {
               <option value="">Nur Registrierung – kein Kurs</option>
               {courses.map(c => (
                 <option key={c.id} value={c.id}>
-                  {c.name} → {getRemainingUnits(c)} Credits
+                  {c.name}{c.weekday ? ` · ${c.weekday}` : ''}{c.date_start ? `, ab ${new Date(c.date_start).toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''} – {getRemainingUnits(c)} Credits
                 </option>
               ))}
             </select>

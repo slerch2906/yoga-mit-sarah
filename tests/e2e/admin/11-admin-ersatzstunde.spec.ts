@@ -208,7 +208,8 @@ test.describe('Ersatzstunde: Yogi hat Credit bereits verbraucht → wird übersp
     sessionId = course.sessionIds[0]
     session2Id = course.sessionIds[1]
 
-    creditId = await giveYogiSingleCredit(yogi2Id, 3)
+    // NUR 1 Credit – damit Yogi nach Session 2 keinen mehr übrig hat
+    creditId = await giveYogiSingleCredit(yogi2Id, 1)
 
     // Yogi war in Session 1 (storniert), Session 1 abgesagt
     await db.from('bookings').insert({
@@ -221,7 +222,7 @@ test.describe('Ersatzstunde: Yogi hat Credit bereits verbraucht → wird übersp
     })
     await db.from('sessions').update({ is_cancelled: true }).eq('id', sessionId)
 
-    // Yogi bucht sich zwischenzeitlich in Session 2 → Credit verbraucht (used = 1)
+    // Yogi bucht sich zwischenzeitlich in Session 2 → Credit verbraucht (used = 1, total = 1 → 0 frei)
     await db.from('bookings').insert({
       user_id: yogi2Id,
       session_id: session2Id,

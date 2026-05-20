@@ -102,7 +102,6 @@ test.describe('Einladungs-Erinnerung senden', () => {
       first_name: 'E2E',
       last_name: 'Reminder',
       token,
-      invited_by: adminUser.id,
     })
   })
 

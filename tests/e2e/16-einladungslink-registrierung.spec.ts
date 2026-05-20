@@ -161,11 +161,16 @@ test.describe('Registrierung: Erfolgreicher Flow', () => {
     expect(prof?.first_name).toBe('E2E')
     expect(prof?.last_name).toBe('Valid')
 
-    // Admin-Notification
-    const { data: notif } = await db.from('admin_notifications')
-      .select('*').eq('type', 'new_yogi_registered')
-      .like('message', `%${INVITE_EMAIL_VALID}%`)
-      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+    // Admin-Notification (kann async durch sein → polling)
+    let notif: any = null
+    for (let i = 0; i < 10 && !notif; i++) {
+      const { data } = await db.from('admin_notifications')
+        .select('*').eq('type', 'new_yogi_registered')
+        .like('message', `%${INVITE_EMAIL_VALID}%`)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle()
+      notif = data
+      if (!notif) await new Promise(r => setTimeout(r, 500))
+    }
     expect(notif, 'Admin muss informiert sein').toBeTruthy()
   })
 })

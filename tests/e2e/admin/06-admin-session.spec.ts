@@ -134,7 +134,11 @@ test.describe('Admin Session: Guthaben-Warnung bei Einzelstunden', () => {
     yogi2Id = (await getUserIdByEmail(process.env.TEST_YOGI2_EMAIL!))!
 
     const db = await getAdminClient()
+    // Pollute-resistent: erst Buchungen löschen (FK), dann alle Credits weg
+    await db.from('bookings').delete().eq('user_id', yogi2Id)
     await db.from('credits').delete().eq('user_id', yogi2Id)
+    // Kurz warten bis DB-Operationen konsistent sind
+    await new Promise(r => setTimeout(r, 500))
 
     const course = await createTestCourse({ name: `${E2E_PREFIX} Guthaben-Session-Test`, sessionCount: 1 })
     sessionId = course.sessionIds[0]

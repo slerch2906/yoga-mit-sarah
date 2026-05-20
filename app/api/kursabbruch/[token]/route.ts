@@ -57,13 +57,18 @@ export async function POST(
     })
   }
 
-  // Admin-Email – server-side, kein fire-and-forget
-  await Email.adminYogiChoice({
-    userId: updated.user_id,
-    courseName: updated.course?.name || '',
-    choice,
-    remainingSessions: updated.remaining_sessions,
-  })
+  // Admin-Email – Best-Effort: Email-Failure darf nicht den Choice-Save kippen
+  try {
+    await Email.adminYogiChoice({
+      userId: updated.user_id,
+      courseName: updated.course?.name || '',
+      choice,
+      remainingSessions: updated.remaining_sessions,
+    })
+  } catch (emailErr) {
+    console.error('Admin-Email für Kursabbruch-Wahl fehlgeschlagen:', emailErr)
+    // Choice wurde dennoch gespeichert
+  }
 
   return NextResponse.json({ ok: true, choice })
 }

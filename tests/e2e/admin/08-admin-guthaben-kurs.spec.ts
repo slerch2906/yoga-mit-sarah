@@ -112,10 +112,11 @@ test.describe('Guthaben: Sperrung für Einzelstunden (Admin-Session)', () => {
   test.beforeAll(async () => {
     yogi2Id = (await getUserIdByEmail(process.env.TEST_YOGI2_EMAIL!))!
 
-    // Altes Guthaben + Credits bereinigen
+    // Altes Guthaben + alle Credits + Buchungen bereinigen (Test-Isolation)
     const db = await getAdminClient()
-    await db.from('credits').delete().eq('user_id', yogi2Id).eq('model', 'guthaben')
-    await db.from('credits').delete().eq('user_id', yogi2Id).neq('model', 'course')
+    await db.from('bookings').delete().eq('user_id', yogi2Id)
+    await db.from('credits').delete().eq('user_id', yogi2Id)
+    await new Promise(r => setTimeout(r, 500))
 
     // Kurs anlegen und erste Session-ID ermitteln
     const course = await createTestCourse({ name: COURSE_NAME, sessionCount: 2 })

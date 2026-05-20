@@ -15,6 +15,7 @@ import {
 import * as dotenv from 'dotenv'
 
 dotenv.config({ path: '.env.test' })
+dotenv.config({ path: '.env.local' }) // für NEXT_PUBLIC_* Keys (anon)
 
 let sessionId: string
 let courseId: string

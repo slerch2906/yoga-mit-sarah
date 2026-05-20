@@ -28,7 +28,7 @@ test.describe('Passwort-Reset', () => {
     await expect(page.getByText(/passwort zurücksetzen/i)).toBeVisible({ timeout: 5_000 })
 
     // E-Mail eingeben
-    await page.getByLabel(/e-mail/i).fill(process.env.TEST_YOGI1_EMAIL!)
+    await page.locator('input[type="email"]').fill(process.env.TEST_YOGI1_EMAIL!)
 
     // Absenden
     await page.getByRole('button', { name: /reset-link senden|zurücksetzen|senden/i }).click()
@@ -65,7 +65,7 @@ test.describe('Passwort-Reset', () => {
     await page.waitForLoadState('networkidle')
 
     await page.getByRole('button', { name: /passwort vergessen/i }).click()
-    await page.getByLabel(/e-mail/i).fill('unbekannt.e2e@test.yogamitsarah.me')
+    await page.locator('input[type="email"]').fill('unbekannt.e2e@test.yogamitsarah.me')
     await page.getByRole('button', { name: /reset-link senden|zurücksetzen|senden/i }).click()
 
     // Auch bei unbekannter E-Mail soll Bestätigung erscheinen (Security: kein User-Enum)

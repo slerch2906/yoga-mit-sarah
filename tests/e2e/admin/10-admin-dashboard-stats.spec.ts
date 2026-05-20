@@ -58,7 +58,7 @@ test.describe('Admin Dashboard: Stats-Kacheln', () => {
     await expect(page.getByText(/warteliste/i).first()).toBeVisible({ timeout: 5_000 })
     // Zeigt entweder Einträge oder "Keine Einträge"
     await expect(
-      page.getByText(/keine einträge/i).or(page.locator('.card'))
+      page.getByText(/keine einträge/i).or(page.locator('.card')).first()
     ).toBeVisible({ timeout: 5_000 })
   })
 })

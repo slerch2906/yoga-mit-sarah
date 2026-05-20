@@ -84,7 +84,10 @@ test.describe('DSGVO Account-Löschung', () => {
     await page.waitForLoadState('networkidle')
 
     // "Account löschen" Button klicken
-    await page.getByRole('button', { name: /^account löschen$/i }).click()
+    // "Account löschen" Button finden – robust gegenüber Layout-Variationen
+    const deleteBtn = page.locator('button').filter({ hasText: /^account löschen$/i }).first()
+    await deleteBtn.waitFor({ state: 'visible', timeout: 20_000 })
+    await deleteBtn.click()
 
     // Bestätigungs-Dialog mit DSGVO-Hinweis sichtbar
     await expect(page.getByText(/account wirklich löschen/i)).toBeVisible({ timeout: 5_000 })
@@ -99,7 +102,10 @@ test.describe('DSGVO Account-Löschung', () => {
     await page.goto('/profil')
     await page.waitForLoadState('networkidle')
 
-    await page.getByRole('button', { name: /^account löschen$/i }).click()
+    // "Account löschen" Button finden – robust gegenüber Layout-Variationen
+    const deleteBtn = page.locator('button').filter({ hasText: /^account löschen$/i }).first()
+    await deleteBtn.waitFor({ state: 'visible', timeout: 20_000 })
+    await deleteBtn.click()
     await expect(page.getByText(/account wirklich löschen/i)).toBeVisible({ timeout: 5_000 })
 
     // Checkbox "Ich verstehe..." anhaken

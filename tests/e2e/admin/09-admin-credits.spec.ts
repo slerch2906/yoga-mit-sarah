@@ -31,7 +31,7 @@ test.describe('Credits verwalten: Read-only und Editierbarkeit', () => {
     await page.waitForLoadState('networkidle')
 
     // Credits-Bereich sichtbar
-    await expect(page.getByText('Credits verwalten')).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByText('Credits verwalten').first()).toBeVisible({ timeout: 8_000 })
 
     // Kurs-Credit-Karte finden
     const courseCard = page.locator('.card', { hasText: 'Credits aus Kurs' }).first()
@@ -50,7 +50,7 @@ test.describe('Credits verwalten: Read-only und Editierbarkeit', () => {
     await page.goto(`/admin/yogis/${yogi1Id}`)
     await page.waitForLoadState('networkidle')
 
-    await expect(page.getByText('Credits verwalten')).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByText('Credits verwalten').first()).toBeVisible({ timeout: 8_000 })
 
     const guthabenCard = page.locator('.card', { hasText: 'Guthaben aus Kursabbruch' }).first()
     await expect(guthabenCard).toBeVisible({ timeout: 5_000 })
@@ -72,7 +72,7 @@ test.describe('Credits verwalten: Read-only und Editierbarkeit', () => {
     await page.goto(`/admin/yogis/${yogi1Id}`)
     await page.waitForLoadState('networkidle')
 
-    await expect(page.getByText('Credits verwalten')).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByText('Credits verwalten').first()).toBeVisible({ timeout: 8_000 })
 
     const tenpackCard = page.locator('.card', { hasText: 'Punktekarte' }).first()
     await expect(tenpackCard).toBeVisible({ timeout: 5_000 })

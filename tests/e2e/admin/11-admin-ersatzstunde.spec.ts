@@ -67,9 +67,9 @@ test.describe('Ersatzstunde: Absage ohne Ersatz → Credit zurück', () => {
     await page.goto(`/admin/sessions/${sessionId}`)
     await page.waitForLoadState('networkidle')
 
-    // Yogi in Teilnehmerliste sichtbar
+    // Yogi in Teilnehmerliste sichtbar (Mobile + Desktop Layout möglich → .first())
     const yogiEmail = process.env.TEST_YOGI1_EMAIL!
-    await expect(page.getByText(yogiEmail)).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByText(yogiEmail).first()).toBeVisible({ timeout: 8_000 })
 
     // Absage-Formular öffnen
     await page.getByRole('button', { name: /stunde absagen/i }).click()
@@ -151,7 +151,7 @@ test.describe('Ersatzstunde: Nachträglicher Ersatztermin → Yogis automatisch 
     await page.waitForLoadState('networkidle')
 
     // Stunde zeigt "abgesagt"-Banner
-    await expect(page.getByText(/stunde ist abgesagt/i)).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByText(/stunde ist abgesagt/i).first()).toBeVisible({ timeout: 8_000 })
 
     // Ersatztermin-Button klicken
     await page.getByRole('button', { name: /ersatztermin nachträglich anlegen/i }).click()
@@ -249,7 +249,7 @@ test.describe('Ersatzstunde: Yogi hat Credit bereits verbraucht → wird übersp
     await page.goto(`/admin/sessions/${sessionId}`)
     await page.waitForLoadState('networkidle')
 
-    await expect(page.getByText(/stunde ist abgesagt/i)).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByText(/stunde ist abgesagt/i).first()).toBeVisible({ timeout: 8_000 })
 
     await page.getByRole('button', { name: /ersatztermin nachträglich anlegen/i }).click()
     await expect(page.getByText(/datum/i).first()).toBeVisible({ timeout: 5_000 })

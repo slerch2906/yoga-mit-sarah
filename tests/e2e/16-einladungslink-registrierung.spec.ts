@@ -21,13 +21,7 @@ const TOKEN_VALID   = `e2e-token-valid-${Date.now()}`
 const TOKEN_USED    = `e2e-token-used-${Date.now()}`
 const TOKEN_EXPIRED = `e2e-token-expired-${Date.now()}`
 
-let adminUserId: string
-
 test.beforeAll(async () => {
-  const service = getServiceClient()
-  const { data: existing } = await service.auth.admin.listUsers()
-  adminUserId = existing?.users?.find(u => u.email === process.env.TEST_ADMIN_EMAIL!)?.id ?? ''
-
   const db = await getAdminClient()
   const now = new Date()
   const futureExpire = new Date(now.getTime() + 14 * 24 * 3600 * 1000)
@@ -39,7 +33,6 @@ test.beforeAll(async () => {
     first_name: 'E2E',
     last_name: 'Valid',
     token: TOKEN_VALID,
-    invited_by: adminUserId,
     expires_at: futureExpire.toISOString(),
     used: false,
   })
@@ -50,7 +43,6 @@ test.beforeAll(async () => {
     first_name: 'E2E',
     last_name: 'Used',
     token: TOKEN_USED,
-    invited_by: adminUserId,
     expires_at: futureExpire.toISOString(),
     used: true,
     accepted_at: new Date().toISOString(),
@@ -62,7 +54,6 @@ test.beforeAll(async () => {
     first_name: 'E2E',
     last_name: 'Expired',
     token: TOKEN_EXPIRED,
-    invited_by: adminUserId,
     expires_at: pastExpire.toISOString(),
     used: false,
   })

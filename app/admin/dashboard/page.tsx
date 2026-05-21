@@ -326,6 +326,12 @@ export default function AdminDashboard() {
     loadData()
   }
 
+  // Swipe-Navigation VOR jedem early return — React-Hooks-Reihenfolge muss stabil sein
+  const swipeHandlers = useSwipe({
+    onSwipeLeft: () => setWeekOffset(o => o + 1),
+    onSwipeRight: () => setWeekOffset(o => o - 1),
+  })
+
   const monday = getMonday(new Date())
   const weekStart = addDays(monday, weekOffset * 7)
   const weekLabel = weekOffset === 0 ? 'Diese Woche'
@@ -334,12 +340,6 @@ export default function AdminDashboard() {
     : formatWeekRange(weekStart)
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" /></div>
-
-  // Swipe-Navigation für Wochenansicht: links→nächste, rechts→vorherige
-  const swipeHandlers = useSwipe({
-    onSwipeLeft: () => setWeekOffset(o => o + 1),
-    onSwipeRight: () => setWeekOffset(o => o - 1),
-  })
 
   return (
     <div className="max-w-md mx-auto min-h-screen" {...swipeHandlers}>

@@ -232,3 +232,117 @@ test.describe('[E2E] adminGuthabenVerrechnet Email — Buchhaltungs-Info', () =>
     // 7 Guthaben + 7-Stunden-Kurs → verrechnet:7, neu:0, remaining:0 → "aufgebraucht"
   })
 })
+
+// ── 10) Credit-Sichtbarkeit nach Kurs-Ende (Sarah-Frage) ───────────────────
+test.describe('[E2E] Credit nach letzter Stunde: Sichtbarkeit + Verfall', () => {
+  test.fixme('Yogi sagt letzte Stunde ab → Credit bleibt 8 Tage in /meine sichtbar', async () => {
+    // Setup: Yogi mit aktivem booking auf der letzten Stunde eines Kurses.
+    // Kurs date_end = heute.
+    // Aktion: Yogi meldet sich rechtzeitig ab (>3h vor Stunde) → Credit zurück
+    // Erwartung (sofort):
+    //   - booking.status='cancelled', credit.used -1 (Trigger)
+    //   - /meine zeigt: Kurs verschwunden (date_end < morgen), aber Credit-Card
+    //     "1 Kurs: <Name>" mit "Verfallen am <date_end + 8d>" sichtbar.
+  })
+
+  test.fixme('Nach 8 Tagen ist der Credit weg aus /meine', async () => {
+    // Setup: Credit mit expires_at < now()
+    // /meine credits-Query filtert .gt('expires_at', now) → nicht mehr in Liste
+  })
+
+  test.fixme('Credit kann während 8-Tage-Frist eingelöst werden (Make-up)', async () => {
+    // Theoretischer Edge-Case: Admin legt eine Drop-in-Session im Kurs nachträglich an
+    // Yogi kann den Credit dort einlösen (course_id match)
+    // Erwartung: booking auto-eingebucht mit credit_id verlinkt, used+1
+  })
+})
+
+// ── 11) Warteliste vs Notify Race (Sarah-Frage) ────────────────────────────
+test.describe('[E2E] Warteliste füllt Platz → Notify-User NICHT informiert', () => {
+  test.fixme('Yogi A meldet ab, Yogi B auf Warteliste+Credit, Yogi C auf Notify → nur B kriegt Email', async () => {
+    // Setup:
+    //   - Session voll mit Yogi A active booking
+    //   - Yogi B in waitlist (type='waitlist', position=1) mit verfügbarem Credit
+    //   - Yogi C in waitlist (type='notify')
+    // Aktion: A meldet sich ab → trigger process_cancellation_with_waitlist
+    // Erwartung:
+    //   - B: booking auto-aktiv, Email "Du bist dabei" (waitlist_promoted)
+    //   - C: KEINE Email (notify_users im Result = [])
+    //   - waitlist-Eintrag für B gelöscht
+    //   - notify-Einträge bleiben für andere Sessions, aber nicht für DIESE
+  })
+
+  test.fixme('Wartelisten-Person ohne Credit wird übersprungen, Notify-Users informiert', async () => {
+    // Setup:
+    //   - Yogi B in waitlist, aber KEINE freien Credits
+    //   - Yogi C in notify
+    // Aktion: A meldet ab
+    // Erwartung:
+    //   - B: kein Insert (v_credit.id IS NULL), waitlist-Eintrag bleibt
+    //   - Wait — schau ich nochmal: aktuelle RPC löscht waitlist-Eintrag IMMER wenn waitlist-Person gefunden,
+    //     auch wenn kein Credit. → B verliert Wartelisten-Position OHNE booking. Edge-Case-Bug?
+    //   - C: bekommt ggf. Email weil promoted=null → aber notify_users wurde nicht abgefragt im else-Branch
+    //   - DOKUMENTIEREN als Findings-Test
+  })
+
+  test.fixme('Niemand auf Warteliste → alle Notify-Users bekommen Email', async () => {
+    // Setup: Yogi C, D, E in notify (kein waitlist)
+    // Aktion: A meldet ab
+    // Erwartung: 3 Emails, alle 3 notify-Einträge gelöscht
+  })
+
+  test.fixme('Auto-eingebuchter Wartelisten-Yogi hat 1h Abmeldefrist', async () => {
+    // Yogi B wird auto-eingebucht → Email mit "1h Abmeldefrist"-Hinweis
+    // Yogi kann sich innerhalb 1h kostenlos abmelden
+  })
+})
+
+// ── 12) Welcome / Invitation_sent / Password-Reset / Admin-Emails ──────────
+test.describe('[E2E] Restliche Email-Templates (Coverage-Lücke)', () => {
+  test.fixme('welcome: Yogi self-registriert über Invite-Link → Welcome-Email kommt', async () => {
+    // Subject: "Willkommen bei Yoga mit Sarah!"
+    // Wenn Invitation einen Kurs hatte: Hinweis "Du bist direkt in <Kurs> eingebucht"
+  })
+
+  test.fixme('invitation_sent: Admin lädt Yogi ein → Email mit Invite-Link kommt', async () => {
+    // /admin/einladen → Einladung anlegen
+    // Subject: "Einladung zur Yoga-App – Yoga mit Sarah"
+    // Body enthält invite-Link (14 Tage gültig)
+  })
+
+  test.fixme('password_reset_request: Forgot-Password → Email mit Reset-Link', async () => {
+    // /login → "Passwort vergessen"
+    // Subject: "Passwort zurücksetzen – Yoga mit Sarah"
+    // Link 1h gültig (action_link aus generateLink)
+  })
+
+  test.fixme('admin_new_yogi: Self-Registration → Admin bekommt Info-Email', async () => {
+    // Yogi registriert sich (mit oder ohne Invite)
+    // Email an Sarah: "Neuer Yogi: <Name>"
+  })
+
+  test.fixme('admin_dsgvo_deletion: Account-Löschung → Admin Email "PDF manuell löschen"', async () => {
+    // Yogi DSGVO-löscht → Admin-Email mit Hinweis auf Drive-PDF
+  })
+
+  test.fixme('admin_course_cancelled_summary: Kursabbruch → Admin Übersicht', async () => {
+    // Admin bricht Kurs ab → Email an Sarah mit Yogi-Liste
+  })
+
+  test.fixme('admin_yogi_choice: Yogi wählt Guthaben/Erstattung → Admin-Notification', async () => {
+    // Yogi öffnet Kursabbruch-Token-Link, wählt Option → Admin-Email
+  })
+})
+
+// ── 13) Email-Failure Resilience ───────────────────────────────────────────
+test.describe('[E2E] Email-Failure handling', () => {
+  test.fixme('Brevo-API-Fehler → Eintrag in admin_notifications', async () => {
+    // Setup: Brevo gibt 4xx/5xx zurück
+    // Edge Function: notifyEmailFailed() insertet in admin_notifications
+    // Erwartung: Tabelle hat neuen Eintrag, App-Flow läuft trotzdem weiter
+  })
+
+  test.fixme('BREVO_API_KEY fehlt → admin_notifications-Eintrag, App stürzt nicht', async () => {
+    // Edge Function returns ok:false, App handhabt graceful
+  })
+})

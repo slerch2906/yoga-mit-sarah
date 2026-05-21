@@ -183,7 +183,7 @@ export default function AdminSessionPage() {
 
   async function loadData() {
     const [{ data: sess }, { data: bkgs }] = await Promise.all([
-      supabase.from('sessions').select('*, course:courses(name, id)').eq('id', id).single(),
+      supabase.from('sessions').select('*, course:courses(name, id), replacement:sessions!sessions_replacement_session_id_fkey(id, date, time_start, is_cancelled)').eq('id', id).single(),
       supabase.from('bookings')
         .select('*, profile:profiles(email, first_name, last_name)')
         .eq('session_id', id).eq('status', 'active'),
@@ -214,6 +214,11 @@ export default function AdminSessionPage() {
     }).select('id').single()
 
     if (!newSession) { setAddingReplacement(false); return }
+
+    // Ersatztermin mit Original verknüpfen (für "Zur Ersatzstunde"-Link bei abgesagter Stunde)
+    await supabase.from('sessions').update({
+      replacement_session_id: newSession.id,
+    }).eq('id', id)
 
     let enrolledCount = 0
     let skippedCount = 0
@@ -258,6 +263,8 @@ export default function AdminSessionPage() {
           date: lateReplacementDate,
           timeStart: lateReplacementTime,
           durationMin: session?.duration_min || 60,
+          originalDate: session?.date,
+          originalTime: session?.time_start,
         })
       }
     }
@@ -430,12 +437,20 @@ export default function AdminSessionPage() {
         {session?.is_cancelled && (
           <div className="card border-yoga-amber-text/20 bg-yoga-amber-bg mb-4">
             <p className="text-sm font-bold text-yoga-amber-text mb-1">Stunde ist abgesagt</p>
-            {!showAddReplacement ? (
+            {/* Link zum bereits verknüpften Ersatztermin (wenn vorhanden) */}
+            {(session as any).replacement && !(session as any).replacement.is_cancelled && (
+              <button onClick={() => router.push(`/admin/sessions/${(session as any).replacement.id}`)}
+                className="w-full mt-2 mb-2 btn-primary text-sm">
+                <i className="ti ti-calendar-event mr-1" />
+                Zur Ersatzstunde: {new Date((session as any).replacement.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })} · {(session as any).replacement.time_start?.slice(0,5)} Uhr
+              </button>
+            )}
+            {!showAddReplacement && !(session as any).replacement ? (
               <button onClick={() => setShowAddReplacement(true)}
                 className="w-full mt-2 text-sm border border-yoga-amber-text/30 text-yoga-amber-text rounded-yoga py-2 font-semibold bg-transparent cursor-pointer hover:opacity-80">
                 <i className="ti ti-calendar-plus mr-2" />Ersatztermin nachträglich anlegen
               </button>
-            ) : (
+            ) : !showAddReplacement ? null : (
               <div className="mt-3 space-y-2">
                 <p className="text-xs text-yoga-text/60">
                   Alle damals angemeldeten Yogis werden automatisch eingebucht und per E-Mail informiert.

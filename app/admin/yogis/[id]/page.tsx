@@ -254,126 +254,117 @@ export default function AdminYogiDetailPage() {
       loadData(); setEnrolling(false); return
     }
 
-    // Guthaben-Credits prüfen
-    const { data: guthabenCredits } = await supabase.from('credits')
-      .select('*').eq('user_id', id).eq('model', 'guthaben')
-      .gt('used', -1).order('expires_at')
-    const availableGuthaben = (guthabenCredits || []).filter(g => (g.total - g.used) > 0)
-    const totalGuthaben = availableGuthaben.reduce((s: number, g: any) => s + (g.total - g.used), 0)
-
-    if (availableGuthaben.length > 0) {
-      const useGuthaben = confirm(
-        `${yogi?.first_name} hat ${totalGuthaben} Guthaben-Credits aus einem abgesagten Kurs.
-
-` +
-        `Folgekurs hat ${remaining} Stunden.
-
-` +
-        `Guthaben verwenden? → ${Math.max(0, remaining - totalGuthaben)} neue Credits nötig.
-` +
-        `(Abbrechen = nur neue Credits vergeben)`
-      )
-      if (useGuthaben) {
-        // Guthaben aufbrauchen
-        let needed = remaining
-        for (const g of availableGuthaben) {
-          if (needed <= 0) break
-          const free = g.total - g.used
-          const use = Math.min(free, needed)
-          await supabase.from('credits').update({ used: g.used + use }).eq('id', g.id)
-          needed -= use
-        }
-        // Verbleibende als neue Credits
-        if (needed > 0) {
-          await supabase.from('credits').insert({
-            user_id: id, course_id: selectedCourseId,
-            model: 'course', total: needed, used: 0,
-            expires_at: expiry.toISOString()
-          })
-        } else {
-          // Alle durch Guthaben gedeckt - Enrollment trotzdem anlegen
-        }
-        await supabase.from('enrollments').upsert({ user_id: id, course_id: selectedCourseId, enrolled_from_unit: 1 })
-        // Sessions buchen + Email + loadData (früher Abschluss)
-        const { data: sessions2 } = await supabase.from('sessions').select('id')
-          .eq('course_id', selectedCourseId).gte('date', new Date().toISOString().split('T')[0])
-        for (const s of (sessions2 || [])) {
-          const { data: ex } = await supabase.from('bookings').select('id')
-            .eq('user_id', id).eq('session_id', s.id).maybeSingle()
-          if (!ex) await supabase.from('bookings').insert({ user_id: id, session_id: s.id, type: 'course', status: 'active' })
-        }
-        const { data: yProf2 } = await supabase.from('profiles').select('email, first_name').eq('id', id).single()
-        if (yProf2?.email && course && !yogi?.is_dummy) {
-          await Email.yogiEnrolledByAdmin({ email: yProf2.email, firstName: yProf2.first_name || 'Yogi',
-            courseName: course.name, weekday: course.weekday, timeStart: course.time_start,
-            durationMin: course.duration_min || 75, totalUnits: remaining, dateStart: course.date_start })
-        }
-        setEnrolling(false); loadData(); return
-      }
-      // useGuthaben = false → normal weiter unten
-    } // end if (availableGuthaben.length > 0)
-
-    await supabase.from('enrollments').upsert({ user_id: id, course_id: selectedCourseId, enrolled_from_unit: 1 })
-
-    // Zuerst Sessions laden um genaue Anzahl zu kennen
-    const { data: sessions } = await supabase.from('sessions').select('id')
+    // === Normal-Pfad: Guthaben automatisch verrechnen wenn vorhanden ===
+    // Sessions laden (sortiert nach Datum)
+    const { data: sessionsData } = await supabase.from('sessions').select('id, date')
       .eq('course_id', selectedCourseId)
       .gte('date', new Date().toISOString().split('T')[0])
       .eq('is_cancelled', false)
+      .order('date')
+    const sessionList = sessionsData || []
+    const actualCount = sessionList.length
 
-    const actualCount = sessions?.length || 0
+    // Verfügbares Guthaben (auto-verrechnen, kein Confirm-Dialog mehr)
+    const { data: guthabenCredits } = await supabase.from('credits')
+      .select('*').eq('user_id', id).eq('model', 'guthaben')
+      .gt('expires_at', new Date().toISOString()).order('expires_at')
+    const availableGuthaben = (guthabenCredits || []).filter((g: any) => (g.total - g.used) > 0)
+    const totalGuthaben = availableGuthaben.reduce((s: number, g: any) => s + (g.total - g.used), 0)
+    const guthabenUsable = Math.min(totalGuthaben, actualCount)
+    const newCreditsNeeded = actualCount - guthabenUsable
 
-    // Credits anlegen: used = actualCount (sofort alle verbraucht, da sofort eingebucht)
-    // Wenn Yogi sich aus einer Stunde austrägt: used -1 → Credit wird frei
-    // Wenn Yogi sich wieder einträgt: used +1 → Credit verbraucht
-    const { data: credit } = await supabase.from('credits').insert({
-      user_id: id, course_id: selectedCourseId, model: 'course',
-      total: actualCount, used: actualCount, expires_at: expiry.toISOString(),
-    }).select().single()
+    // Enrollment upserten
+    await supabase.from('enrollments').upsert({ user_id: id, course_id: selectedCourseId, enrolled_from_unit: 1 })
 
-    if (actualCount > 0 && sessions) {
-      // Für jede Session: bestehende Buchung reaktivieren ODER neue anlegen
-      for (const s of sessions) {
-        const { data: existing } = await supabase.from('bookings')
-          .select('id').eq('session_id', s.id).eq('user_id', id).maybeSingle()
-        if (existing) {
-          await supabase.from('bookings').update({
-            status: 'active', credit_id: credit?.id || null,
-            cancelled_at: null, cancel_late: false, type: 'course'
-          }).eq('id', existing.id)
-        } else {
-          await supabase.from('bookings').insert({
-            user_id: id, session_id: s.id,
-            credit_id: credit?.id || null, type: 'course', status: 'active'
-          })
+    // Falls neue Credits nötig: Course-Credit anlegen (used=0, Trigger setzt auf #aktive)
+    let newCourseCreditId: string | null = null
+    if (newCreditsNeeded > 0) {
+      const { data: cc } = await supabase.from('credits').insert({
+        user_id: id, course_id: selectedCourseId, model: 'course',
+        total: newCreditsNeeded, used: 0, expires_at: expiry.toISOString(),
+      }).select().single()
+      newCourseCreditId = cc?.id || null
+    }
+
+    // Credit-IDs pro Session: erst Guthaben aufbrauchen, dann Course-Credit
+    const creditPerSession: (string | null)[] = []
+    const guthabenRemaining = availableGuthaben.map((g: any) => ({
+      id: g.id, free: g.total - g.used,
+    }))
+    for (let i = 0; i < sessionList.length; i++) {
+      let assigned: string | null = null
+      for (const g of guthabenRemaining) {
+        if (g.free > 0) {
+          assigned = g.id
+          g.free -= 1
+          break
         }
+      }
+      creditPerSession.push(assigned || newCourseCreditId)
+    }
+
+    // Bookings reaktivieren / anlegen (mit credit_id-Link, damit Trigger korrekt recalct)
+    for (let i = 0; i < sessionList.length; i++) {
+      const s = sessionList[i]
+      const creditId = creditPerSession[i]
+      const { data: existing } = await supabase.from('bookings')
+        .select('id').eq('session_id', s.id).eq('user_id', id).maybeSingle()
+      if (existing) {
+        await supabase.from('bookings').update({
+          status: 'active', credit_id: creditId,
+          cancelled_at: null, cancel_late: false, type: 'course',
+        }).eq('id', existing.id)
+      } else {
+        await supabase.from('bookings').insert({
+          user_id: id, session_id: s.id,
+          credit_id: creditId, type: 'course', status: 'active',
+        })
       }
     }
 
-    // Email: Kurs-Einbuchung durch Admin
+    // Email: Kurs-Einbuchung an Yogi
     try {
-      const { data: yProf } = await supabase.from('profiles').select('email, first_name').eq('id', id).single()
-      const { data: crs } = await supabase.from('courses').select('name, weekday, time_start, duration_min, total_units, date_start').eq('id', selectedCourseId).single()
-      if (yProf?.email && crs && !yProf.is_dummy) {
+      const { data: yProf } = await supabase.from('profiles').select('email, first_name, is_dummy').eq('id', id).single()
+      if (yProf?.email && course && !yProf.is_dummy) {
         await Email.yogiEnrolledByAdmin({
           email: yProf.email,
           firstName: yProf.first_name || 'Yogi',
-          courseName: crs.name || '',
-          weekday: crs.weekday || '',
-          timeStart: crs.time_start || '',
-          durationMin: crs.duration_min || 75,
-          totalUnits: crs.total_units || undefined,
-          dateStart: crs.date_start || undefined,
+          courseName: course.name || '',
+          weekday: course.weekday || '',
+          timeStart: course.time_start || '',
+          durationMin: course.duration_min || 75,
+          totalUnits: actualCount,
+          dateStart: course.date_start || undefined,
         })
       }
     } catch(e) {}
 
+    // Email an Admin wenn Guthaben verrechnet wurde
+    if (guthabenUsable > 0) {
+      try {
+        await Email.adminGuthabenVerrechnet({
+          yogiName: `${yogi?.first_name || ''} ${yogi?.last_name || ''}`.trim(),
+          yogiEmail: yogi?.email || '',
+          courseName: course?.name || '',
+          guthabenAmount: guthabenUsable,
+        })
+      } catch(e) {}
+    }
+
     await supabase.from('audit_log').insert({
       action: 'yogi_enrolled_by_admin',
-      details: { target_user_id: id, course_id: selectedCourseId, credits: remaining }
+      details: {
+        target_user_id: id, course_id: selectedCourseId,
+        credits: actualCount,
+        guthaben_verrechnet: guthabenUsable,
+        neue_credits: newCreditsNeeded,
+      },
     })
 
     setShowEnrollForm(false); setSelectedCourseId('')
+    if (guthabenUsable > 0) {
+      alert(`✓ Einbuchung erfolgt.\n${guthabenUsable} Stunde${guthabenUsable === 1 ? '' : 'n'} mit Guthaben verrechnet.${newCreditsNeeded > 0 ? `\n${newCreditsNeeded} neue Credits angelegt.` : ''}`)
+    }
     loadData(); setEnrolling(false)
   }
 
@@ -464,12 +455,11 @@ export default function AdminYogiDetailPage() {
     loadData()
   }
 
-  // Eine Session gilt erst als absolviert, wenn date+time+duration < now (nicht nur date)
+  // "Teilgenommen" ab Stundenstart (date+time < now), NICHT erst nach Stundenende.
+  // Begründung Sarah: sobald die Stunde angefangen hat, gilt sie als teilgenommen.
   function sessionEnded(session: any) {
     if (!session?.date || !session?.time_start) return false
-    const end = new Date(`${session.date}T${session.time_start}`)
-    end.setMinutes(end.getMinutes() + (session.duration_min || 75))
-    return end < new Date()
+    return new Date(`${session.date}T${session.time_start}`) < new Date()
   }
 
   function getStatusBadge(b: any) {

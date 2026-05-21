@@ -90,9 +90,9 @@ export default function MeinePage() {
     const mb = session.myBooking
     if (session.is_cancelled) return <span className="badge" style={{background:'var(--yoga-red-bg)',color:'var(--yoga-red-text)'}}>Abgesagt</span>
     if (!mb || mb.status === 'cancelled') return <span className="badge badge-left">Abgemeldet</span>
-    const sessionEnd = new Date(`${session.date}T${session.time_start}`)
-    sessionEnd.setMinutes(sessionEnd.getMinutes() + (session.duration_min || 60))
-    if (sessionEnd < new Date()) return <span className="badge badge-done">Teilgenommen</span>
+    // Ab Stundenstart als "Teilgenommen" markieren
+    if (new Date(`${session.date}T${session.time_start}`) < new Date())
+      return <span className="badge badge-done">Teilgenommen</span>
     return <span className="badge badge-enrolled">Angemeldet</span>
   }
 
@@ -113,12 +113,10 @@ export default function MeinePage() {
     document.body.removeChild(a)
   }
 
-  // Hilfsfunktion: Session ist abgelaufen (date+time+duration < now)
+  // "Teilgenommen" ab Stundenstart (date+time < now), nicht erst nach Stundenende.
   function sessionFinished(session: any) {
     if (!session?.date || !session?.time_start) return false
-    const end = new Date(`${session.date}T${session.time_start}`)
-    end.setMinutes(end.getMinutes() + (session.duration_min || 75))
-    return end < new Date()
+    return new Date(`${session.date}T${session.time_start}`) < new Date()
   }
   // Modell-bewusste Credit-Werte:
   // - Course-Credits: attended = absolvierte Sessions, free = upcoming-active (Sarahs Erwartung).
@@ -165,7 +163,7 @@ export default function MeinePage() {
                       {c.model === 'guthaben' && free > 0 && (
                         <>
                           <div className="text-xs text-yoga-amber-text mt-1">Guthaben aus abgesagtem Kurs</div>
-                          <div className="text-xs text-yoga-text/50 mt-0.5 italic">Nicht für Einzelstunden, nur verrechenbar mit neuem Kurs</div>
+                          <div className="text-xs text-yoga-text/50 mt-0.5">Nicht für Einzelstunden, nur verrechenbar mit neuem Kurs</div>
                         </>
                       )}
                       {free === 0
@@ -175,13 +173,15 @@ export default function MeinePage() {
                           : <div className="text-xs text-yoga-text/40 mt-1">Gültig bis {new Date(c.expires_at).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })}</div>
                       }
                     </div>
-                    <div className="text-right">
-                      <div className="text-xs text-yoga-text/40">{attended} / {c.total} genutzt</div>
-                      <div className="h-1.5 w-16 bg-yoga-border rounded-full mt-1">
-                        <div className="h-full bg-yoga-text/40 rounded-full"
-                          style={{ width: `${(attended/Math.max(1,c.total))*100}%` }} />
+                    {c.model !== 'guthaben' && (
+                      <div className="text-right">
+                        <div className="text-xs text-yoga-text/40">{attended} / {c.total} genutzt</div>
+                        <div className="h-1.5 w-16 bg-yoga-border rounded-full mt-1">
+                          <div className="h-full bg-yoga-text/40 rounded-full"
+                            style={{ width: `${(attended/Math.max(1,c.total))*100}%` }} />
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               )
@@ -258,13 +258,9 @@ export default function MeinePage() {
                   <div className="text-sm font-semibold truncate">{b.session?.course?.name}</div>
                   <div className="text-xs text-yoga-text/45">Einzelstunde · 1 Credit</div>
                 </div>
-                {(() => {
-                  const end = new Date(`${b.session?.date}T${b.session?.time_start}`)
-                  end.setMinutes(end.getMinutes() + (b.session?.duration_min || 60))
-                  return end < new Date()
-                    ? <span className="badge badge-done">Teilgenommen </span>
-                    : <span className="badge badge-enrolled">Gebucht</span>
-                })()}
+                {new Date(`${b.session?.date}T${b.session?.time_start}`) < new Date()
+                  ? <span className="badge badge-done">Teilgenommen </span>
+                  : <span className="badge badge-enrolled">Gebucht</span>}
               </button>
             ))}
           </div>

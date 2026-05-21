@@ -39,7 +39,7 @@ export const Email = {
   sessionCancelled: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; reason?: string; replacementDate?: string; replacementTime?: string }) =>
     sendEmail('session_cancelled', data),
 
-  sessionAdded: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number }) =>
+  sessionAdded: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number; originalDate?: string; originalTime?: string }) =>
     sendEmail('session_added', data),
 
   adminNewYogi: (data: { fullName: string; email: string; courseName?: string }) =>

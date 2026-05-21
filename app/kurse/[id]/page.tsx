@@ -34,7 +34,7 @@ export default function SessionDetailPage() {
 
     const [{ data: prof }, { data: sess }, { data: myBook }, { data: myWait }, { data: allCredits }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
-      supabase.from('sessions').select('*, course:courses(*)').eq('id', id).single(),
+      supabase.from('sessions').select('*, course:courses(*), replacement:sessions!sessions_replacement_session_id_fkey(id, date, time_start, is_cancelled)').eq('id', id).single(),
       supabase.from('bookings').select('*').eq('session_id', id).eq('user_id', user.id).eq('status', 'active').maybeSingle(),
       supabase.from('waitlist').select('*').eq('session_id', id).eq('user_id', user.id).maybeSingle(),
       supabase.from('credits').select('*').eq('user_id', user.id).gt('expires_at', new Date().toISOString()),
@@ -325,12 +325,19 @@ export default function SessionDetailPage() {
           </div>
         )}
 
-        {/* ABGESAGT – keine Buchung möglich */}
+        {/* ABGESAGT – keine Buchung möglich, ggf. Link zur Ersatzstunde */}
         {!past && session.is_cancelled && (
           <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-4 mb-4 text-center">
             <i className="ti ti-calendar-cancel text-2xl text-yoga-text/30 block mb-2" />
             <p className="text-sm font-semibold text-yoga-text/50 mb-1">Diese Stunde wurde abgesagt</p>
             <p className="text-sm text-yoga-text/40">Buchungen und Warteliste sind nicht möglich.</p>
+            {(session as any).replacement && !(session as any).replacement.is_cancelled && (
+              <button onClick={() => router.push(`/kurse/${(session as any).replacement.id}`)}
+                className="btn-primary mt-3 w-full">
+                <i className="ti ti-calendar-event mr-1" />
+                Zur Ersatzstunde am {new Date((session as any).replacement.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })} · {(session as any).replacement.time_start?.slice(0,5)} Uhr
+              </button>
+            )}
             <button onClick={() => router.back()} className="btn-ghost mt-3">Zurück</button>
           </div>
         )}

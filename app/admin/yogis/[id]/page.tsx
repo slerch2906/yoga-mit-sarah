@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Email } from '@/lib/email'
+import { isActive, isStarted, countActiveFutureUnits } from '@/lib/session-status'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -55,7 +56,7 @@ export default function AdminYogiDetailPage() {
         .eq('user_id', id).order('created_at', { ascending: false }).limit(20),
       supabase.from('credits').select('*, course:courses(name)').eq('user_id', id).order('created_at', { ascending: false }),
       supabase.from('enrollments').select('*, course:courses(*)').eq('user_id', id),
-      supabase.from('courses').select('*, sessions(date), enrollments(id)').eq('is_active', true).order('name'),
+      supabase.from('courses').select('*, sessions(date, is_cancelled, cancel_reason), enrollments(id)').eq('is_active', true).order('name'),
     ])
     setYogi(y); setBookings(b || []); setCredits(c || [])
     setEnrollments(e || []); setCourses(courseList || [])
@@ -81,12 +82,14 @@ export default function AdminYogiDetailPage() {
   }, 0)
 
   function getRemainingUnits(course: any) {
-    const today = new Date()
-    return (course.sessions || []).filter((s: any) => new Date(s.date) >= today).length
+    // Nur aktive zukünftige Sessions zählen (excluded/cancelled NICHT mitzählen).
+    // Quelle der Wahrheit: lib/session-status.ts countActiveFutureUnits.
+    return countActiveFutureUnits(course?.sessions)
   }
 
   function getExpiryDate(course: any) {
-    const dates = (course.sessions || []).map((s: any) => new Date(s.date))
+    // Ablaufdatum aus AKTIVEN Sessions (excluded/cancelled ignorieren).
+    const dates = (course.sessions || []).filter(isActive).map((s: any) => new Date(s.date))
     if (dates.length === 0) return new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
     const last = new Date(Math.max(...dates.map((d: Date) => d.getTime())))
     last.setDate(last.getDate() + 8)
@@ -455,12 +458,8 @@ export default function AdminYogiDetailPage() {
     loadData()
   }
 
-  // "Teilgenommen" ab Stundenstart (date+time < now), NICHT erst nach Stundenende.
-  // Begründung Sarah: sobald die Stunde angefangen hat, gilt sie als teilgenommen.
-  function sessionEnded(session: any) {
-    if (!session?.date || !session?.time_start) return false
-    return new Date(`${session.date}T${session.time_start}`) < new Date()
-  }
+  // "Teilgenommen" ab Stundenstart — Logik aus lib/session-status.ts
+  const sessionEnded = isStarted
 
   function getStatusBadge(b: any) {
     if (b.status === 'cancelled') return <span className="badge badge-left">Ausgetragen</span>

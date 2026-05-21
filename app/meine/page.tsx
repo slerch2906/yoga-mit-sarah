@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/auth'
+import { isActive, isExcluded, isCancelled, isStarted } from '@/lib/session-status'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -60,19 +61,19 @@ export default function MeinePage() {
           const { data: myBookings } = await supabase
             .from('bookings').select('*').eq('user_id', user.id)
             .in('session_id', (sessions || []).map((s: any) => s.id))
-          // Ausgeschlossene Stunden nie anzeigen
-          const visibleSessions = (sessions || [])
-            .filter((s: any) => s.cancel_reason !== 'excluded')
+          // Ausgeschlossene Stunden nie anzeigen (Setup-Excluded zählt nicht als Termin).
+          const visibleSessions = (sessions || []).filter((s: any) => !isExcluded(s))
           // Range anwenden: nur Einheiten zwischen enrolled_from_unit und enrolled_until_unit
           const fromUnit = enrol.enrolled_from_unit ?? 1
           const untilUnit = enrol.enrolled_until_unit ?? visibleSessions.length
-          // Unit-Index basiert auf aktiven (nicht-cancelled) Sessions in chronologischer Reihenfolge
-          const activeOrdered = visibleSessions.filter((s: any) => !s.is_cancelled)
+          // Unit-Index basiert auf AKTIVEN Sessions in chronologischer Reihenfolge
+          const activeOrdered = visibleSessions.filter(isActive)
           const rangeIds = new Set(
             activeOrdered.slice(fromUnit - 1, untilUnit).map((s: any) => s.id)
           )
+          // Anzeigen: aktive im Range + abgesagte (mit "Abgesagt"-Badge); excluded sind raus.
           sessionsMap[enrol.course_id] = visibleSessions
-            .filter((s: any) => rangeIds.has(s.id) || s.is_cancelled)
+            .filter((s: any) => rangeIds.has(s.id) || isCancelled(s))
             .map((s: any) => ({
               ...s, myBooking: myBookings?.find((b: any) => b.session_id === s.id),
             }))
@@ -85,13 +86,17 @@ export default function MeinePage() {
     setLoading(false)
   }
 
-  // Kursstunden: alle anzeigen mit Status
+  // Kursstunden Badge — kanonisches Status-Modell aus lib/session-status.ts
   function getStatusBadge(session: any) {
     const mb = session.myBooking
-    if (session.is_cancelled) return <span className="badge" style={{background:'var(--yoga-red-bg)',color:'var(--yoga-red-text)'}}>Abgesagt</span>
-    if (!mb || mb.status === 'cancelled') return <span className="badge badge-left">Abgemeldet</span>
-    // Ab Stundenstart als "Teilgenommen" markieren
-    if (new Date(`${session.date}T${session.time_start}`) < new Date())
+    // Excluded sollte hier eigentlich nicht ankommen (vorher gefiltert), aber sicher ist sicher
+    if (isExcluded(session))
+      return <span className="badge badge-left">Ausgeschlossen</span>
+    if (isCancelled(session))
+      return <span className="badge" style={{background:'var(--yoga-red-bg)',color:'var(--yoga-red-text)'}}>Abgesagt</span>
+    if (!mb || mb.status === 'cancelled')
+      return <span className="badge badge-left">Abgemeldet</span>
+    if (isStarted(session))
       return <span className="badge badge-done">Teilgenommen</span>
     return <span className="badge badge-enrolled">Angemeldet</span>
   }
@@ -113,11 +118,8 @@ export default function MeinePage() {
     document.body.removeChild(a)
   }
 
-  // "Teilgenommen" ab Stundenstart (date+time < now), nicht erst nach Stundenende.
-  function sessionFinished(session: any) {
-    if (!session?.date || !session?.time_start) return false
-    return new Date(`${session.date}T${session.time_start}`) < new Date()
-  }
+  // "Teilgenommen" ab Stundenstart — Logik aus lib/session-status.ts
+  const sessionFinished = isStarted
   // Modell-bewusste Credit-Werte:
   // - Course-Credits: attended = absolvierte Sessions, free = upcoming-active (Sarahs Erwartung).
   // - Andere Modelle: behalte DB-Semantik (used = allokiert).

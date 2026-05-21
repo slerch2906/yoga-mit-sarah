@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Email } from '@/lib/email'
+import { isExcluded } from '@/lib/session-status'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -308,8 +309,13 @@ export default function AdminSessionPage() {
       replacementSessionId = newSession?.id || null
     }
 
-    // 2) Ursprüngliche Session als abgesagt markieren
-    await supabase.from('sessions').update({ is_cancelled: true }).eq('id', id)
+    // 2) Ursprüngliche Session als abgesagt markieren + ggf. Ersatztermin verlinken
+    // WICHTIG: cancel_reason gesetzt damit UI zwischen "Abgesagt" und "Ausgeschlossen" unterscheidet.
+    await supabase.from('sessions').update({
+      is_cancelled: true,
+      cancel_reason: reason || 'Abgesagt',
+      replacement_session_id: replacementSessionId,
+    }).eq('id', id)
 
     // 3) Alle Buchungen stornieren
     for (const booking of bookings) {
@@ -392,8 +398,8 @@ export default function AdminSessionPage() {
           <div className="text-sm text-yoga-text/60">{dateStr} · {session?.time_start?.slice(0,5)} Uhr</div>
           <div className="text-sm text-yoga-text/50 mt-1">{session?.duration_min} Minuten</div>
           {session?.is_cancelled && (
-            <div className={`mt-2 text-sm font-semibold ${session.cancel_reason === 'excluded' ? 'text-yoga-text/50' : 'text-yoga-red-text'}`}>
-              {session.cancel_reason === 'excluded' ? 'Diese Stunde ist ausgeschlossen (zählt nicht als Einheit)' : 'Diese Stunde ist bereits abgesagt'}
+            <div className={`mt-2 text-sm font-semibold ${isExcluded(session) ? 'text-yoga-text/50' : 'text-yoga-red-text'}`}>
+              {isExcluded(session) ? 'Diese Stunde ist ausgeschlossen (zählt nicht als Einheit)' : 'Diese Stunde ist bereits abgesagt'}
             </div>
           )}
         </div>

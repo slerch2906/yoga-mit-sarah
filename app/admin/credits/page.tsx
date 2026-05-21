@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { countActiveFutureUnits, isActive } from '@/lib/session-status'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -26,7 +27,7 @@ function CreditsVergebenInner() {
   async function loadData() {
     const [{ data: target }, { data: courseList }] = await Promise.all([
       userId ? supabase.from('profiles').select('*').eq('id', userId).single() : Promise.resolve({ data: null }),
-      supabase.from('courses').select('id, name, total_units, is_single, sessions(date)').eq('is_active', true).order('name'),
+      supabase.from('courses').select('id, name, total_units, is_single, sessions(date, is_cancelled, cancel_reason)').eq('is_active', true).order('name'),
     ])
     setTargetUser(target)
     setCourses(courseList || [])
@@ -35,12 +36,14 @@ function CreditsVergebenInner() {
   function getRemainingUnits(course: any) {
     // Einzelstunde: immer 1 Credit
     if (course.is_single) return 1
-    const today = new Date()
-    return (course.sessions || []).filter((s: any) => new Date(s.date) >= today).length
+    // Nur AKTIVE zukünftige Sessions zählen (Single Source of Truth in lib/session-status.ts)
+    return countActiveFutureUnits(course?.sessions)
   }
 
   function getAutoExpiry(course: any): string {
-    const dates = (course.sessions || []).map((s: any) => new Date(s.date))
+    // Ablaufdatum aus AKTIVEN Sessions berechnen (excluded/cancelled ignorieren –
+    // sonst kann ein excluded späterer Termin das expires_at verschieben).
+    const dates = (course.sessions || []).filter(isActive).map((s: any) => new Date(s.date))
     if (dates.length === 0) return new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
     const last = new Date(Math.max(...dates.map((d: Date) => d.getTime())))
     last.setDate(last.getDate() + 8)

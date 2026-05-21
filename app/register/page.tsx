@@ -126,11 +126,14 @@ function RegisterInner() {
       })
 
       // 2) Credits anlegen
-      // Alle zukünftigen Sessions des Kurses laden
+      // Nur AKTIVE zukünftige Sessions laden (excluded/cancelled raus –
+      // sonst würde der prevent_booking_cancelled_session Trigger feuern
+      // und der Yogi bekäme falsche Anzahl Credits).
       const { data: sessions } = await supabase
         .from('sessions')
         .select('id, date')
         .eq('course_id', invitation.course_id)
+        .eq('is_cancelled', false)
         .gte('date', new Date().toISOString().split('T')[0])
         .order('date', { ascending: false })
 

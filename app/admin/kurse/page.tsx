@@ -292,22 +292,13 @@ export default function AdminKursePage() {
   }
 
   async function loadSessions(courseId: string) {
-    if (courseSessions[courseId]) {
-      setExpandedCourse(expandedCourse === courseId ? null : courseId)
-      return
-    }
-    const { data } = await supabase.from('sessions')
-      .select('id, date, time_start, is_cancelled')
-      .eq('course_id', courseId).order('date')
-    setCourseSessions(prev => ({ ...prev, [courseId]: data || [] }))
-    setExpandedCourse(courseId)
-  }
-
-  async function loadSessions(courseId: string) {
+    // Toggle: wenn bereits expanded → einklappen
     if (expandedCourse === courseId) { setExpandedCourse(null); return }
     if (!courseSessions[courseId]) {
+      // cancel_reason MUSS mitgeladen werden, sonst kann UI nicht zwischen
+      // "Ausgeschlossen" und "Abgesagt" unterscheiden.
       const { data } = await supabase.from('sessions')
-        .select('id, date, time_start, is_cancelled')
+        .select('id, date, time_start, is_cancelled, cancel_reason')
         .eq('course_id', courseId).order('date')
       setCourseSessions(prev => ({ ...prev, [courseId]: data || [] }))
     }

@@ -1,0 +1,80 @@
+/**
+ * Kanonische Status-Logik für Sessions.
+ *
+ * Status-Modell (Single Source of Truth):
+ *
+ * | Status            | DB-Bedingung                                          | Zählt als Einheit | Credit-relevant |
+ * |-------------------|-------------------------------------------------------|-------------------|------------------|
+ * | Aktiv             | is_cancelled=false                                    | JA                | JA               |
+ * | Vergangen         | aktiv UND date+time_start < now                       | JA                | JA (verbraucht)  |
+ * | Ausgeschlossen    | is_cancelled=true UND cancel_reason='excluded'        | NEIN              | NEIN             |
+ * | Abgesagt          | is_cancelled=true UND cancel_reason!='excluded'       | NEIN              | NEIN (Refund/Ersatz) |
+ *
+ * WICHTIG: Bei jeder Session-Query mindestens `is_cancelled` UND `cancel_reason`
+ * mitladen, sonst kann hier nicht korrekt unterschieden werden.
+ */
+
+export type SessionLike = {
+  id?: string
+  date?: string | null
+  time_start?: string | null
+  duration_min?: number | null
+  is_cancelled?: boolean | null
+  cancel_reason?: string | null
+}
+
+/** Stunde wurde bei Kurs-Setup ausgeschlossen (Ferien etc.) — zählt nicht als Einheit. */
+export function isExcluded(s: SessionLike | null | undefined): boolean {
+  return !!s?.is_cancelled && s?.cancel_reason === 'excluded'
+}
+
+/** Stunde wurde live abgesagt (vom Admin) — Credit muss zurück oder per Ersatz neu eingebucht. */
+export function isCancelled(s: SessionLike | null | undefined): boolean {
+  return !!s?.is_cancelled && s?.cancel_reason !== 'excluded'
+}
+
+/** Stunde findet (noch) statt — entweder zukünftig oder gerade laufend. */
+export function isActive(s: SessionLike | null | undefined): boolean {
+  return s != null && s.is_cancelled !== true
+}
+
+/** Stunde hat begonnen (gilt als „Teilgenommen"). Stundenstart ist der Cutoff. */
+export function isStarted(s: SessionLike | null | undefined): boolean {
+  if (!s?.date || !s?.time_start) return false
+  return new Date(`${s.date}T${s.time_start}`) < new Date()
+}
+
+/** Stunde liegt zeitlich in der Vergangenheit (ganzer Tag-Check, ignoriert Status). */
+export function isPastDay(s: SessionLike | null | undefined): boolean {
+  if (!s?.date) return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return new Date(s.date) < today
+}
+
+/**
+ * Anzahl Sessions die als „Einheit" zählen (= aktive Sessions).
+ * Quelle der Wahrheit für Credit-Vergabe.
+ */
+export function countActiveUnits(sessions: SessionLike[] | null | undefined): number {
+  return (sessions || []).filter(isActive).length
+}
+
+/**
+ * Wie countActiveUnits, aber nur zukünftige/laufende Sessions (date >= heute).
+ * Genutzt fürs Einbuchen — vergangene Sessions kann man nicht mehr buchen.
+ */
+export function countActiveFutureUnits(sessions: SessionLike[] | null | undefined): number {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return (sessions || []).filter(s => isActive(s) && s.date && new Date(s.date) >= today).length
+}
+
+/** Status-Label für die UI. */
+export function sessionStatusLabel(s: SessionLike | null | undefined):
+  | 'Aktiv' | 'Vergangen' | 'Ausgeschlossen' | 'Abgesagt' {
+  if (isExcluded(s)) return 'Ausgeschlossen'
+  if (isCancelled(s)) return 'Abgesagt'
+  if (isStarted(s)) return 'Vergangen'
+  return 'Aktiv'
+}

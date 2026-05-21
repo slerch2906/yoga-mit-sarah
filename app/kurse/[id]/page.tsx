@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { getServerNow } from '@/lib/server-time'
 import { Email } from '@/lib/email'
 import { getCurrentUser } from '@/lib/auth'
+import { isExcluded, isCancelled } from '@/lib/session-status'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -325,13 +326,17 @@ export default function SessionDetailPage() {
           </div>
         )}
 
-        {/* ABGESAGT – keine Buchung möglich, ggf. Link zur Ersatzstunde */}
+        {/* ABGESAGT/AUSGESCHLOSSEN – keine Buchung möglich, ggf. Link zur Ersatzstunde */}
         {!past && session.is_cancelled && (
           <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-4 mb-4 text-center">
             <i className="ti ti-calendar-cancel text-2xl text-yoga-text/30 block mb-2" />
-            <p className="text-sm font-semibold text-yoga-text/50 mb-1">Diese Stunde wurde abgesagt</p>
-            <p className="text-sm text-yoga-text/40">Buchungen und Warteliste sind nicht möglich.</p>
-            {(session as any).replacement && !(session as any).replacement.is_cancelled && (
+            <p className="text-sm font-semibold text-yoga-text/50 mb-1">
+              {isExcluded(session) ? 'Diese Stunde ist ausgeschlossen' : 'Diese Stunde wurde abgesagt'}
+            </p>
+            <p className="text-sm text-yoga-text/40">
+              {isExcluded(session) ? 'Die Stunde gehört nicht zum Kurs.' : 'Buchungen und Warteliste sind nicht möglich.'}
+            </p>
+            {isCancelled(session) && (session as any).replacement && !(session as any).replacement.is_cancelled && (
               <button onClick={() => router.push(`/kurse/${(session as any).replacement.id}`)}
                 className="btn-primary mt-3 w-full">
                 <i className="ti ti-calendar-event mr-1" />

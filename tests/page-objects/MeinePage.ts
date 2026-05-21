@@ -30,11 +30,13 @@ export class MeinePage {
   }
 
   async expectNoCredits() {
-    await expect(this.page.getByText(/deine credits/i)).not.toBeVisible()
+    // Sektion "Deine freien Credits" zeigt "Keine Credits" Empty-State (siehe app/meine/page.tsx)
+    await expect(this.page.getByText(/keine credits/i)).toBeVisible()
   }
 
   async expectCreditHeading() {
-    await expect(this.page.getByText(/deine credits/i)).toBeVisible()
+    // Sektion heißt seit 2026-05-21 "Deine freien Credits" (vorher "Deine Credits")
+    await expect(this.page.getByText(/deine freien credits/i)).toBeVisible()
   }
 
   // ── Kursstunden ───────────────────────────────────────────────────────────

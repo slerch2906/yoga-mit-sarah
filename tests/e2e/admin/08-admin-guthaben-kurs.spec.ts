@@ -85,18 +85,26 @@ test.describe('Guthaben: Verrechnung bei Kursanmeldung (Admin)', () => {
 
     // Auf Hinzufügen klicken
     await page.getByRole('button', { name: /^hinzufügen$/i }).first().click()
-    await page.waitForTimeout(2_000)
+    // Confirmation-Alert wegklicken (neue Logik zeigt "X Stunden mit Guthaben verrechnet")
+    page.on('dialog', d => d.accept())
+    await page.waitForTimeout(2_500)
 
-    // Guthaben muss verschwunden sein
-    const guthabenCount = await countGuthabenCredits(yogi1Id)
-    expect(guthabenCount, 'Guthaben-Credits müssen nach Verrechnung gelöscht sein').toBe(0)
+    // Neue Logik (Commit 8f8a58c): Guthaben wird VERRECHNET (used erhöht), nicht gelöscht.
+    // Bei 3 Guthaben + 4-Stunden-Kurs: Guthaben.used=3, neuer Course-Credit für 1 Stunde.
+    const { getAdminClient: getDb } = await import('../../utils/db')
+    const db = await getDb()
+    const { data: guthabenCreds } = await db.from('credits')
+      .select('total, used').eq('user_id', yogi1Id).eq('model', 'guthaben')
+    expect(guthabenCreds, 'Guthaben-Credit muss noch existieren (nicht gelöscht)').toBeTruthy()
+    expect(guthabenCreds!.length, 'Guthaben-Eintrag bleibt erhalten').toBe(1)
+    expect(guthabenCreds![0].used, '3 Guthaben verrechnet (used=3)').toBe(3)
 
-    // Kurs-Credits müssen korrekt angelegt sein (used = total = sessionCount)
+    // Course-Credit nur noch für den ungedeckten Rest (4-3=1)
     const courseCredit = await getCourseCredit(yogi1Id, courseId)
     expect(courseCredit, 'Kurs-Credit muss angelegt sein').toBeTruthy()
     expect(courseCredit!.model).toBe('course')
-    expect(courseCredit!.total, 'total muss der Sessionanzahl entsprechen').toBe(4)
-    expect(courseCredit!.used, 'used muss gleich total sein (alle Sessions gebucht)').toBe(4)
+    expect(courseCredit!.total, 'total = nur nicht durch Guthaben gedeckte Stunden (1)').toBe(1)
+    expect(courseCredit!.used, 'used = 1 (1 Stunde mit neuem Credit gebucht)').toBe(1)
   })
 })
 

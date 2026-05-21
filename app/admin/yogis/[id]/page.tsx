@@ -236,14 +236,19 @@ export default function AdminYogiDetailPage() {
         }
       }
 
-      // Email mit Range-Info
+      // Email mit Range-Info — Range-Mode hat eigene totalUnits (rangeCount = Anzahl Range-Sessions)
       try {
         const { data: yProf } = await supabase.from('profiles').select('email, first_name').eq('id', id).single()
         if (yProf?.email && course && !yogi?.is_dummy) {
+          const firstSession = targetSessions[0]?.date
           await Email.yogiEnrolledByAdmin({
             email: yProf.email, firstName: yProf.first_name || 'Yogi',
             courseName: course.name, weekday: course.weekday, timeStart: course.time_start,
-            durationMin: course.duration_min || 75, totalUnits: rangeCount, dateStart: course.date_start,
+            durationMin: course.duration_min || 75,
+            totalUnits: course.total_units || rangeCount,  // Gesamt-Kurs
+            remainingUnits: rangeCount,                    // Yogis Anteil (Range)
+            dateStart: course.date_start,
+            firstSessionDate: firstSession,
           })
         }
       } catch(e) {}
@@ -332,6 +337,7 @@ export default function AdminYogiDetailPage() {
     try {
       const { data: yProf } = await supabase.from('profiles').select('email, first_name, is_dummy').eq('id', id).single()
       if (yProf?.email && course && !yProf.is_dummy) {
+        const firstSession = sessionList[0]?.date
         await Email.yogiEnrolledByAdmin({
           email: yProf.email,
           firstName: yProf.first_name || 'Yogi',
@@ -339,8 +345,10 @@ export default function AdminYogiDetailPage() {
           weekday: course.weekday || '',
           timeStart: course.time_start || '',
           durationMin: course.duration_min || 75,
-          totalUnits: actualCount,
+          totalUnits: course.total_units || actualCount,  // Gesamt-Kurs
+          remainingUnits: actualCount,                    // verbleibende Stunden für Yogi
           dateStart: course.date_start || undefined,
+          firstSessionDate: firstSession,
         })
       }
     } catch(e) {}

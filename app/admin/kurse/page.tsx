@@ -609,6 +609,7 @@ export default function AdminKursePage() {
     // Yogi-Email
     if (yogi.email && !yogi.is_dummy) {
       try {
+        const firstSession = sessionList[0]?.date
         await Email.yogiEnrolledByAdmin({
           email: yogi.email,
           firstName: yogi.first_name || 'Yogi',
@@ -616,8 +617,10 @@ export default function AdminKursePage() {
           weekday: course.weekday,
           timeStart: course.time_start,
           durationMin: course.duration_min || 75,
-          totalUnits: sessionCount,
+          totalUnits: course.total_units || sessionCount,  // Gesamt-Kurs (alle Einheiten)
+          remainingUnits: sessionCount,                    // verbleibende für Yogi ab heute
           dateStart: course.date_start,
+          firstSessionDate: firstSession,
         })
       } catch(e) {}
     }
@@ -754,7 +757,8 @@ export default function AdminKursePage() {
         }
       }
 
-      // Email senden
+      // Email senden — Folgekurs: total = credits (= alle Sessions), remaining = credits
+      // (Yogi steigt von Anfang an im Folgekurs ein, daher total = remaining)
       if (member.email) {
         await Email.yogiEnrolledByAdmin({
           email: member.email,
@@ -763,8 +767,10 @@ export default function AdminKursePage() {
           weekday: targetCourse.weekday,
           timeStart: targetCourse.time_start,
           durationMin: targetCourse.duration_min || 75,
-          totalUnits: credits,
+          totalUnits: targetCourse.total_units || credits,
+          remainingUnits: credits,
           dateStart: targetCourse.date_start,
+          firstSessionDate: targetCourse.date_start,
         })
       }
     }

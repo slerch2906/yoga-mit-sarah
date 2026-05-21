@@ -57,7 +57,7 @@ export const Email = {
   invitationReminder: (data: { email: string; firstName: string; inviteLink: string; courseName?: string }) =>
     sendEmail('invitation_reminder', data),
 
-  yogiEnrolledByAdmin: (data: { email: string; firstName: string; courseName: string; weekday: string; timeStart: string; durationMin: number; totalUnits?: number; dateStart?: string }) =>
+  yogiEnrolledByAdmin: (data: { email: string; firstName: string; courseName: string; weekday: string; timeStart: string; durationMin: number; totalUnits?: number; remainingUnits?: number; dateStart?: string; firstSessionDate?: string }) =>
     sendEmail('yogi_enrolled_by_admin', data),
 
   notifyPlaceFree: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; sessionId: string }) =>

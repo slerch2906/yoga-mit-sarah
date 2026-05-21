@@ -11,11 +11,11 @@ interface AppHeaderProps {
 export default function AppHeader({ title, subtitle, rightElement, isAdmin, showBack }: AppHeaderProps) {
   return (
     <div className="app-header sticky top-0 z-10">
-      <div className="w-[52px] h-[52px] flex-shrink-0 flex items-center justify-center">
+      <div className="w-[73px] h-[73px] flex-shrink-0 flex items-center justify-center">
         <img
           src="https://yogamitsarah.me/wp-content/uploads/2025/09/Logo-300x300.png"
           alt="Yoga mit Sarah Logo"
-          className="w-[52px] h-[52px] object-contain"
+          className="w-[73px] h-[73px] object-contain"
           onError={(e) => {
             (e.target as HTMLImageElement).src = '/logo.png'
           }}

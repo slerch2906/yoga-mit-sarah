@@ -82,6 +82,9 @@ export default function AdminDashboard() {
 
     setSessions((sessionData || [])
       .filter((s: any) => s.course?.is_active !== false)
+      // Excluded Stunden (Setup-Ausschlüsse beim Kurs-Anlegen) NIE in der Wochenliste
+      // anzeigen — die sind nur Platzhalter im Edit-Form, keine echten Termine.
+      .filter((s: any) => !(s.is_cancelled && s.cancel_reason === 'excluded'))
       .map((s: any) => ({
         ...s,
         active_count: s.bookings.filter((b: any) => b.status === 'active').length,

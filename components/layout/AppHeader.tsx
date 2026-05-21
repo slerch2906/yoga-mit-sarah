@@ -17,6 +17,16 @@ export default function AppHeader({ title, subtitle, rightElement, isAdmin, show
         className="absolute inset-0 bg-cover bg-center pointer-events-none"
         style={{ backgroundImage: "url('/header-bg.jpg?v=2')", opacity: 0.4 }}
       />
+      {rightElement}
+      {isAdmin && (
+        <span className="relative z-10 text-xs bg-yoga-text text-yoga-bg rounded-full px-2.5 py-1 font-bold tracking-wider flex-shrink-0">
+          ADMIN
+        </span>
+      )}
+      <div className="relative z-10 flex-1 min-w-0 text-right">
+        <h1 className="text-lg font-bold truncate">{title}</h1>
+        {subtitle && <p className="text-sm text-yoga-text/50 mt-0.5">{subtitle}</p>}
+      </div>
       <div className="relative z-10 w-[73px] h-[73px] flex-shrink-0 flex items-center justify-center">
         <img
           src="https://yogamitsarah.me/wp-content/uploads/2025/09/Logo-300x300.png"
@@ -27,16 +37,6 @@ export default function AppHeader({ title, subtitle, rightElement, isAdmin, show
           }}
         />
       </div>
-      <div className="relative z-10 flex-1 min-w-0">
-        <h1 className="text-base font-bold truncate">{title}</h1>
-        {subtitle && <p className="text-xs text-yoga-text/50 mt-0.5">{subtitle}</p>}
-      </div>
-      {isAdmin && (
-        <span className="relative z-10 text-xs bg-yoga-text text-yoga-bg rounded-full px-2.5 py-1 font-bold tracking-wider flex-shrink-0">
-          ADMIN
-        </span>
-      )}
-      {rightElement}
     </div>
   )
 }

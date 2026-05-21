@@ -74,7 +74,8 @@ export default function KursePage() {
   }, [offset, userId])
 
   async function loadSessions() {
-    setLoading(true)
+    // KEIN setLoading(true) hier — nur initial loading. Refresh-Lade (z.B. Wochenwechsel
+    // via Swipe) soll alte Liste sichtbar lassen, sonst Flackern + leerer Spinner.
     const monday = getMonday(new Date())
     const weekStart = addDays(monday, offset * 7)
     const weekEnd = addDays(weekStart, 6)

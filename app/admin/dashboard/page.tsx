@@ -52,7 +52,8 @@ export default function AdminDashboard() {
   useEffect(() => { loadData() }, [weekOffset])
 
   async function loadData() {
-    setLoading(true)
+    // KEIN setLoading(true) hier — sonst zeigt Wochenwechsel via Swipe einen leeren
+    // Spinner. Alte Daten bleiben bis neue da sind, dann sanfter Re-Render.
     const monday = getMonday(new Date())
     const weekStart = addDays(monday, weekOffset * 7)
     const weekEnd = addDays(weekStart, 6)

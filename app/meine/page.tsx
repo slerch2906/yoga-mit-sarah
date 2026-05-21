@@ -118,23 +118,45 @@ export default function MeinePage() {
     document.body.removeChild(a)
   }
 
-  // "Teilgenommen" ab Stundenstart — Logik aus lib/session-status.ts
-  const sessionFinished = isStarted
-  // Modell-bewusste Credit-Werte:
-  // - Course-Credits: attended = absolvierte Sessions, free = upcoming-active (Sarahs Erwartung).
-  // - Andere Modelle: behalte DB-Semantik (used = allokiert).
-  function computeAttended(c: any) {
+  // Modell-bewusste Credit-Werte für die Yogi-Anzeige:
+  //
+  // COURSE-CREDIT (Sarah's Mentalmodell, pro KURS aggregiert über ggf. mehrere
+  // Credits wie Guthaben+neuer Course-Credit zusammen):
+  //   total   = Anzahl Stunden, in die der Yogi insgesamt eingebucht ist im Kurs
+  //             (= aktive + abgemeldete bookings für diesen Kurs)
+  //   used    = aktive bookings (= aktuell für die Stunde angemeldet)
+  //   free    = total - used = Stunden für die sich der Yogi abgemeldet hat
+  //             (Credit ggf. refundable bzw. später wieder buchbar)
+  //
+  // GUTHABEN / TENPACK / SINGLE: behält DB-Semantik (used aus DB-Trigger).
+  function courseAggregate(courseId: string) {
+    const sess = courseSessions[courseId] || []
+    const withBooking = sess.filter((s: any) => s.myBooking)
+    const total = withBooking.length
+    const used = withBooking.filter((s: any) => s.myBooking?.status === 'active').length
+    return { total, used, free: Math.max(0, total - used) }
+  }
+  function computeUsedDisplay(c: any) {
     if (c.model !== 'course') return c.used
-    const sess = courseSessions[c.course_id] || []
-    return sess.filter((s: any) => s.myBooking?.status === 'active' && sessionFinished(s)).length
+    return courseAggregate(c.course_id).used
+  }
+  function computeTotalDisplay(c: any) {
+    if (c.model !== 'course') return c.total
+    return courseAggregate(c.course_id).total
   }
   function computeFreeMeine(c: any) {
     if (c.model !== 'course') return Math.max(0, c.total - c.used)
-    const sess = courseSessions[c.course_id] || []
-    return sess.filter((s: any) => s.myBooking?.status === 'active' && !sessionFinished(s)).length
+    return courseAggregate(c.course_id).free
   }
-  const totalFreeCredits = credits.reduce((sum, c) => sum + computeFreeMeine(c), 0)
-  const firstExpiry = [...credits].sort((a, b) => new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime())[0]
+  // Anzeige-Filter: Guthaben/Tenpack/Single mit 0 freien Credits ausblenden
+  // (sind komplett aufgebraucht und liefern dem Yogi keine Info mehr).
+  // Course-Credits IMMER zeigen (zeigen Kursfortschritt + Verfallsdatum).
+  const visibleCredits = credits.filter((c: any) => {
+    if (c.model === 'course') return true
+    return Math.max(0, c.total - c.used) > 0
+  })
+  const totalFreeCredits = visibleCredits.reduce((sum, c) => sum + computeFreeMeine(c), 0)
+  const firstExpiry = [...visibleCredits].sort((a, b) => new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime())[0]
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" /></div>
 
@@ -142,13 +164,14 @@ export default function MeinePage() {
     <div className="max-w-md mx-auto min-h-screen">
       <AppHeader title="Meine" isAdmin={profile?.is_admin} />
       <div className="px-4 py-4">
-        {/* Credits Detail-Anzeige – immer sichtbar */}
-        {credits.length > 0 ? (
+        {/* Credits Detail-Anzeige – "Freie Credits" = Credits aus Abmeldungen */}
+        {visibleCredits.length > 0 ? (
           <div className="mb-4">
-            <p className="section-label">Deine Credits</p>
-            {credits.map(c => {
+            <p className="section-label">Deine freien Credits</p>
+            {visibleCredits.map(c => {
               const free = computeFreeMeine(c)
-              const attended = computeAttended(c)
+              const used = computeUsedDisplay(c)
+              const totalDisplay = computeTotalDisplay(c)
               return (
                 <div key={c.id} className="card mb-2">
                   <div className="flex items-center justify-between">
@@ -162,25 +185,23 @@ export default function MeinePage() {
                             : `Einzelstunden-${c.total === 1 ? 'Credit' : 'Credits'}`}
                         </span>
                       </div>
-                      {c.model === 'guthaben' && free > 0 && (
+                      {c.model === 'guthaben' && (
                         <>
                           <div className="text-xs text-yoga-amber-text mt-1">Guthaben aus abgesagtem Kurs</div>
                           <div className="text-xs text-yoga-text/50 mt-0.5">Nicht für Einzelstunden, nur verrechenbar mit neuem Kurs</div>
                         </>
                       )}
-                      {free === 0
-                        ? <div className="text-xs text-yoga-text/40 mt-1">Alle Credits verbraucht</div>
-                        : c.model !== 'guthaben'
-                          ? <div className="text-xs text-yoga-text/40 mt-1">Verfallen am {new Date(c.expires_at).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })}</div>
-                          : <div className="text-xs text-yoga-text/40 mt-1">Gültig bis {new Date(c.expires_at).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })}</div>
+                      {c.model === 'guthaben'
+                        ? <div className="text-xs text-yoga-text/40 mt-1">Gültig bis {new Date(c.expires_at).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })}</div>
+                        : <div className="text-xs text-yoga-text/40 mt-1">Verfallen am {new Date(c.expires_at).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })}</div>
                       }
                     </div>
                     {c.model !== 'guthaben' && (
                       <div className="text-right">
-                        <div className="text-xs text-yoga-text/40">{attended} / {c.total} genutzt</div>
+                        <div className="text-xs text-yoga-text/40">{used} / {totalDisplay} genutzt</div>
                         <div className="h-1.5 w-16 bg-yoga-border rounded-full mt-1">
                           <div className="h-full bg-yoga-text/40 rounded-full"
-                            style={{ width: `${(attended/Math.max(1,c.total))*100}%` }} />
+                            style={{ width: `${(used/Math.max(1,totalDisplay))*100}%` }} />
                         </div>
                       </div>
                     )}
@@ -191,7 +212,7 @@ export default function MeinePage() {
           </div>
         ) : (
           <div className="mb-4">
-            <p className="section-label">Deine Credits</p>
+            <p className="section-label">Deine freien Credits</p>
             <div className="card text-center py-4">
               <p className="text-sm text-yoga-text/50">Keine Credits</p>
             </div>
@@ -204,7 +225,7 @@ export default function MeinePage() {
         {enrollments.map(enrol => {
           const sessions = courseSessions[enrol.course_id] || []
           // Absolviert erst wenn Session zeitlich vorbei ist (date+time+duration), nicht nur date
-          const done = sessions.filter(s => sessionFinished(s) && s.myBooking?.status === 'active').length
+          const done = sessions.filter(s => isStarted(s) && s.myBooking?.status === 'active').length
           return (
             <div key={enrol.id} className="mb-6">
               <div className="card mb-2">

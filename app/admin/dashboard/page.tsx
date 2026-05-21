@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Email } from '@/lib/email'
+import { useSwipe } from '@/lib/useSwipe'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -334,8 +335,14 @@ export default function AdminDashboard() {
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" /></div>
 
+  // Swipe-Navigation für Wochenansicht: links→nächste, rechts→vorherige
+  const swipeHandlers = useSwipe({
+    onSwipeLeft: () => setWeekOffset(o => o + 1),
+    onSwipeRight: () => setWeekOffset(o => o - 1),
+  })
+
   return (
-    <div className="max-w-md mx-auto min-h-screen">
+    <div className="max-w-md mx-auto min-h-screen" {...swipeHandlers}>
       <AppHeader title="Admin Dashboard" isAdmin />
       <div className="px-4 py-4">
 

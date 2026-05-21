@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/auth'
+import { useSwipe } from '@/lib/useSwipe'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -119,17 +120,28 @@ export default function KursePage() {
     return <span className="badge badge-free">{free} Plätze frei</span>
   }
 
+  const goWeek = (delta: number) => {
+    const n = offset + delta
+    sessionStorage.setItem('kurse_week_offset', String(n))
+    setOffset(n)
+  }
+  // Swipe: links→nächste Woche, rechts→vorherige Woche
+  const swipeHandlers = useSwipe({
+    onSwipeLeft: () => goWeek(+1),
+    onSwipeRight: () => goWeek(-1),
+  })
+
   return (
-    <div className="max-w-md mx-auto min-h-screen">
+    <div className="max-w-md mx-auto min-h-screen" {...swipeHandlers}>
       <AppHeader title="Yoga mit Sarah" isAdmin={profile?.is_admin} />
 
       <div className="flex items-center justify-between px-4 pt-3 pb-1">
-        <button onClick={() => { const n = offset - 1; sessionStorage.setItem('kurse_week_offset', String(n)); setOffset(n); }}
+        <button onClick={() => goWeek(-1)}
           className="flex items-center gap-1 text-sm font-semibold px-3 py-2 border-2 border-yoga-text/30 rounded-full text-yoga-text">
           <i className="ti ti-chevron-left" /> Vorherige
         </button>
         <span className="text-sm font-bold">{weekLabel}</span>
-        <button onClick={() => { const n = offset + 1; sessionStorage.setItem('kurse_week_offset', String(n)); setOffset(n); }}
+        <button onClick={() => goWeek(+1)}
           className="flex items-center gap-1 text-sm font-semibold px-3 py-2 border-2 border-yoga-text/30 rounded-full text-yoga-text">
           Nächste <i className="ti ti-chevron-right" />
         </button>

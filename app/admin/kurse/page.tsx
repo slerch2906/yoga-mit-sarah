@@ -108,17 +108,15 @@ export default function AdminKursePage() {
   }, [form.weekday, form.date_start, form.date_end, excludedDates, form.is_single, editCourse])
 
   async function loadData() {
-    // bookings pro Session mitladen, um Überbuchung erkennen zu können (Drop-ins).
     const { data } = await supabase.from('courses')
-      .select('*, sessions(date, is_cancelled, cancel_reason, bookings!bookings_session_id_fkey(id, status)), enrollments(id)')
+      .select('*, sessions(date, is_cancelled, cancel_reason), enrollments(id)')
       .order('date_start', { ascending: true })
     const withParticipants = (data || []).map((c: any) => {
+      // Counter zeigt NUR Kurs-Teilnehmer (enrollments). Drop-Ins (Einzelstunden-
+      // Buchungen in einzelne Sessions des Kurses) zählen hier explizit NICHT mit —
+      // die sind Stunden-Gäste, keine Kurs-Teilnehmer. Sarah-Klarstellung 21.5.
       const enrolledCount = (c.enrollments || []).length
-      // Überbuchung: irgendeine aktive Session hat mehr aktive Bookings als max_spots?
-      const maxSpots = c.max_spots ?? Infinity
-      const isOverbooked = (c.sessions || [])
-        .filter((s: any) => !s.is_cancelled)
-        .some((s: any) => ((s.bookings || []).filter((b: any) => b.status === 'active').length) > maxSpots)
+      const isOverbooked = c.max_spots != null && enrolledCount > c.max_spots
       return { ...c, participant_count: enrolledCount, is_overbooked: isOverbooked }
     })
     setCourses(withParticipants)

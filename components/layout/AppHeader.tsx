@@ -15,7 +15,7 @@ export default function AppHeader({ title, subtitle, rightElement, isAdmin, show
       <div
         aria-hidden="true"
         className="absolute inset-0 bg-cover bg-center pointer-events-none"
-        style={{ backgroundImage: "url('/header-bg.jpg')", opacity: 0.5 }}
+        style={{ backgroundImage: "url('/header-bg.jpg?v=2')", opacity: 0.4 }}
       />
       <div className="relative z-10 w-[73px] h-[73px] flex-shrink-0 flex items-center justify-center">
         <img

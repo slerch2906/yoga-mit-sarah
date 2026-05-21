@@ -113,7 +113,27 @@ export default function MeinePage() {
     document.body.removeChild(a)
   }
 
-  const totalFreeCredits = credits.reduce((sum, c) => sum + Math.max(0, c.total - c.used), 0)
+  // Hilfsfunktion: Session ist abgelaufen (date+time+duration < now)
+  function sessionFinished(session: any) {
+    if (!session?.date || !session?.time_start) return false
+    const end = new Date(`${session.date}T${session.time_start}`)
+    end.setMinutes(end.getMinutes() + (session.duration_min || 75))
+    return end < new Date()
+  }
+  // Modell-bewusste Credit-Werte:
+  // - Course-Credits: attended = absolvierte Sessions, free = upcoming-active (Sarahs Erwartung).
+  // - Andere Modelle: behalte DB-Semantik (used = allokiert).
+  function computeAttended(c: any) {
+    if (c.model !== 'course') return c.used
+    const sess = courseSessions[c.course_id] || []
+    return sess.filter((s: any) => s.myBooking?.status === 'active' && sessionFinished(s)).length
+  }
+  function computeFreeMeine(c: any) {
+    if (c.model !== 'course') return Math.max(0, c.total - c.used)
+    const sess = courseSessions[c.course_id] || []
+    return sess.filter((s: any) => s.myBooking?.status === 'active' && !sessionFinished(s)).length
+  }
+  const totalFreeCredits = credits.reduce((sum, c) => sum + computeFreeMeine(c), 0)
   const firstExpiry = [...credits].sort((a, b) => new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime())[0]
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" /></div>
@@ -127,7 +147,8 @@ export default function MeinePage() {
           <div className="mb-4">
             <p className="section-label">Deine Credits</p>
             {credits.map(c => {
-              const free = Math.max(0, c.total - c.used)
+              const free = computeFreeMeine(c)
+              const attended = computeAttended(c)
               return (
                 <div key={c.id} className="card mb-2">
                   <div className="flex items-center justify-between">
@@ -155,10 +176,10 @@ export default function MeinePage() {
                       }
                     </div>
                     <div className="text-right">
-                      <div className="text-xs text-yoga-text/40">{c.used} / {c.total} genutzt</div>
+                      <div className="text-xs text-yoga-text/40">{attended} / {c.total} genutzt</div>
                       <div className="h-1.5 w-16 bg-yoga-border rounded-full mt-1">
                         <div className="h-full bg-yoga-text/40 rounded-full"
-                          style={{ width: `${(c.used/c.total)*100}%` }} />
+                          style={{ width: `${(attended/Math.max(1,c.total))*100}%` }} />
                       </div>
                     </div>
                   </div>
@@ -180,7 +201,8 @@ export default function MeinePage() {
         )}
         {enrollments.map(enrol => {
           const sessions = courseSessions[enrol.course_id] || []
-          const done = sessions.filter(s => new Date(s.date) < new Date() && s.myBooking?.status === 'active').length
+          // Absolviert erst wenn Session zeitlich vorbei ist (date+time+duration), nicht nur date
+          const done = sessions.filter(s => sessionFinished(s) && s.myBooking?.status === 'active').length
           return (
             <div key={enrol.id} className="mb-6">
               <div className="card mb-2">

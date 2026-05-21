@@ -20,9 +20,10 @@ export default function AdminYogiDetailPage() {
   const [selectedCourseId, setSelectedCourseId] = useState('')
   const [enrolling, setEnrolling] = useState(false)
   // Ausnahme-Range (Standard: NICHT aktiv → ganzer Kurs)
+  // String-State erlaubt leeren Inhalt während Bearbeitung (kein Auto-Fallback auf 1)
   const [enrollRangeMode, setEnrollRangeMode] = useState(false)
-  const [enrollFromUnit, setEnrollFromUnit] = useState(1)
-  const [enrollUntilUnit, setEnrollUntilUnit] = useState(1)
+  const [enrollFromUnit, setEnrollFromUnit] = useState('1')
+  const [enrollUntilUnit, setEnrollUntilUnit] = useState('1')
   const [selectedCourseUnits, setSelectedCourseUnits] = useState(0)
   const [editingCredit, setEditingCredit] = useState<any>(null)
   const [editCreditAmount, setEditCreditAmount] = useState(0)
@@ -40,8 +41,8 @@ export default function AdminYogiDetailPage() {
     const course = courses.find(c => c.id === selectedCourseId)
     const remaining = course ? getRemainingUnits(course) : 0
     setSelectedCourseUnits(remaining)
-    setEnrollFromUnit(1)
-    setEnrollUntilUnit(remaining)
+    setEnrollFromUnit('1')
+    setEnrollUntilUnit(String(remaining))
     setEnrollRangeMode(false) // Reset auf Standard
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCourseId])
@@ -50,7 +51,7 @@ export default function AdminYogiDetailPage() {
     const [{ data: y }, { data: b }, { data: c }, { data: e }, { data: courseList }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', id).single(),
       supabase.from('bookings')
-        .select('*, session:sessions(date, time_start, course:courses(name))')
+        .select('*, session:sessions(date, time_start, duration_min, course:courses(name))')
         .eq('user_id', id).order('created_at', { ascending: false }).limit(20),
       supabase.from('credits').select('*, course:courses(name)').eq('user_id', id).order('created_at', { ascending: false }),
       supabase.from('enrollments').select('*, course:courses(*)').eq('user_id', id),
@@ -61,8 +62,21 @@ export default function AdminYogiDetailPage() {
     setLoading(false)
   }
 
+  // Modell-bewusste "freie Credits"-Anzeige:
+  // - Course-Credits: free = noch nicht absolvierte aktive Buchungen (upcoming).
+  //   Hintergrund: bei Auto-Enrollment werden alle Sessions sofort gebucht, used=total.
+  //   Sarahs Erwartung: free = "noch verfügbare Stunden", nicht "nicht-allokierte Credits".
+  // - Tenpack/Single/Guthaben: free = total - used (allokierte Credits, DB-Semantik).
+  function computeFree(c: any) {
+    if (c.model === 'course') {
+      return bookings.filter(b =>
+        b.credit_id === c.id && b.status === 'active' && !sessionEnded(b.session)
+      ).length
+    }
+    return Math.max(0, c.total - c.used)
+  }
   const freeCredits = credits.reduce((sum, c) => {
-    if (new Date(c.expires_at) > new Date()) return sum + Math.max(0, c.total - c.used)
+    if (new Date(c.expires_at) > new Date()) return sum + computeFree(c)
     return sum
   }, 0)
 
@@ -150,16 +164,18 @@ export default function AdminYogiDetailPage() {
     const remaining = getRemainingUnits(course)
     const expiry = getExpiryDate(course)
 
-    // Range-Mode validieren
+    // Range-Mode validieren (String-State → Number parsen)
     let fromUnit = 1
     let untilUnit: number | null = null
     if (enrollRangeMode) {
-      if (enrollFromUnit < 1 || enrollUntilUnit < enrollFromUnit || enrollUntilUnit > remaining) {
+      const fromN = parseInt(enrollFromUnit)
+      const untilN = parseInt(enrollUntilUnit)
+      if (!Number.isFinite(fromN) || !Number.isFinite(untilN) || fromN < 1 || untilN < fromN || untilN > remaining) {
         alert(`Ungültiger Bereich. Möglich: 1 bis ${remaining}.`)
         setEnrolling(false); return
       }
-      fromUnit = enrollFromUnit
-      untilUnit = enrollUntilUnit
+      fromUnit = fromN
+      untilUnit = untilN
     }
 
     // Prüfen ob Kurs bereits voll
@@ -448,9 +464,17 @@ export default function AdminYogiDetailPage() {
     loadData()
   }
 
+  // Eine Session gilt erst als absolviert, wenn date+time+duration < now (nicht nur date)
+  function sessionEnded(session: any) {
+    if (!session?.date || !session?.time_start) return false
+    const end = new Date(`${session.date}T${session.time_start}`)
+    end.setMinutes(end.getMinutes() + (session.duration_min || 75))
+    return end < new Date()
+  }
+
   function getStatusBadge(b: any) {
     if (b.status === 'cancelled') return <span className="badge badge-left">Ausgetragen</span>
-    if (new Date(b.session?.date) < new Date()) return <span className="badge badge-done">Teilgenommen </span>
+    if (sessionEnded(b.session)) return <span className="badge badge-done">Teilgenommen </span>
     return <span className="badge badge-enrolled">Angemeldet</span>
   }
 
@@ -505,7 +529,7 @@ export default function AdminYogiDetailPage() {
           </div>
           <div className="card text-center">
             <div className="text-2xl font-bold">
-              {bookings.filter(b => b.status === 'active' && new Date(b.session?.date) < new Date()).length}
+              {bookings.filter(b => b.status === 'active' && sessionEnded(b.session)).length}
             </div>
             <div className="text-xs text-yoga-text/50">Absolvierte Stunden</div>
           </div>
@@ -569,18 +593,22 @@ export default function AdminYogiDetailPage() {
                       <input
                         type="number" min={1} max={selectedCourseUnits}
                         value={enrollFromUnit}
-                        onChange={e => setEnrollFromUnit(parseInt(e.target.value) || 1)}
+                        onChange={e => setEnrollFromUnit(e.target.value)}
                         className="field-input w-16 py-1 text-center" />
                       <label className="text-xs text-yoga-text/70">bis</label>
                       <input
-                        type="number" min={enrollFromUnit} max={selectedCourseUnits}
+                        type="number" min={1} max={selectedCourseUnits}
                         value={enrollUntilUnit}
-                        onChange={e => setEnrollUntilUnit(parseInt(e.target.value) || enrollFromUnit)}
+                        onChange={e => setEnrollUntilUnit(e.target.value)}
                         className="field-input w-16 py-1 text-center" />
                       <span className="text-xs text-yoga-text/60">von {selectedCourseUnits}</span>
                     </div>
                     <p className="text-xs text-yoga-text/50 mt-2">
-                      {Math.max(0, enrollUntilUnit - enrollFromUnit + 1)} Credits werden vergeben
+                      {(() => {
+                        const f = parseInt(enrollFromUnit), u = parseInt(enrollUntilUnit)
+                        if (!Number.isFinite(f) || !Number.isFinite(u)) return 0
+                        return Math.max(0, u - f + 1)
+                      })()} Credits werden vergeben
                     </p>
                   </div>
                 )}
@@ -637,7 +665,7 @@ export default function AdminYogiDetailPage() {
           <>
             <p className="section-label mt-2">Credits verwalten</p>
             {credits.map(c => {
-              const free = Math.max(0, c.total - c.used)
+              const free = computeFree(c)
               const isExpired = new Date(c.expires_at) < new Date()
               return (
                 <div key={c.id} className={`card mb-2 ${isExpired ? 'opacity-50' : ''}`}>

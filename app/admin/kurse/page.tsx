@@ -108,21 +108,18 @@ export default function AdminKursePage() {
   }, [form.weekday, form.date_start, form.date_end, excludedDates, form.is_single, editCourse])
 
   async function loadData() {
-    // bookings pro Session mitladen für Teilnehmer-Counter (zeigt auch Drop-ins/Überbuchung).
-    // sessions.bookings = nur active Buchungen → max über alle aktiven Sessions = tatsächliche Belegung.
+    // bookings pro Session mitladen, um Überbuchung erkennen zu können (Drop-ins).
     const { data } = await supabase.from('courses')
       .select('*, sessions(date, is_cancelled, cancel_reason, bookings!bookings_session_id_fkey(id, status)), enrollments(id)')
       .order('date_start', { ascending: true })
-    // Pro Kurs: maximale aktive Belegung über alle nicht-ausgeschlossenen Sessions berechnen
     const withParticipants = (data || []).map((c: any) => {
-      const activeSessions = (c.sessions || []).filter((s: any) => !s.is_cancelled)
-      const maxActive = activeSessions.reduce((max: number, s: any) => {
-        const activeCount = (s.bookings || []).filter((b: any) => b.status === 'active').length
-        return Math.max(max, activeCount)
-      }, 0)
-      // Fallback auf enrollments wenn keine Sessions/Bookings (z.B. neu angelegter Kurs)
-      const participantCount = Math.max(maxActive, (c.enrollments || []).length)
-      return { ...c, participant_count: participantCount }
+      const enrolledCount = (c.enrollments || []).length
+      // Überbuchung: irgendeine aktive Session hat mehr aktive Bookings als max_spots?
+      const maxSpots = c.max_spots ?? Infinity
+      const isOverbooked = (c.sessions || [])
+        .filter((s: any) => !s.is_cancelled)
+        .some((s: any) => ((s.bookings || []).filter((b: any) => b.status === 'active').length) > maxSpots)
+      return { ...c, participant_count: enrolledCount, is_overbooked: isOverbooked }
     })
     setCourses(withParticipants)
     setLoading(false)
@@ -484,7 +481,14 @@ export default function AdminKursePage() {
     await supabase.from('enrollments').delete().eq('course_id', courseId)
     await supabase.from('credits').delete().eq('course_id', courseId)
     await supabase.from('invitations').delete().eq('course_id', courseId)
-    await supabase.from('courses').delete().eq('id', courseId)
+    // course_cancellation_responses (Yogi-Wahl-Tokens nach Kursabbruch) auch löschen,
+    // sonst blockiert FK constraint den courses.delete bei archivierten Kursen
+    await supabase.from('course_cancellation_responses').delete().eq('course_id', courseId)
+    const { error: deleteError } = await supabase.from('courses').delete().eq('id', courseId)
+    if (deleteError) {
+      alert('Fehler beim Löschen: ' + deleteError.message)
+      return
+    }
     loadData()
   }
 
@@ -832,22 +836,14 @@ export default function AdminKursePage() {
                       {new Date(c.date_start).toLocaleDateString('de-DE')} – {new Date(c.date_end).toLocaleDateString('de-DE')}
                     </div>
                     <div className="text-sm text-yoga-text/60 mt-0.5">
-                      {(() => {
-                        const count = c.participant_count ?? (c.enrollments || []).length
-                        const isOverbooked = c.max_spots && count > c.max_spots
-                        return (
-                          <>
-                            Teilnehmer:{' '}
-                            <strong className={isOverbooked ? 'text-yoga-red-text' : ''}>
-                              {count}
-                            </strong>
-                            {c.max_spots ? `/${c.max_spots}` : ''}
-                            {isOverbooked && (
-                              <span className="ml-1 text-xs font-semibold text-yoga-red-text">· überbucht</span>
-                            )}
-                          </>
-                        )
-                      })()}
+                      Teilnehmer:{' '}
+                      <strong className={c.is_overbooked ? 'text-yoga-red-text' : ''}>
+                        {c.participant_count ?? (c.enrollments || []).length}
+                      </strong>
+                      {c.max_spots ? `/${c.max_spots}` : ''}
+                      {c.is_overbooked && (
+                        <span className="ml-1 text-xs font-semibold text-yoga-red-text">· überbucht</span>
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
@@ -856,11 +852,7 @@ export default function AdminKursePage() {
                         Beendet
                       </span>
                     )}
-                    {getCourseStatus(c) === 'läuft' && !c.is_single && (
-                      <span className="badge" style={{background:'var(--yoga-green-bg)', color:'var(--yoga-green-text)'}}>
-                        Läuft
-                      </span>
-                    )}
+                    {/* "Läuft"-Badge entfernt (redundant zu grünem Status-Button) */}
                     <span className={`badge ${c.is_single ? 'badge-wait' : 'badge-free'}`}>
                       {c.is_single ? 'Einzelstunde' : 'Kurs'}
                     </span>

@@ -407,7 +407,7 @@ export default function ProfilPage() {
               <div className="text-sm font-semibold">Bestätigungen meiner Buchungen</div>
               <div className="text-xs text-yoga-text/50 mt-0.5">Email bei eigener Buchung oder Abmeldung</div>
             </div>
-            <input type="checkbox" className="w-5 h-5 cursor-pointer flex-shrink-0"
+            <input type="checkbox" className="w-5 h-5 cursor-pointer flex-shrink-0" style={{ accentColor: '#3d3a39' }}
               checked={profile?.notify_booking_confirmations !== false}
               onChange={async e => {
                 const v = e.target.checked
@@ -422,7 +422,7 @@ export default function ProfilPage() {
               <div className="text-sm font-semibold">Wartelisten-Bestätigung</div>
               <div className="text-xs text-yoga-text/50 mt-0.5">Email beim Eintragen auf eine Warteliste</div>
             </div>
-            <input type="checkbox" className="w-5 h-5 cursor-pointer flex-shrink-0"
+            <input type="checkbox" className="w-5 h-5 cursor-pointer flex-shrink-0" style={{ accentColor: '#3d3a39' }}
               checked={profile?.notify_waitlist_joined !== false}
               onChange={async e => {
                 const v = e.target.checked

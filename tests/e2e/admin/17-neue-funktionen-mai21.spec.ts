@@ -177,6 +177,28 @@ test.describe('[E2E] Neu: Guthaben-Card Styling', () => {
   })
 })
 
+// ── 10) WIEDERKEHRENDER BUG: Edit-Modus setzt cancel_reason='excluded' ──────
+test.describe('[E2E] admin/kurse Edit-Modus speichert excluded Sessions korrekt', () => {
+  test.fixme('Kurs anlegen, dann bearbeiten + neues exclude-Date hinzufügen → cancel_reason="excluded" gesetzt', async () => {
+    // 1) Neuer Kurs angelegt
+    // 2) Edit → eine Stunde excluded
+    // 3) DB-Check: sessions.is_cancelled=true UND cancel_reason='excluded' (NICHT NULL)
+    // Vorher-Bug: Z.252-258 setzte nur is_cancelled, cancel_reason blieb NULL
+    //             → /meine zeigte Session als "Abgesagt" statt sie auszublenden
+  })
+
+  test.fixme('Yogi-Übersicht /meine: excluded Sessions tauchen NIE auf', async () => {
+    // Setup: Yogi in Kurs mit 1 excluded session
+    // Erwartung: visibleSessions-Filter (isExcluded) blendet sie aus
+    // KEIN "Abgesagt"-Badge für die ausgeschlossene Stunde
+  })
+
+  test.fixme('Excluded Session: 0 bookings, kein Yogi je drauf', async () => {
+    // Verhindert dass excluded sessions als "Abgesagt" angelegt werden
+    // mit ausstehenden Bookings die später Probleme machen
+  })
+})
+
 // ── 9) Überbuchung sichtbar in admin/kurse Teilnehmer-Counter ──────────────
 test.describe('[E2E] Neu: admin/kurse Teilnehmer-Counter zeigt Überbuchung', () => {
   test.fixme('Kurs max_spots=1, 2 Yogis eingebucht → Anzeige "2/1 · überbucht" (rot)', async () => {

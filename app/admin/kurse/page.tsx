@@ -255,6 +255,9 @@ export default function AdminKursePage() {
               time_start: form.time_start + ':00',
               duration_min: form.duration_min,
               is_cancelled: excludedDates.includes(date),
+              // WICHTIG: cancel_reason='excluded' muss zwingend gesetzt sein, damit /meine + UI
+              // zwischen "Ausgeschlossen" (nicht anzeigen) und "Abgesagt" (rot anzeigen) unterscheidet.
+              cancel_reason: excludedDates.includes(date) ? 'excluded' : null,
             }))
           )
         }

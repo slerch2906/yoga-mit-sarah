@@ -571,7 +571,7 @@ export default function AdminKursePage() {
       }
     }
 
-    // Admin-Info wenn Guthaben verrechnet
+    // Admin-Info wenn Guthaben verrechnet (Buchhaltungs-Info)
     if (guthabenUsable > 0) {
       try {
         await Email.adminGuthabenVerrechnet({
@@ -579,6 +579,9 @@ export default function AdminKursePage() {
           yogiEmail: yogi.email || '',
           courseName: course.name,
           guthabenAmount: guthabenUsable,
+          courseTotal: sessionCount,
+          newCreditsCount: newCreditsNeeded,
+          guthabenRemaining: totalGuthaben - guthabenUsable,
         })
       } catch(e) {}
     }

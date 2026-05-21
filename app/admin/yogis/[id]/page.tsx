@@ -345,14 +345,17 @@ export default function AdminYogiDetailPage() {
       }
     } catch(e) {}
 
-    // Email an Admin wenn Guthaben verrechnet wurde
+    // Email an Admin wenn Guthaben verrechnet wurde (Buchhaltungs-Info)
     if (guthabenUsable > 0) {
       try {
         await Email.adminGuthabenVerrechnet({
           yogiName: `${yogi?.first_name || ''} ${yogi?.last_name || ''}`.trim(),
           yogiEmail: yogi?.email || '',
           courseName: course?.name || '',
-          guthabenAmount: guthabenUsable,
+          guthabenAmount: guthabenUsable,          // verrechnet
+          courseTotal: actualCount,                // Gesamt-Credits des Kurses
+          newCreditsCount: newCreditsNeeded,       // muss Yogi neu zahlen
+          guthabenRemaining: totalGuthaben - guthabenUsable, // Rest-Guthaben
         })
       } catch(e) {}
     }

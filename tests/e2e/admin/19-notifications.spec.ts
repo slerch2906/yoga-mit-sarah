@@ -208,3 +208,27 @@ test.describe('[E2E] Notifications: kompletter Reminder-Workflow', () => {
     // 3. Cron läuft im Fenster → find_pending leer
   })
 })
+
+// ── 9) adminGuthabenVerrechnet Email enthält Buchhaltungs-Info ──────────────
+test.describe('[E2E] adminGuthabenVerrechnet Email — Buchhaltungs-Info', () => {
+  test.fixme('Subject enthält "X/Y Credits"-Pattern', async () => {
+    // "Guthaben verrechnet: <Name> (7/12 Credits)" — sofort im Posteingang erkennbar
+  })
+
+  test.fixme('Body zeigt Kurs-Total, verrechnet, neu zu zahlen, verbleibendes Guthaben', async () => {
+    // Setup: 7 Guthaben, neuer Kurs mit 12 Stunden
+    // Body enthält:
+    //   - "Kurs insgesamt: 12 Credits"
+    //   - "Aus Guthaben verrechnet: 7 Credits"
+    //   - "Yogi muss neu bezahlen: 5 Credits"
+    //   - "Verbleibendes Guthaben: 0 Credits" / "vollständig aufgebraucht"
+  })
+
+  test.fixme('Edge-Case Guthaben > Kurs (7 Guthaben, 6 Stunden)', async () => {
+    // verrechnet:6 (nicht 7), neu:0, remaining:1 ("für nächsten Kurs")
+  })
+
+  test.fixme('Edge-Case Guthaben = exakt Kurs-Total', async () => {
+    // 7 Guthaben + 7-Stunden-Kurs → verrechnet:7, neu:0, remaining:0 → "aufgebraucht"
+  })
+})

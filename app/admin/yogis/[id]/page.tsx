@@ -70,8 +70,11 @@ export default function AdminYogiDetailPage() {
   // - Tenpack/Single/Guthaben: free = total - used (allokierte Credits, DB-Semantik).
   function computeFree(c: any) {
     if (c.model === 'course') {
+      // WICHTIG: isStarted direkt aus lib verwenden, NICHT sessionEnded-Alias —
+      // sonst TDZ-ReferenceError (const wird weiter unten in der Komponente
+      // initialisiert, computeFree läuft aber sofort beim ersten Render).
       return bookings.filter(b =>
-        b.credit_id === c.id && b.status === 'active' && !sessionEnded(b.session)
+        b.credit_id === c.id && b.status === 'active' && !isStarted(b.session)
       ).length
     }
     return Math.max(0, c.total - c.used)
@@ -459,11 +462,9 @@ export default function AdminYogiDetailPage() {
   }
 
   // "Teilgenommen" ab Stundenstart — Logik aus lib/session-status.ts
-  const sessionEnded = isStarted
-
   function getStatusBadge(b: any) {
     if (b.status === 'cancelled') return <span className="badge badge-left">Ausgetragen</span>
-    if (sessionEnded(b.session)) return <span className="badge badge-done">Teilgenommen </span>
+    if (isStarted(b.session)) return <span className="badge badge-done">Teilgenommen </span>
     return <span className="badge badge-enrolled">Angemeldet</span>
   }
 
@@ -518,7 +519,7 @@ export default function AdminYogiDetailPage() {
           </div>
           <div className="card text-center">
             <div className="text-2xl font-bold">
-              {bookings.filter(b => b.status === 'active' && sessionEnded(b.session)).length}
+              {bookings.filter(b => b.status === 'active' && isStarted(b.session)).length}
             </div>
             <div className="text-xs text-yoga-text/50">Absolvierte Stunden</div>
           </div>

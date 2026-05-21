@@ -398,6 +398,63 @@ export default function ProfilPage() {
           )}
         </div>
 
+        {/* Benachrichtigungen */}
+        <p className="section-label">Benachrichtigungen</p>
+        <div className="card mb-2 p-0 overflow-hidden">
+          {/* Bestätigungen meiner Buchungen */}
+          <label className="flex items-center justify-between px-4 py-3 border-b border-yoga-border cursor-pointer">
+            <div className="flex-1 pr-3">
+              <div className="text-sm font-semibold">Bestätigungen meiner Buchungen</div>
+              <div className="text-xs text-yoga-text/50 mt-0.5">Email bei eigener Buchung oder Abmeldung</div>
+            </div>
+            <input type="checkbox" className="w-5 h-5 cursor-pointer flex-shrink-0"
+              checked={profile?.notify_booking_confirmations !== false}
+              onChange={async e => {
+                const v = e.target.checked
+                setProfile((p: any) => ({ ...p, notify_booking_confirmations: v }))
+                await supabase.from('profiles').update({ notify_booking_confirmations: v }).eq('id', profile.id)
+              }} />
+          </label>
+
+          {/* Wartelisten-Bestätigung */}
+          <label className="flex items-center justify-between px-4 py-3 cursor-pointer">
+            <div className="flex-1 pr-3">
+              <div className="text-sm font-semibold">Wartelisten-Bestätigung</div>
+              <div className="text-xs text-yoga-text/50 mt-0.5">Email beim Eintragen auf eine Warteliste</div>
+            </div>
+            <input type="checkbox" className="w-5 h-5 cursor-pointer flex-shrink-0"
+              checked={profile?.notify_waitlist_joined !== false}
+              onChange={async e => {
+                const v = e.target.checked
+                setProfile((p: any) => ({ ...p, notify_waitlist_joined: v }))
+                await supabase.from('profiles').update({ notify_waitlist_joined: v }).eq('id', profile.id)
+              }} />
+          </label>
+        </div>
+
+        {/* Stunden-Erinnerung */}
+        <div className="card mb-2">
+          <div className="text-sm font-semibold mb-1">Erinnerung vor Yogastunden</div>
+          <div className="text-xs text-yoga-text/50 mb-3">Email-Erinnerung an deine angemeldeten Stunden</div>
+          <select className="field-input"
+            value={profile?.notify_session_reminder_hours ?? ''}
+            onChange={async e => {
+              const v = e.target.value === '' ? null : parseInt(e.target.value)
+              setProfile((p: any) => ({ ...p, notify_session_reminder_hours: v }))
+              await supabase.from('profiles').update({ notify_session_reminder_hours: v }).eq('id', profile.id)
+            }}>
+            <option value="">Aus</option>
+            <option value="4">4 Stunden vorher</option>
+            <option value="12">12 Stunden vorher</option>
+            <option value="24">24 Stunden vorher</option>
+          </select>
+        </div>
+
+        <div className="bg-yoga-gray rounded-yoga p-3 mb-4 text-xs text-yoga-text/60 leading-relaxed">
+          <i className="ti ti-info-circle mr-1" />
+          Wichtige Benachrichtigungen — Stundenabsagen, Kursabbrüche, Ersatztermine, Wartelisten-Nachrücken und Kurs-Uhrzeit-Änderungen — werden immer gesendet, damit du nichts verpasst.
+        </div>
+
         <p className="section-label">Rechtliches</p>
         <div className="card mb-4 p-0 overflow-hidden">
           {rechtliches.map((item, i) => (

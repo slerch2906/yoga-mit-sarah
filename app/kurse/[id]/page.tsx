@@ -125,10 +125,10 @@ export default function SessionDetailPage() {
         user_id: user!.id, action: 'booking_created',
         details: { session_id: id, type: 'single', course_name: session?.course?.name, session_date: session?.date, session_time: session?.time_start }
       })
-      // Buchungsbestätigung Email
+      // Buchungsbestätigung Email — nur wenn Yogi sie aktiviert hat (Default: ja)
       try {
-        const { data: prof } = await supabase.from('profiles').select('email, first_name').eq('id', user!.id).single()
-        if (prof) await Email.bookingConfirmed({
+        const { data: prof } = await supabase.from('profiles').select('email, first_name, notify_booking_confirmations').eq('id', user!.id).single()
+        if (prof && prof.notify_booking_confirmations !== false) await Email.bookingConfirmed({
           email: prof.email,
           firstName: prof.first_name || 'Yogi',
           courseName: session?.course?.name || '',
@@ -164,11 +164,11 @@ export default function SessionDetailPage() {
       details: { session_id: id, late, course_name: session?.course?.name, session_date: session?.date, session_time: session?.time_start }
     })
 
-    // Email an Yogi senden
+    // Email an Yogi senden — nur wenn Yogi sie aktiviert hat (Default: ja)
     try {
       const { data: prof } = await supabase.from('profiles')
-        .select('email, first_name').eq('id', user!.id).single()
-      if (prof?.email) {
+        .select('email, first_name, notify_booking_confirmations').eq('id', user!.id).single()
+      if (prof?.email && prof.notify_booking_confirmations !== false) {
         await Email.bookingCancelled({
           email: prof.email,
           firstName: prof.first_name || 'Yogi',
@@ -218,7 +218,7 @@ export default function SessionDetailPage() {
   async function handleWaitlist(type: 'waitlist' | 'notify') {
     setActionLoading(true)
     const user = await getCurrentUser()
-    const { data: prof } = await supabase.from('profiles').select('email, first_name').eq('id', user!.id).single()
+    const { data: prof } = await supabase.from('profiles').select('email, first_name, notify_waitlist_joined').eq('id', user!.id).single()
 
     // Atomic Insert via SECURITY DEFINER RPC (verhindert dass Yogi alle waitlist-Counts lesen muss)
     const { data: result } = await supabase.rpc('join_waitlist', {
@@ -226,7 +226,8 @@ export default function SessionDetailPage() {
     })
     const position = result?.position ?? 0
 
-    if (type === 'waitlist' && prof) {
+    // Wartelisten-Bestätigung nur wenn Yogi sie aktiviert hat (Default: ja). Nur waitlist (nicht notify).
+    if (type === 'waitlist' && prof && prof.notify_waitlist_joined !== false) {
       try {
         await Email.waitlistJoined({
           email: prof.email,

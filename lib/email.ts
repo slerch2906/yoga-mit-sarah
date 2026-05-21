@@ -42,6 +42,9 @@ export const Email = {
   sessionAdded: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number; originalDate?: string; originalTime?: string }) =>
     sendEmail('session_added', data),
 
+  sessionReminder: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number; hoursBefore: number }) =>
+    sendEmail('session_reminder', data),
+
   adminNewYogi: (data: { fullName: string; email: string; courseName?: string }) =>
     sendEmail('admin_new_yogi', data),
 

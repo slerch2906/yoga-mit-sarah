@@ -108,8 +108,23 @@ export default function AdminKursePage() {
   }, [form.weekday, form.date_start, form.date_end, excludedDates, form.is_single, editCourse])
 
   async function loadData() {
-    const { data } = await supabase.from('courses').select('*, sessions(date, is_cancelled, cancel_reason), enrollments(id)').order('date_start', { ascending: true })
-    setCourses(data || [])
+    // bookings pro Session mitladen für Teilnehmer-Counter (zeigt auch Drop-ins/Überbuchung).
+    // sessions.bookings = nur active Buchungen → max über alle aktiven Sessions = tatsächliche Belegung.
+    const { data } = await supabase.from('courses')
+      .select('*, sessions(date, is_cancelled, cancel_reason, bookings!bookings_session_id_fkey(id, status)), enrollments(id)')
+      .order('date_start', { ascending: true })
+    // Pro Kurs: maximale aktive Belegung über alle nicht-ausgeschlossenen Sessions berechnen
+    const withParticipants = (data || []).map((c: any) => {
+      const activeSessions = (c.sessions || []).filter((s: any) => !s.is_cancelled)
+      const maxActive = activeSessions.reduce((max: number, s: any) => {
+        const activeCount = (s.bookings || []).filter((b: any) => b.status === 'active').length
+        return Math.max(max, activeCount)
+      }, 0)
+      // Fallback auf enrollments wenn keine Sessions/Bookings (z.B. neu angelegter Kurs)
+      const participantCount = Math.max(maxActive, (c.enrollments || []).length)
+      return { ...c, participant_count: participantCount }
+    })
+    setCourses(withParticipants)
     setLoading(false)
   }
 
@@ -814,7 +829,22 @@ export default function AdminKursePage() {
                       {new Date(c.date_start).toLocaleDateString('de-DE')} – {new Date(c.date_end).toLocaleDateString('de-DE')}
                     </div>
                     <div className="text-sm text-yoga-text/60 mt-0.5">
-                       Teilnehmer: <strong>{(c.enrollments || []).length}</strong>{c.max_spots ? `/${c.max_spots}` : ''}
+                      {(() => {
+                        const count = c.participant_count ?? (c.enrollments || []).length
+                        const isOverbooked = c.max_spots && count > c.max_spots
+                        return (
+                          <>
+                            Teilnehmer:{' '}
+                            <strong className={isOverbooked ? 'text-yoga-red-text' : ''}>
+                              {count}
+                            </strong>
+                            {c.max_spots ? `/${c.max_spots}` : ''}
+                            {isOverbooked && (
+                              <span className="ml-1 text-xs font-semibold text-yoga-red-text">· überbucht</span>
+                            )}
+                          </>
+                        )
+                      })()}
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1">

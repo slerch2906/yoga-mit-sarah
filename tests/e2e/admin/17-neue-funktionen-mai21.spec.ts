@@ -177,6 +177,26 @@ test.describe('[E2E] Neu: Guthaben-Card Styling', () => {
   })
 })
 
+// ── 9) Überbuchung sichtbar in admin/kurse Teilnehmer-Counter ──────────────
+test.describe('[E2E] Neu: admin/kurse Teilnehmer-Counter zeigt Überbuchung', () => {
+  test.fixme('Kurs max_spots=1, 2 Yogis eingebucht → Anzeige "2/1 · überbucht" (rot)', async () => {
+    // Setup: Kurs mit max_spots=1, 1 Yogi via enrollment, 2. Yogi via admin/sessions/[id] (Drop-in)
+    // Erwartung in /admin/kurse:
+    //   - Teilnehmer-Zeile zeigt "2/1"
+    //   - "2" ist rot (text-yoga-red-text)
+    //   - Suffix "· überbucht"
+  })
+
+  test.fixme('Normalfall ohne Überbuchung: keine rote Markierung', async () => {
+    // max_spots=5, 3 Yogis → "3/5", schwarz, kein überbucht-Label
+  })
+
+  test.fixme('Counter nutzt max-Belegung über Sessions, nicht enrollment-count', async () => {
+    // 1 enrollment + 1 Drop-in via session = 2 Buchungen → Counter zeigt 2
+    // Vorher-Bug: enrollments.length zählte Drop-in NICHT
+  })
+})
+
 // ── 8) Course-Credit "frei" zeigt upcoming statt total-used ────────────────
 test.describe('[E2E] Neu: Course-Credit free = upcoming aktive Buchungen', () => {
   test.fixme('Direkt nach Einbuchung in 6-Stunden-Kurs: free = 6 (nicht 0)', async () => {

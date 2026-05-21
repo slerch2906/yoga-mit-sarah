@@ -19,12 +19,32 @@ export default function AdminYogiDetailPage() {
   const [showEnrollForm, setShowEnrollForm] = useState(false)
   const [selectedCourseId, setSelectedCourseId] = useState('')
   const [enrolling, setEnrolling] = useState(false)
+  // Ausnahme-Range (Standard: NICHT aktiv → ganzer Kurs)
+  const [enrollRangeMode, setEnrollRangeMode] = useState(false)
+  const [enrollFromUnit, setEnrollFromUnit] = useState(1)
+  const [enrollUntilUnit, setEnrollUntilUnit] = useState(1)
+  const [selectedCourseUnits, setSelectedCourseUnits] = useState(0)
   const [editingCredit, setEditingCredit] = useState<any>(null)
   const [editCreditAmount, setEditCreditAmount] = useState(0)
   const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => { loadData() }, [id])
+
+  // Wenn Kurs gewählt: Range-Felder initial auf "ganzer Kurs" setzen
+  useEffect(() => {
+    if (!selectedCourseId) {
+      setSelectedCourseUnits(0); setEnrollRangeMode(false)
+      return
+    }
+    const course = courses.find(c => c.id === selectedCourseId)
+    const remaining = course ? getRemainingUnits(course) : 0
+    setSelectedCourseUnits(remaining)
+    setEnrollFromUnit(1)
+    setEnrollUntilUnit(remaining)
+    setEnrollRangeMode(false) // Reset auf Standard
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCourseId])
 
   async function loadData() {
     const [{ data: y }, { data: b }, { data: c }, { data: e }, { data: courseList }] = await Promise.all([
@@ -130,6 +150,18 @@ export default function AdminYogiDetailPage() {
     const remaining = getRemainingUnits(course)
     const expiry = getExpiryDate(course)
 
+    // Range-Mode validieren
+    let fromUnit = 1
+    let untilUnit: number | null = null
+    if (enrollRangeMode) {
+      if (enrollFromUnit < 1 || enrollUntilUnit < enrollFromUnit || enrollUntilUnit > remaining) {
+        alert(`Ungültiger Bereich. Möglich: 1 bis ${remaining}.`)
+        setEnrolling(false); return
+      }
+      fromUnit = enrollFromUnit
+      untilUnit = enrollUntilUnit
+    }
+
     // Prüfen ob Kurs bereits voll
     const { count } = await supabase
       .from('enrollments')
@@ -140,6 +172,70 @@ export default function AdminYogiDetailPage() {
       alert(`Kurs ist bereits voll (max. ${course.max_spots} Teilnehmer).`)
       setEnrolling(false)
       return
+    }
+
+    // Range-Mode: Guthaben-Pfad überspringen (Edge-Case, manuell handhaben)
+    if (enrollRangeMode) {
+      // Sessions ab heute, sortiert nach Datum
+      const { data: allSessions } = await supabase.from('sessions')
+        .select('id, date, is_cancelled, cancel_reason')
+        .eq('course_id', selectedCourseId)
+        .gte('date', new Date().toISOString().split('T')[0])
+        .order('date')
+      // Nur aktive (nicht excluded, nicht admin-cancelled) zählen als Einheit
+      const activeSessions = (allSessions || [])
+        .filter((s: any) => s.cancel_reason !== 'excluded' && !s.is_cancelled)
+      const targetSessions = activeSessions.slice(fromUnit - 1, untilUnit!)
+      const rangeCount = targetSessions.length
+
+      await supabase.from('enrollments').upsert({
+        user_id: id, course_id: selectedCourseId,
+        enrolled_from_unit: fromUnit, enrolled_until_unit: untilUnit,
+      })
+
+      const { data: credit } = await supabase.from('credits').insert({
+        user_id: id, course_id: selectedCourseId, model: 'course',
+        total: rangeCount, used: 0, expires_at: expiry.toISOString(),
+      }).select().single()
+
+      for (const s of targetSessions) {
+        const { data: existing } = await supabase.from('bookings')
+          .select('id').eq('session_id', s.id).eq('user_id', id).maybeSingle()
+        if (existing) {
+          await supabase.from('bookings').update({
+            status: 'active', credit_id: credit?.id || null,
+            cancelled_at: null, cancel_late: false, type: 'course',
+          }).eq('id', existing.id)
+        } else {
+          await supabase.from('bookings').insert({
+            user_id: id, session_id: s.id,
+            credit_id: credit?.id || null, type: 'course', status: 'active',
+          })
+        }
+      }
+
+      // Email mit Range-Info
+      try {
+        const { data: yProf } = await supabase.from('profiles').select('email, first_name').eq('id', id).single()
+        if (yProf?.email && course && !yogi?.is_dummy) {
+          await Email.yogiEnrolledByAdmin({
+            email: yProf.email, firstName: yProf.first_name || 'Yogi',
+            courseName: course.name, weekday: course.weekday, timeStart: course.time_start,
+            durationMin: course.duration_min || 75, totalUnits: rangeCount, dateStart: course.date_start,
+          })
+        }
+      } catch(e) {}
+
+      await supabase.from('audit_log').insert({
+        action: 'yogi_enrolled_by_admin',
+        details: {
+          target_user_id: id, course_id: selectedCourseId,
+          credits: rangeCount, range: { from: fromUnit, until: untilUnit },
+        },
+      })
+
+      setShowEnrollForm(false); setSelectedCourseId('')
+      loadData(); setEnrolling(false); return
     }
 
     // Guthaben-Credits prüfen
@@ -445,6 +541,52 @@ export default function AdminYogiDetailPage() {
                 )
               })}
             </select>
+
+            {/* Ausnahme: Nicht ganzer Kurs (Range einbuchen) */}
+            {selectedCourseId && (
+              <div className="mb-3">
+                {!enrollRangeMode ? (
+                  <button
+                    onClick={() => setEnrollRangeMode(true)}
+                    className="text-xs underline cursor-pointer bg-transparent border-0 p-0"
+                    style={{ color: '#3a5a30' }}>
+                    + Ausnahme: nur bestimmte Stunden einbuchen
+                  </button>
+                ) : (
+                  <div className="bg-yoga-card rounded-yoga p-3 border border-yoga-border">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold" style={{ color: '#3a5a30' }}>
+                        Ausnahme: nur Teil-Buchung
+                      </p>
+                      <button
+                        onClick={() => setEnrollRangeMode(false)}
+                        className="text-xs underline cursor-pointer bg-transparent border-0 p-0 text-yoga-text/60">
+                        zurück zu ganzem Kurs
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-yoga-text/70">Von Einheit</label>
+                      <input
+                        type="number" min={1} max={selectedCourseUnits}
+                        value={enrollFromUnit}
+                        onChange={e => setEnrollFromUnit(parseInt(e.target.value) || 1)}
+                        className="field-input w-16 py-1 text-center" />
+                      <label className="text-xs text-yoga-text/70">bis</label>
+                      <input
+                        type="number" min={enrollFromUnit} max={selectedCourseUnits}
+                        value={enrollUntilUnit}
+                        onChange={e => setEnrollUntilUnit(parseInt(e.target.value) || enrollFromUnit)}
+                        className="field-input w-16 py-1 text-center" />
+                      <span className="text-xs text-yoga-text/60">von {selectedCourseUnits}</span>
+                    </div>
+                    <p className="text-xs text-yoga-text/50 mt-2">
+                      {Math.max(0, enrollUntilUnit - enrollFromUnit + 1)} Credits werden vergeben
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex gap-2">
               <button onClick={handleEnroll} disabled={!selectedCourseId || enrolling}
                 className={`flex-1 btn-primary text-sm py-2.5 ${!selectedCourseId ? 'opacity-40 cursor-not-allowed' : ''}`}>

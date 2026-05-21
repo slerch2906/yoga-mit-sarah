@@ -583,11 +583,12 @@ export default function AdminKursePage() {
   async function loadParticipants(course: any) {
     const { data } = await supabase
       .from('enrollments')
-      .select('user_id, enrolled_from_unit, profile:profiles(id, first_name, last_name, email, is_dummy), credits(total, used, expires_at, course_id)')
+      .select('user_id, enrolled_from_unit, enrolled_until_unit, profile:profiles(id, first_name, last_name, email, is_dummy), credits(total, used, expires_at, course_id)')
       .eq('course_id', course.id)
     const members = (data || []).map((e: any) => ({
       ...e.profile,
       enrolled_from_unit: e.enrolled_from_unit,
+      enrolled_until_unit: e.enrolled_until_unit,
       credit: (e.credits || []).find((c: any) => c.course_id === course.id),
     })).filter(Boolean)
     setParticipants(members)
@@ -1305,7 +1306,9 @@ export default function AdminKursePage() {
                     </div>
                     <div className="text-xs text-yoga-text/50 mt-0.5">
                       {p.email || 'Kein Login'}
-                      {p.enrolled_from_unit > 1 && ` · ab Einheit ${p.enrolled_from_unit}`}
+                      {(p.enrolled_from_unit > 1 || p.enrolled_until_unit) && (
+                        ` · Einheit ${p.enrolled_from_unit ?? 1}${p.enrolled_until_unit ? `–${p.enrolled_until_unit}` : '+'}`
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0 ml-3">

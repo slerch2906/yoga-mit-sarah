@@ -60,9 +60,19 @@ export default function MeinePage() {
           const { data: myBookings } = await supabase
             .from('bookings').select('*').eq('user_id', user.id)
             .in('session_id', (sessions || []).map((s: any) => s.id))
-          // Ausgeschlossene Stunden nie anzeigen; abgesagte anzeigen (ausgegraut)
-          sessionsMap[enrol.course_id] = (sessions || [])
+          // Ausgeschlossene Stunden nie anzeigen
+          const visibleSessions = (sessions || [])
             .filter((s: any) => s.cancel_reason !== 'excluded')
+          // Range anwenden: nur Einheiten zwischen enrolled_from_unit und enrolled_until_unit
+          const fromUnit = enrol.enrolled_from_unit ?? 1
+          const untilUnit = enrol.enrolled_until_unit ?? visibleSessions.length
+          // Unit-Index basiert auf aktiven (nicht-cancelled) Sessions in chronologischer Reihenfolge
+          const activeOrdered = visibleSessions.filter((s: any) => !s.is_cancelled)
+          const rangeIds = new Set(
+            activeOrdered.slice(fromUnit - 1, untilUnit).map((s: any) => s.id)
+          )
+          sessionsMap[enrol.course_id] = visibleSessions
+            .filter((s: any) => rangeIds.has(s.id) || s.is_cancelled)
             .map((s: any) => ({
               ...s, myBooking: myBookings?.find((b: any) => b.session_id === s.id),
             }))

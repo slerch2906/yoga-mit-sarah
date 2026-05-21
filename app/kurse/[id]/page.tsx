@@ -35,18 +35,28 @@ export default function SessionDetailPage() {
 
     const [{ data: prof }, { data: sess }, { data: myBook }, { data: myWait }, { data: allCredits }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
-      supabase.from('sessions').select('*, course:courses(*), replacement:sessions!sessions_replacement_session_id_fkey(id, date, time_start, is_cancelled)').eq('id', id).single(),
+      // KEIN self-referenzierender Subquery (PostgREST gibt 400). Replacement separat unten laden.
+      supabase.from('sessions').select('*, course:courses(*)').eq('id', id).single(),
       supabase.from('bookings').select('*').eq('session_id', id).eq('user_id', user.id).eq('status', 'active').maybeSingle(),
       supabase.from('waitlist').select('*').eq('session_id', id).eq('user_id', user.id).maybeSingle(),
       supabase.from('credits').select('*').eq('user_id', user.id).gt('expires_at', new Date().toISOString()),
     ])
+
+    // Replacement-Session separat laden (Self-Join via PostgREST war fehlerhaft → 400)
+    let replacement: any = null
+    if ((sess as any)?.replacement_session_id) {
+      const { data: rep } = await supabase.from('sessions')
+        .select('id, date, time_start, is_cancelled')
+        .eq('id', (sess as any).replacement_session_id).maybeSingle()
+      replacement = rep
+    }
 
     const { count: bookingCount } = await supabase
       .from('bookings').select('*', { count: 'exact', head: true })
       .eq('session_id', id).eq('status', 'active')
 
     setProfile(prof)
-    setSession(sess)
+    setSession(sess ? { ...sess, replacement } : sess)
     setMyBooking(myBook)
     setMyWaitlist(myWait)
     setFreeSpots(((sess as any)?.course?.max_spots || 0) - (bookingCount || 0))

@@ -184,12 +184,22 @@ export default function AdminSessionPage() {
 
   async function loadData() {
     const [{ data: sess }, { data: bkgs }] = await Promise.all([
-      supabase.from('sessions').select('*, course:courses(name, id), replacement:sessions!sessions_replacement_session_id_fkey(id, date, time_start, is_cancelled)').eq('id', id).single(),
+      // KEIN self-referenzierender Subquery (PostgREST → 400). Replacement separat unten.
+      supabase.from('sessions').select('*, course:courses(name, id)').eq('id', id).single(),
       supabase.from('bookings')
         .select('*, profile:profiles(email, first_name, last_name)')
         .eq('session_id', id).eq('status', 'active'),
     ])
-    setSession(sess)
+
+    // Replacement-Session separat laden
+    let replacement: any = null
+    if ((sess as any)?.replacement_session_id) {
+      const { data: rep } = await supabase.from('sessions')
+        .select('id, date, time_start, is_cancelled')
+        .eq('id', (sess as any).replacement_session_id).maybeSingle()
+      replacement = rep
+    }
+    setSession(sess ? { ...sess, replacement } : sess)
     setBookings(bkgs || [])
     setLoading(false)
   }

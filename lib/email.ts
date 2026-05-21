@@ -45,6 +45,9 @@ export const Email = {
   sessionReminder: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number; hoursBefore: number }) =>
     sendEmail('session_reminder', data),
 
+  waitlistRemovedCreditUsedElsewhere: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string }) =>
+    sendEmail('waitlist_removed_credit_used_elsewhere', data),
+
   adminNewYogi: (data: { fullName: string; email: string; courseName?: string }) =>
     sendEmail('admin_new_yogi', data),
 

@@ -233,6 +233,56 @@ test.describe('[E2E] adminGuthabenVerrechnet Email — Buchhaltungs-Info', () =>
   })
 })
 
+// ── 14) Wartelisten-Credit-Konflikt sauber lösen (Bug-Fix) ──────────────────
+test.describe('[E2E] Wartelisten-Konflikt: Credit anderweitig verwendet', () => {
+  test.fixme('Pre-Check: Yogi mit 1 Credit + 1 waitlist will andere Stunde buchen → Modal erscheint', async () => {
+    // Setup: Yogi mit 1 freien Credit, eingetragen auf Warteliste von Stunde A
+    // Aktion: Öffnet Stunde B, klickt "Für diese Stunde eintragen"
+    // Erwartung:
+    //   - Modal "Wartelisten-Konflikt" erscheint
+    //   - Zeigt Stunde A als zu entfernende Warteliste
+    //   - Button "Ja, buchen und Warteliste verlassen" + "Abbrechen"
+  })
+
+  test.fixme('Modal-Bestätigung: Buchung läuft, waitlist gelöscht, Yogi-Email kommt', async () => {
+    // Click "Ja, buchen..." → bookings.insert, waitlist.delete, Email
+    // Email subject: "Warteliste entfernt: <courseName>"
+    // Body erklärt: "Wartelisten-Position entfernt weil Credit anderweitig verwendet"
+  })
+
+  test.fixme('Yogi mit 2 Credits + 1 waitlist bucht → KEIN Modal (Credit reicht)', async () => {
+    // Setup: 2 freie Credits, 1 waitlist
+    // Buchung → freie = 1, waitlist = 1 → Credit reicht
+    // Erwartung: kein Modal, direkte Buchung
+  })
+
+  test.fixme('Yogi mit 1 Credit + 3 waitlists → 2 zu entfernen (älteste zuerst)', async () => {
+    // Setup: 1 freier Credit, 3 waitlist-Einträge
+    // Buchung → 0 free + 3 waitlist → 3 zu viel
+    // Erwartung: Modal zeigt 3 zu entfernende, älteste zuerst (created_at ASC)
+  })
+
+  test.fixme('RPC defensiv: Wartelisten-Yogi ohne Credit beim Promote → skip + nächste', async () => {
+    // Setup: Yogi B auf waitlist pos.1, KEIN Credit (theoretischer Race-Case)
+    //        Yogi C auf waitlist pos.2 MIT Credit
+    // Aktion: Cancel triggert process_cancellation_with_waitlist
+    // Erwartung:
+    //   - B wird übersprungen, waitlist-Eintrag gelöscht, skipped_no_credit-Liste enthält B
+    //   - C wird auto-eingebucht, promoted-Email
+    //   - B bekommt waitlist_removed_credit_used_elsewhere-Email
+  })
+
+  test.fixme('RPC: niemand mit Credit → notify_users werden informiert', async () => {
+    // Setup: 2 waitlist (beide ohne Credit), 1 notify
+    // Erwartung: beide waitlist gelöscht (skipped_no_credit), notify-User bekommt Email
+  })
+
+  test.fixme('Subject + Body waitlist_removed_credit_used_elsewhere Email', async () => {
+    // Subject "Warteliste entfernt: <courseName>"
+    // Body: rotes Highlight mit Datum/Zeit + Erklärung + Link zur App
+  })
+})
+
 // ── 10) Credit-Sichtbarkeit nach Kurs-Ende (Sarah-Frage) ───────────────────
 test.describe('[E2E] Credit nach letzter Stunde: Sichtbarkeit + Verfall', () => {
   test.fixme('Yogi sagt letzte Stunde ab → Credit bleibt 8 Tage in /meine sichtbar', async () => {

@@ -24,6 +24,8 @@ export default function SessionDetailPage() {
   const [actionLoading, setActionLoading] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
   const [showCancel, setShowCancel] = useState(false)
+  const [conflictingWaitlists, setConflictingWaitlists] = useState<any[]>([])
+  const [showWaitlistConflict, setShowWaitlistConflict] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -93,10 +95,54 @@ export default function SessionDetailPage() {
     return dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr'
   }
 
+  // Prüft ob Yogi nach dieser Buchung noch genug Credits für alle Warteliste-Einträge hat.
+  // Falls nicht: gibt die zu entfernenden Wartelisten zurück (älteste zuerst).
+  async function checkWaitlistConflicts(userId: string): Promise<any[]> {
+    const { data: waitlists } = await supabase.from('waitlist')
+      .select('id, position, created_at, session_id, session:sessions(date, time_start, course:courses(name))')
+      .eq('user_id', userId).eq('type', 'waitlist').order('created_at')
+    if (!waitlists || waitlists.length === 0) return []
+    // Wieviele Credits stehen NACH dieser Buchung noch zur Verfügung?
+    const creditsAfterBooking = Math.max(0, freeCredits - 1)
+    // Wenn freeCredits-1 < waitlists.length, müssen die ältesten entfernt werden
+    const removalCount = Math.max(0, waitlists.length - creditsAfterBooking)
+    if (removalCount === 0) return []
+    return waitlists.slice(0, removalCount)
+  }
+
   async function handleBook() {
     if (!bestCredit) return
-    setActionLoading(true)
     const user = await getCurrentUser()
+    // Vor dem Buchen: Wartelisten-Konflikt-Check
+    const conflicts = await checkWaitlistConflicts(user!.id)
+    if (conflicts.length > 0 && !showWaitlistConflict) {
+      // Modal anzeigen, User muss bestätigen
+      setConflictingWaitlists(conflicts)
+      setShowWaitlistConflict(true)
+      return
+    }
+    setActionLoading(true)
+
+    // Wartelisten-Konflikte entfernen + Yogi informieren
+    if (conflicts.length > 0) {
+      const ids = conflicts.map((w: any) => w.id)
+      await supabase.from('waitlist').delete().in('id', ids)
+      // Yogi-Email pro entfernter Warteliste
+      try {
+        const { data: prof } = await supabase.from('profiles').select('email, first_name').eq('id', user!.id).single()
+        if (prof?.email) {
+          for (const w of conflicts) {
+            await Email.waitlistRemovedCreditUsedElsewhere({
+              email: prof.email,
+              firstName: prof.first_name || 'Yogi',
+              courseName: w.session?.course?.name || '',
+              date: w.session?.date || '',
+              timeStart: w.session?.time_start || '',
+            })
+          }
+        }
+      } catch (e) {}
+    }
 
     // Prüfe ob bereits eine (cancelled) Buchung existiert → dann updaten statt inserieren
     const { data: existingBooking } = await supabase.from('bookings')
@@ -141,6 +187,8 @@ export default function SessionDetailPage() {
     } else {
       alert('Fehler beim Buchen: ' + error.message)
     }
+    setShowWaitlistConflict(false)
+    setConflictingWaitlists([])
     setActionLoading(false)
   }
 
@@ -207,6 +255,20 @@ export default function SessionDetailPage() {
             date: nu.date || '',
             timeStart: nu.time_start || '',
             sessionId: nu.session_id || id,
+          })
+        }
+      }
+
+      // Skipped-Wartelisten-Yogis (kein Credit mehr beim Promote-Versuch) informieren —
+      // edge case z.B. wenn Yogi gleichzeitig in 2 Tabs hantiert
+      for (const sk of (result?.skipped_no_credit || [])) {
+        if (sk?.email) {
+          await Email.waitlistRemovedCreditUsedElsewhere({
+            email: sk.email,
+            firstName: sk.first_name || 'Yogi',
+            courseName: sk.course_name || '',
+            date: sk.date || '',
+            timeStart: sk.time_start || '',
           })
         }
       }
@@ -493,6 +555,33 @@ export default function SessionDetailPage() {
               </>
             )}
           </>
+        )}
+
+        {/* WARTELISTEN-KONFLIKT MODAL */}
+        {showWaitlistConflict && conflictingWaitlists.length > 0 && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => { setShowWaitlistConflict(false); setConflictingWaitlists([]) }}>
+            <div className="bg-yoga-card w-full max-w-md mx-auto rounded-t-2xl p-5 pb-10" onClick={e => e.stopPropagation()}>
+              <h3 className="text-base font-bold mb-2 text-yoga-amber-text">
+                <i className="ti ti-alert-triangle mr-1" />Wartelisten-Konflikt
+              </h3>
+              <p className="text-sm text-yoga-text/80 leading-relaxed mb-3">
+                Du bist auf {conflictingWaitlists.length === 1 ? 'folgender Warteliste' : 'folgenden Wartelisten'}, hast aber nicht genug Credits für alle. Wenn du diese Stunde buchst, wirst du von {conflictingWaitlists.length === 1 ? 'dieser Warteliste' : 'diesen Wartelisten'} entfernt:
+              </p>
+              <div className="bg-yoga-bg rounded-yoga p-3 mb-4">
+                {conflictingWaitlists.map((w: any) => (
+                  <div key={w.id} className="text-sm py-1 border-b last:border-b-0 border-yoga-border">
+                    <strong>{w.session?.course?.name}</strong> · {new Date(w.session?.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })} · {w.session?.time_start?.slice(0,5)} Uhr
+                  </div>
+                ))}
+              </div>
+              <button onClick={handleBook} disabled={actionLoading} className="btn-primary mb-2">
+                {actionLoading ? 'Wird gebucht...' : 'Ja, buchen und Warteliste verlassen'}
+              </button>
+              <button onClick={() => { setShowWaitlistConflict(false); setConflictingWaitlists([]) }} className="btn-ghost">
+                Abbrechen
+              </button>
+            </div>
+          </div>
         )}
 
         {/* AUF WARTELISTE */}

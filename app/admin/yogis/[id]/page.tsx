@@ -81,9 +81,11 @@ export default function AdminYogiDetailPage() {
     const sessionsInCourse = bookings
       .filter(b => b.session?.course_id === c.course_id)
       .map(b => b.session).filter(Boolean)
+    // Konvention: ABGESAGTE Session hat replacement_session_id = <Ersatz-id>.
+    // Wir filtern die abgesagten Originale raus, sodass die Ersatzstunden zählen.
     const replacedIds = new Set(
       sessionsInCourse.filter((s: any) => s.replacement_session_id)
-        .map((s: any) => s.replacement_session_id)
+        .map((s: any) => s.id)
     )
     // Effektive Bookings: nur die, deren Session NICHT ersetzt wurde
     const effective = myBookingsOfCredit.filter(b => b.session && !replacedIds.has(b.session.id))

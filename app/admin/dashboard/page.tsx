@@ -46,6 +46,11 @@ export default function AdminDashboard() {
   const [replacementDate, setReplacementDate] = useState('')
   const [replacementTime, setReplacementTime] = useState('')
   const [cancelling, setCancelling] = useState(false)
+  // Nachträglicher Ersatztermin für eine bereits abgesagte Stunde (vom Modal aus)
+  const [showAddReplacement, setShowAddReplacement] = useState(false)
+  const [lateReplacementDate, setLateReplacementDate] = useState('')
+  const [lateReplacementTime, setLateReplacementTime] = useState('')
+  const [addingReplacement, setAddingReplacement] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -65,6 +70,21 @@ export default function AdminDashboard() {
       .gte('date', weekStart.toISOString().split('T')[0])
       .lte('date', weekEnd.toISOString().split('T')[0])
       .order('date').order('time_start')
+
+    // Ersatzstunden-Mapping: welche Sessions sind die Ersatzstunden für eine abgesagte?
+    // Wir suchen alle Sessions deren replacement_session_id auf eine sichtbare Session zeigt
+    // → dann wissen wir: diese sichtbare Session IST eine Ersatzstunde.
+    const sessionIds = (sessionData || []).map((s: any) => s.id)
+    let originMap: Record<string, any> = {}
+    if (sessionIds.length > 0) {
+      const { data: origins } = await supabase
+        .from('sessions')
+        .select('id, date, time_start, replacement_session_id, course:courses(name)')
+        .in('replacement_session_id', sessionIds)
+      for (const o of (origins || []) as any[]) {
+        if (o.replacement_session_id) originMap[o.replacement_session_id] = o
+      }
+    }
 
     // Weekly stats
     const { count: bookCount } = await supabase.from('audit_log')
@@ -91,6 +111,9 @@ export default function AdminDashboard() {
         ...s,
         active_count: s.bookings.filter((b: any) => b.status === 'active').length,
         cancelled_count: s.bookings.filter((b: any) => b.status === 'cancelled').length,
+        // Ersatzstunden-Info: wenn diese Session als Ersatz für eine andere angelegt wurde
+        is_replacement: !!originMap[s.id],
+        original_session: originMap[s.id] || null,
       })))
     setStats({ bookings: bookCount || 0, cancellations: cancelCount || 0, waitlist: waitCount || 0 })
 
@@ -327,6 +350,98 @@ export default function AdminDashboard() {
     loadData()
   }
 
+  // Sarah 2026-05-22: Nachträglich (= nachdem die Stunde schon abgesagt ist) eine
+  // Ersatzstunde anlegen. Logik gespiegelt aus admin/sessions/[id]/handleAddLateReplacement.
+  async function handleAddLateReplacementFromDashboard() {
+    if (!selectedSession || !lateReplacementDate || !lateReplacementTime) return
+    setAddingReplacement(true)
+
+    // Alle stornierten Buchungen dieser Stunde laden
+    const { data: cancelledBookings } = await supabase
+      .from('bookings')
+      .select('*, profile:profiles(email, first_name, last_name)')
+      .eq('session_id', selectedSession.id)
+      .eq('status', 'cancelled')
+
+    // Neue Ersatz-Session im gleichen Kurs anlegen
+    const { data: newSession } = await supabase.from('sessions').insert({
+      course_id: selectedSession.course_id,
+      date: lateReplacementDate,
+      time_start: lateReplacementTime + ':00',
+      duration_min: selectedSession.duration_min,
+      is_cancelled: false,
+    }).select('id').single()
+
+    if (!newSession) { setAddingReplacement(false); return }
+
+    // Original-Session mit Ersatztermin verknüpfen
+    await supabase.from('sessions').update({
+      replacement_session_id: newSession.id,
+    }).eq('id', selectedSession.id)
+
+    let enrolledCount = 0
+    let skippedCount = 0
+    for (const booking of (cancelledBookings || []) as any[]) {
+      if (!booking.credit_id) continue
+      const { data: credit } = await supabase.from('credits')
+        .select('*').eq('id', booking.credit_id).maybeSingle()
+      const creditAvailable = credit
+        && (credit.total - credit.used) > 0
+        && new Date(credit.expires_at) > new Date()
+      if (!creditAvailable) { skippedCount++; continue }
+
+      const { error: bookingError } = await supabase.from('bookings').upsert({
+        user_id: booking.user_id,
+        session_id: newSession.id,
+        credit_id: booking.credit_id,
+        type: booking.type || 'course',
+        status: 'active',
+        cancelled_at: null,
+        cancel_late: false,
+      }, { onConflict: 'user_id,session_id' })
+
+      if (bookingError) { skippedCount++; continue }
+      enrolledCount++
+
+      if (booking.profile?.email) {
+        await Email.sessionAdded({
+          email: booking.profile.email,
+          firstName: booking.profile.first_name || 'Yogi',
+          courseName: selectedSession.course?.name || '',
+          date: lateReplacementDate,
+          timeStart: lateReplacementTime,
+          durationMin: selectedSession.duration_min || 60,
+          originalDate: selectedSession.date,
+          originalTime: selectedSession.time_start,
+        })
+      }
+    }
+
+    await supabase.from('audit_log').insert({
+      action: 'replacement_session_added',
+      details: {
+        original_session_id: selectedSession.id,
+        replacement_session_id: newSession.id,
+        course: selectedSession.course?.name,
+        date: lateReplacementDate,
+        yogis_enrolled: enrolledCount,
+        yogis_skipped: skippedCount,
+        source: 'admin_dashboard',
+      }
+    })
+
+    setAddingReplacement(false)
+    setShowAddReplacement(false)
+    setLateReplacementDate('')
+    setLateReplacementTime('')
+    setSelectedSession(null)
+    const skipNote = skippedCount > 0
+      ? ` ${skippedCount} Yogi(s) nicht eingebucht – Credit bereits in einer anderen Stunde verwendet.`
+      : ''
+    alert(`Ersatztermin angelegt! ${enrolledCount} Yogi(s) eingebucht und informiert.${skipNote}`)
+    loadData()
+  }
+
   // Swipe-Navigation VOR jedem early return — React-Hooks-Reihenfolge muss stabil sein
   const swipeHandlers = useSwipe({
     onSwipeLeft: () => setWeekOffset(o => o + 1),
@@ -353,13 +468,72 @@ export default function AdminDashboard() {
             <div className="bg-yoga-bg w-full max-w-md mx-auto rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-base font-bold">{selectedSession.course?.name}</h3>
+                  <h3 className="text-base font-bold">
+                    {selectedSession.course?.name}
+                    {selectedSession.is_replacement && (
+                      <span className="text-yoga-amber-text font-semibold"> · Ersatzstunde</span>
+                    )}
+                  </h3>
                   <p className="text-sm text-yoga-text/55">{new Date(selectedSession.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · {selectedSession.time_start?.slice(0,5)} Uhr</p>
+                  {selectedSession.is_replacement && selectedSession.original_session && (
+                    <p className="text-xs text-yoga-amber-text mt-1 flex items-center gap-1">
+                      <i className="ti ti-arrow-back-up" />
+                      Ersatzstunde für{' '}
+                      <strong>
+                        {new Date(selectedSession.original_session.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })}
+                        {' · '}{selectedSession.original_session.time_start?.slice(0,5)} Uhr
+                      </strong>
+                    </p>
+                  )}
                 </div>
-                <button onClick={() => setSelectedSession(null)} className="text-yoga-text/40 text-2xl border-0 bg-transparent cursor-pointer">
+                <button onClick={() => {
+                  setSelectedSession(null)
+                  setShowAddReplacement(false)
+                  setLateReplacementDate('')
+                  setLateReplacementTime('')
+                }} className="text-yoga-text/40 text-2xl border-0 bg-transparent cursor-pointer">
                   <i className="ti ti-x" />
                 </button>
               </div>
+
+              {/* Bei ABGESAGTER Stunde: Ersatzstunde anlegen (sofern noch keine verknüpft ist) */}
+              {selectedSession.is_cancelled && !selectedSession.replacement_session_id && !showAddReplacement && (
+                <button onClick={() => setShowAddReplacement(true)}
+                  className="w-full btn-secondary text-sm mb-3 flex items-center justify-center gap-2">
+                  <i className="ti ti-calendar-plus" />Ersatzstunde anlegen
+                </button>
+              )}
+              {selectedSession.is_cancelled && showAddReplacement && (
+                <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-3">
+                  <p className="text-sm font-semibold mb-2">Ersatztermin für diese abgesagte Stunde</p>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <div>
+                      <label className="field-label">Datum</label>
+                      <input className="field-input text-sm" type="date" value={lateReplacementDate}
+                        onChange={e => setLateReplacementDate(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]} />
+                    </div>
+                    <div>
+                      <label className="field-label">Uhrzeit</label>
+                      <input className="field-input text-sm" type="time" value={lateReplacementTime}
+                        onChange={e => setLateReplacementTime(e.target.value)} />
+                    </div>
+                  </div>
+                  <p className="text-xs text-yoga-text/55 mb-3">
+                    Alle ausgetragenen Yogis werden automatisch in den Ersatztermin eingebucht
+                    und per Email informiert. Die Kurs-Einheiten ändern sich nicht.
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={handleAddLateReplacementFromDashboard}
+                      disabled={!lateReplacementDate || !lateReplacementTime || addingReplacement}
+                      className="flex-1 btn-primary text-sm disabled:opacity-40">
+                      {addingReplacement ? 'Wird angelegt...' : 'Ersatzstunde anlegen'}
+                    </button>
+                    <button onClick={() => { setShowAddReplacement(false); setLateReplacementDate(''); setLateReplacementTime('') }}
+                      className="flex-1 btn-ghost text-sm">Abbrechen</button>
+                  </div>
+                </div>
+              )}
 
               {/* Yogi hinzufügen */}
               {!selectedSession.is_cancelled && (
@@ -587,7 +761,12 @@ export default function AdminDashboard() {
               className={`w-full card mb-3 text-left hover:border-yoga-border2 ${s.is_cancelled || isPast ? 'opacity-40' : ''} ${highlight ? 'border-2 border-yoga-text' : ''}`}>
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <div className="text-sm font-bold">{s.course?.name}</div>
+                  <div className="text-sm font-bold">
+                    {s.course?.name}
+                    {s.is_replacement && (
+                      <span className="text-yoga-amber-text font-semibold"> · Ersatzstunde</span>
+                    )}
+                  </div>
                   <div className="text-xs text-yoga-text/55">
                     {new Date(s.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })} · {s.time_start?.slice(0,5)} Uhr
                   </div>

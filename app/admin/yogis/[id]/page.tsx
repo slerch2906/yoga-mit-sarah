@@ -52,7 +52,7 @@ export default function AdminYogiDetailPage() {
     const [{ data: y }, { data: b }, { data: c }, { data: e }, { data: courseList }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', id).single(),
       supabase.from('bookings')
-        .select('*, session:sessions!bookings_session_id_fkey(id, date, time_start, duration_min, is_cancelled, replacement_session_id, course_id, course:courses(name))')
+        .select('*, session:sessions!bookings_session_id_fkey(id, date, time_start, duration_min, is_cancelled, replacement_session_id, course_id, course:courses(name, is_active, is_cancelled))')
         .eq('user_id', id).order('created_at', { ascending: false }),
       supabase.from('credits').select('*, course:courses(name)').eq('user_id', id).order('created_at', { ascending: false }),
       supabase.from('enrollments').select('*, course:courses(*)').eq('user_id', id),
@@ -700,10 +700,21 @@ export default function AdminYogiDetailPage() {
             Sarah-Wunsch 2026-05-22: Admin braucht den Überblick auch wenn Yogi nicht
             (mehr) im Kurs ist (z.B. nach Kursabbruch noch in Drop-In Einzelstunden). */}
         {(() => {
-          const today = new Date().toISOString().split('T')[0]
-          const futureSingles = bookings.filter((b: any) =>
-            b.type === 'single' && b.status === 'active' && b.session?.date && b.session.date >= today
-          ).sort((a: any, b: any) => {
+          // Filter (Sarah-Regel 2026-05-22):
+          // - nur ZUKÜNFTIGE Stunden (Datum+Uhrzeit vs. now, minutengenau)
+          // - Session selbst nicht abgesagt
+          // - Kurs nicht abgebrochen oder archiviert (is_active=true, !is_cancelled)
+          const now = Date.now()
+          const futureSingles = bookings.filter((b: any) => {
+            if (b.type !== 'single' || b.status !== 'active') return false
+            if (!b.session?.date || !b.session?.time_start) return false
+            const sessDt = new Date(`${b.session.date}T${b.session.time_start}`).getTime()
+            if (sessDt <= now) return false  // bereits gestartet/vorbei
+            if (b.session?.is_cancelled) return false  // Stunde abgesagt
+            const c = b.session?.course
+            if (c && (c.is_active === false || c.is_cancelled === true)) return false  // Kurs abgebrochen/archiviert
+            return true
+          }).sort((a: any, b: any) => {
             const aKey = `${a.session?.date}T${a.session?.time_start}`
             const bKey = `${b.session?.date}T${b.session?.time_start}`
             return aKey.localeCompare(bKey)
@@ -713,7 +724,8 @@ export default function AdminYogiDetailPage() {
             <>
               <p className="section-label">Eingebuchte Einzelstunden</p>
               {futureSingles.map((b: any) => (
-                <div key={b.id} className="card mb-2 flex items-center gap-2.5">
+                <button key={b.id} onClick={() => router.push(`/admin/sessions/${b.session.id}`)}
+                  className="w-full card mb-2 flex items-center gap-2.5 text-left hover:border-yoga-border2 cursor-pointer">
                   <div className="flex-shrink-0 w-20">
                     <div className="text-sm font-bold">
                       {new Date(b.session.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })}
@@ -725,7 +737,8 @@ export default function AdminYogiDetailPage() {
                     <div className="text-sm font-semibold truncate">{b.session?.course?.name || '—'}</div>
                     <div className="text-xs text-yoga-text/45">Einzelstunde · {b.session?.duration_min || 75} min</div>
                   </div>
-                </div>
+                  <i className="ti ti-chevron-right text-sm text-yoga-text/30 flex-shrink-0" />
+                </button>
               ))}
             </>
           )

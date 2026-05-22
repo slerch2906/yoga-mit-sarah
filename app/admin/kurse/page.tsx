@@ -310,10 +310,26 @@ export default function AdminKursePage() {
     if (!courseSessions[courseId]) {
       // cancel_reason MUSS mitgeladen werden, sonst kann UI nicht zwischen
       // "Ausgeschlossen" und "Abgesagt" unterscheiden.
+      // replacement_session_id: zeigt von ABGESAGT auf neue Ersatz-Session → daraus
+      // können wir ableiten welche Sessions SELBST Ersatzstunden sind (=Ziel einer Verlinkung).
       const { data } = await supabase.from('sessions')
-        .select('id, date, time_start, is_cancelled, cancel_reason')
+        .select('id, date, time_start, is_cancelled, cancel_reason, replacement_session_id')
         .eq('course_id', courseId).order('date')
-      setCourseSessions(prev => ({ ...prev, [courseId]: data || [] }))
+      // Sessions die Ziel eines replacement-Links sind → "is_replacement"
+      const replacementTargets = new Set(
+        (data || []).filter((s: any) => s.replacement_session_id).map((s: any) => s.replacement_session_id)
+      )
+      // Plus: pro Ersatzstunde merken wir uns das Original-Datum für die UI
+      const originLookup: Record<string, any> = {}
+      for (const s of (data || []) as any[]) {
+        if (s.replacement_session_id) originLookup[s.replacement_session_id] = { date: s.date, time_start: s.time_start }
+      }
+      const enriched = (data || []).map((s: any) => ({
+        ...s,
+        is_replacement: replacementTargets.has(s.id),
+        original_session: originLookup[s.id] || null,
+      }))
+      setCourseSessions(prev => ({ ...prev, [courseId]: enriched }))
     }
     setExpandedCourse(courseId)
   }
@@ -1011,6 +1027,16 @@ export default function AdminKursePage() {
                           {new Date(s.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })}
                           {' · '}{s.time_start?.slice(0,5)} Uhr
                           {s.is_cancelled && (s.cancel_reason === 'excluded' ? ' · Ausgeschlossen' : ' · Abgesagt')}
+                          {s.is_replacement && (
+                            <span className="text-yoga-amber-text font-semibold">
+                              {' · Ersatzstunde'}
+                              {s.original_session && (
+                                <span className="text-yoga-text/55 font-normal">
+                                  {' (für '}{new Date(s.original_session.date).toLocaleDateString('de-DE', { day:'numeric', month:'short' })}{')'}
+                                </span>
+                              )}
+                            </span>
+                          )}
                         </span>
                         <i className="ti ti-chevron-right text-yoga-text/30" />
                       </button>

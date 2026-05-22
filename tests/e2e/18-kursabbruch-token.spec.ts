@@ -202,4 +202,35 @@ test.describe('Kursabbruch: Token-Reuse (atomic update)', () => {
     await db.from('sessions').delete().eq('course_id', course.courseId)
     await db.from('courses').delete().eq('id', course.courseId)
   })
+
+  // === Sarah 2026-05-22: Erstattungs-Logik mit Guthaben-Verrechnung ===
+  test.fixme('[E2E] Yogi mit Altguthaben → Admin verrechnet → Kursabbruch → Erstattung-Wahl: verrechnetes Guthaben verschwindet', async () => {
+    // Setup: Yogi hat guthaben total=2, used=0
+    // Admin addet zu Kurs mit 1 Session → guthaben.used=1
+    // Admin sagt Kurs ab → Trigger reset guthaben.used=0 (auto-refund) → course_cancellation_responses.guthaben_breakdown=[{credit_id, count:1}]
+    // Yogi klickt "Erstattung" → apply_cancellation_refund reduziert guthaben.total um 1 → 1/0
+    // Assert: guthaben total=1, used=0, free=1 (NICHT 2)
+    // Assert: Yogi-Email "Erstattungsanfrage bestätigt" wurde gesendet (notification_log)
+    // Assert: Admin-Email "Kursabbruch-Entscheidung" wurde gesendet
+  })
+
+  test.fixme('[E2E] Yogi mit Altguthaben + Neu-Bezahlt → Erstattung: nur Guthaben weg, Neu wird in Geld erstattet', async () => {
+    // Setup: Yogi hat guthaben=2, addet zu Kurs mit 5 Sessions → 2 mit guthaben, 3 als course-credits
+    // Cancel + Erstattung
+    // Assert: guthaben.total reduziert um 2 → guthaben.total=0
+    // Assert: course-credits gelöscht (bereits durch cancelCourse)
+    // Yogi behält NICHTS aus diesem Kurs in Form von Credits (alles via Geld-Erstattung)
+  })
+
+  test.fixme('[E2E] Yogi mit Altguthaben + Neu-Bezahlt → Guthaben behalten: kein Doppel-Count', async () => {
+    // Setup wie oben (guthaben=2, kurs 5 sessions, 2+3 split)
+    // Cancel + Guthaben behalten
+    // Auto-refund vom Trigger gibt guthaben.used von 2 auf 0 zurück (=2 frei wiederhergestellt)
+    // Neuer guthaben-Credit total=3 (=newCreditsCount, NICHT remaining_sessions=5!)
+    // Assert: Yogi hat 2 (alt) + 3 (neu) = 5 freie Credits — exakt soviel wie vor dem Kurs (Bug-Free)
+  })
+
+  test.fixme('[E2E] Yogi-Bestätigungs-Mail nach beiden Wahlen', async () => {
+    // notification_log enthält pro Wahl einen Eintrag mit type='yogi_course_cancel_choice'
+  })
 })

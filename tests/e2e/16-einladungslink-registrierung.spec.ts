@@ -85,8 +85,9 @@ test.describe('Registrierung: Token-Validierung', () => {
   test('Ungültiges Token → Fehlermeldung', async ({ page }) => {
     await page.goto('/register?token=nicht-existierendes-token-xyz')
     await page.waitForLoadState('networkidle')
+    // Sarah-Regel 2026-05-22: einheitliche Meldung "abgelaufen oder ungültig"
     await expect(
-      page.getByText(/einladungslink.*ungültig|nicht.*gültig/i)
+      page.getByText(/abgelaufen oder ungültig|einladungslink.*ungültig|nicht.*gültig/i)
     ).toBeVisible({ timeout: 10_000 })
   })
 

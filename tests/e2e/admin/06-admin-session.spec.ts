@@ -166,7 +166,9 @@ test.describe('Admin Session: Guthaben-Warnung bei Einzelstunden', () => {
     // Guthaben-Hinweis in Suchliste
     await expect(page.getByText(/guthaben.*nur für kurse/i)).toBeVisible({ timeout: 5_000 })
 
-    // Einbuchen klicken → Guthaben-Modal
+    // Confirm-Dialog akzeptieren (handleAddYogi fragt erst nach Quick-Credit)
+    page.once('dialog', d => d.accept())
+    // Einbuchen klicken → confirm akzeptiert → Quick-Credit-Modal mit Guthaben-Warnung
     await page.getByRole('button', { name: /einbuchen/i }).first().click()
     await expect(page.getByText(/nur kurs-guthaben vorhanden/i)).toBeVisible({ timeout: 5_000 })
 

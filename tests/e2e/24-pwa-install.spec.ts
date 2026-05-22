@@ -26,10 +26,12 @@ test.describe('[E2E] PWA: App-Icon + Install-Banner', () => {
     const response = await page.goto('/login')
     const html = await response!.text()
 
-    // Alte WordPress-URL darf NICHT mehr im HTML stehen
-    expect(html).not.toContain('yogamitsarah.me/wp-content/uploads/2025/09/Logo-300x300.png')
+    // Apple-touch-icon im <link rel="apple-touch-icon"> muss lokal sein,
+    // nicht eine WordPress-URL. (Body-Logos dürfen weiter WordPress nutzen —
+    // die werden für Branding-Konsistenz extern referenziert.)
+    expect(html).toMatch(/rel=["']apple-touch-icon["'][^>]*href=["']\/apple-touch-icon\.png["']/i)
 
-    // Lokale Icons müssen referenziert sein
+    // PWA-Manifest-relevante Icons müssen lokal verfügbar sein
     expect(html).toContain('/apple-touch-icon.png')
     expect(html).toContain('/logo-512.png')
     expect(html).toContain('/logo-192.png')

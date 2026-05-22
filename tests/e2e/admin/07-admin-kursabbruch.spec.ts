@@ -163,8 +163,8 @@ test.describe('Kurs abbrechen – Option 2b: Yogi wählt Erstattung', () => {
     await page.goto(`/kursabbruch/${response!.token}`)
     await page.waitForLoadState('networkidle')
 
-    // Erstattungs-Option wählen
-    await page.getByText('Geld zurück').click()
+    // Erstattungs-Option wählen (Button, nicht der Text im Hinweis)
+    await page.getByRole('button', { name: /geld zurück/i }).click()
 
     // Bestätigungsmeldung sichtbar
     await expect(page.getByText(/erstattung beantragt/i)).toBeVisible({ timeout: 10_000 })

@@ -152,7 +152,9 @@ test.describe('Guthaben: Sperrung für Einzelstunden (Admin-Session)', () => {
       page.getByText(/guthaben.*nur für kurse/i)
     ).toBeVisible({ timeout: 5_000 })
 
-    // Auf Einbuchen klicken → Quick-Credit-Modal zeigt Guthaben-Warnung
+    // Auf Einbuchen klicken → handleAddYogi fragt confirm() für Quick-Credit
+    // → Modal zeigt Guthaben-Warnung
+    page.once('dialog', d => d.accept())
     await page.getByRole('button', { name: /einbuchen/i }).first().click()
 
     await expect(

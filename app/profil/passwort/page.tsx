@@ -10,6 +10,8 @@ export default function PasswortResetPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
+  const [showPw, setShowPw] = useState(false)
+  const [showPw2, setShowPw2] = useState(false)
   const supabase = createClient()
   const router = useRouter()
 
@@ -64,16 +66,30 @@ export default function PasswortResetPage() {
           <div className="card space-y-4">
             <div>
               <label className="field-label">Neues Passwort</label>
-              <input type="password" className="field-input" value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Mindestens 8 Zeichen" />
+              <div className="relative">
+                <input type={showPw ? 'text' : 'password'} className="field-input pr-12" value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Mindestens 8 Zeichen" />
+                <button type="button" onClick={() => setShowPw(!showPw)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-yoga-text/40 hover:text-yoga-text/70 transition-colors"
+                  aria-label={showPw ? 'Passwort verbergen' : 'Passwort anzeigen'}>
+                  <i className={`ti ${showPw ? 'ti-eye-off' : 'ti-eye'} text-xl`} />
+                </button>
+              </div>
             </div>
             <div>
               <label className="field-label">Passwort bestätigen</label>
-              <input type="password" className="field-input" value={confirm}
-                onChange={e => setConfirm(e.target.value)}
-                placeholder="Passwort wiederholen"
-                onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
+              <div className="relative">
+                <input type={showPw2 ? 'text' : 'password'} className="field-input pr-12" value={confirm}
+                  onChange={e => setConfirm(e.target.value)}
+                  placeholder="Passwort wiederholen"
+                  onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
+                <button type="button" onClick={() => setShowPw2(!showPw2)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-yoga-text/40 hover:text-yoga-text/70 transition-colors"
+                  aria-label={showPw2 ? 'Passwort verbergen' : 'Passwort anzeigen'}>
+                  <i className={`ti ${showPw2 ? 'ti-eye-off' : 'ti-eye'} text-xl`} />
+                </button>
+              </div>
             </div>
             {error && <p className="text-sm text-red-500">{error}</p>}
             <button onClick={handleSubmit} disabled={loading}

@@ -131,7 +131,16 @@ export default function MeinePage() {
   // GUTHABEN / TENPACK / SINGLE: behält DB-Semantik (used aus DB-Trigger).
   function courseAggregate(courseId: string) {
     const sess = courseSessions[courseId] || []
-    const withBooking = sess.filter((s: any) => s.myBooking)
+    // Sarah 2026-05-22: Ersatzstunden ersetzen das Original — die ersetzte Session
+    // darf nicht zusätzlich gezählt werden, sonst sieht der Yogi "5/7" statt "5/6".
+    // Eine Session ist "ersetzt", wenn eine andere Session des Kurses sie als
+    // replacement_session_id referenziert.
+    const replacedIds = new Set(
+      sess.filter((s: any) => s.replacement_session_id)
+          .map((s: any) => s.replacement_session_id)
+    )
+    const effective = sess.filter((s: any) => !replacedIds.has(s.id))
+    const withBooking = effective.filter((s: any) => s.myBooking)
     const total = withBooking.length
     const used = withBooking.filter((s: any) => s.myBooking?.status === 'active').length
     return { total, used, free: Math.max(0, total - used) }

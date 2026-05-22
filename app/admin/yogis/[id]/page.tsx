@@ -52,8 +52,8 @@ export default function AdminYogiDetailPage() {
     const [{ data: y }, { data: b }, { data: c }, { data: e }, { data: courseList }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', id).single(),
       supabase.from('bookings')
-        .select('*, session:sessions(date, time_start, duration_min, course:courses(name))')
-        .eq('user_id', id).order('created_at', { ascending: false }).limit(20),
+        .select('*, session:sessions(id, date, time_start, duration_min, is_cancelled, replacement_session_id, course_id, course:courses(name))')
+        .eq('user_id', id).order('created_at', { ascending: false }),
       supabase.from('credits').select('*, course:courses(name)').eq('user_id', id).order('created_at', { ascending: false }),
       supabase.from('enrollments').select('*, course:courses(*)').eq('user_id', id),
       supabase.from('courses').select('*, sessions(date, is_cancelled, cancel_reason), enrollments(id)').eq('is_active', true).order('name'),
@@ -68,15 +68,31 @@ export default function AdminYogiDetailPage() {
   //   Hintergrund: bei Auto-Enrollment werden alle Sessions sofort gebucht, used=total.
   //   Sarahs Erwartung: free = "noch verfügbare Stunden", nicht "nicht-allokierte Credits".
   // - Tenpack/Single/Guthaben: free = total - used (allokierte Credits, DB-Semantik).
+  // Sarah 2026-05-22: Course-Credit-Anzeige konsistent zur /meine-Logik
+  // (Ersatzstunden ersetzen das Original, zählen nicht doppelt; Anzeige als
+  // "X von Y genutzt" mit "frei" = total - used).
+  function courseAggregateForCredit(c: any) {
+    // Alle Bookings dieses Course-Credits + die ihrer Sessions im selben Kurs
+    const myBookingsOfCredit = bookings.filter(b => b.credit_id === c.id)
+    // Plus: alle bookings desselben users mit derselben course_id (Ersatzstunden
+    // können einen NEUEN credit_id-Link haben oder NULL nach cancelCourse —
+    // hier wollen wir alle Bookings im Kurs sehen, die mit diesem Credit
+    // wirtschaftlich verknüpft waren).
+    const sessionsInCourse = bookings
+      .filter(b => b.session?.course_id === c.course_id)
+      .map(b => b.session).filter(Boolean)
+    const replacedIds = new Set(
+      sessionsInCourse.filter((s: any) => s.replacement_session_id)
+        .map((s: any) => s.replacement_session_id)
+    )
+    // Effektive Bookings: nur die, deren Session NICHT ersetzt wurde
+    const effective = myBookingsOfCredit.filter(b => b.session && !replacedIds.has(b.session.id))
+    const total = effective.length
+    const used = effective.filter(b => b.status === 'active').length
+    return { total, used, free: Math.max(0, total - used) }
+  }
   function computeFree(c: any) {
-    if (c.model === 'course') {
-      // WICHTIG: isStarted direkt aus lib verwenden, NICHT sessionEnded-Alias —
-      // sonst TDZ-ReferenceError (const wird weiter unten in der Komponente
-      // initialisiert, computeFree läuft aber sofort beim ersten Render).
-      return bookings.filter(b =>
-        b.credit_id === c.id && b.status === 'active' && !isStarted(b.session)
-      ).length
-    }
+    if (c.model === 'course') return courseAggregateForCredit(c).free
     return Math.max(0, c.total - c.used)
   }
   const freeCredits = credits.reduce((sum, c) => {
@@ -708,7 +724,12 @@ export default function AdminYogiDetailPage() {
                     <div className="flex items-start justify-between">
                       <div>
                         <div className="text-sm font-semibold">
-                          {free} von {c.total} Credits frei
+                          {c.model === 'course'
+                            ? (() => {
+                                const agg = courseAggregateForCredit(c)
+                                return `${agg.used} / ${agg.total} genutzt · ${agg.free} frei`
+                              })()
+                            : `${free} von ${c.total} Credits frei`}
                         </div>
                         <div className="text-xs text-yoga-text/50 mt-0.5">
                           {c.model === 'course' ? `Credits aus Kurs: ${c.course?.name || '—'}` : c.model === 'guthaben' ? 'Guthaben aus Kursabbruch' : c.model === 'single' ? 'Credits aus Punktekarte' : c.model === 'tenpack' ? 'Punktekarte' : 'Quartal'} ·

@@ -99,10 +99,15 @@ export default function KursabbruchPage() {
           <div className="card">
             <p className="text-sm text-yoga-text/60 mb-1">Kurs abgesagt:</p>
             <p className="font-bold text-base mb-4">{entry.course?.name}</p>
-            <p className="text-sm text-yoga-text/70 mb-5">
+            <p className="text-sm text-yoga-text/70 mb-3">
               Es wurden <strong>{entry.remaining_sessions} Stunden</strong> abgesagt.
               Was möchtest du?
             </p>
+            <div className="text-xs text-yoga-text/55 bg-yoga-gray border border-yoga-border rounded-yoga px-3 py-2 mb-5">
+              💡 In deiner App-Übersicht siehst du das Guthaben bereits gutgeschrieben.
+              Bei der Wahl <strong>„Geld zurück"</strong> wird es wieder reduziert,
+              dafür bekommst du den Betrag in Geld zurück.
+            </div>
 
             <div className="space-y-3">
               <button onClick={() => handleChoice('guthaben')} disabled={choosing}

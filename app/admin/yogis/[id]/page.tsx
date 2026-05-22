@@ -52,7 +52,7 @@ export default function AdminYogiDetailPage() {
     const [{ data: y }, { data: b }, { data: c }, { data: e }, { data: courseList }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', id).single(),
       supabase.from('bookings')
-        .select('*, session:sessions(id, date, time_start, duration_min, is_cancelled, replacement_session_id, course_id, course:courses(name))')
+        .select('*, session:sessions!bookings_session_id_fkey(id, date, time_start, duration_min, is_cancelled, replacement_session_id, course_id, course:courses(name))')
         .eq('user_id', id).order('created_at', { ascending: false }),
       supabase.from('credits').select('*, course:courses(name)').eq('user_id', id).order('created_at', { ascending: false }),
       supabase.from('enrollments').select('*, course:courses(*)').eq('user_id', id),

@@ -183,7 +183,7 @@ export default function SessionDetailPage() {
       // Hole alle cancelled bookings des Yogis (kursübergreifend), die mit einem
       // course-Credit verknüpft waren. Sortiert nach session.date ASC.
       const { data: cancelled } = await supabase.from('bookings')
-        .select('id, session:sessions(id, date, time_start, course:courses(name, date_end)), credit:credits(model)')
+        .select('id, session:sessions!bookings_session_id_fkey(id, date, time_start, course:courses(name, date_end)), credit:credits(model)')
         .eq('user_id', user!.id)
         .eq('status', 'cancelled')
       const cancelledCourse = ((cancelled || []) as any[])

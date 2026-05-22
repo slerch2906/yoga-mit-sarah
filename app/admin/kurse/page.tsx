@@ -360,7 +360,7 @@ export default function AdminKursePage() {
     if ((futureSessions || []).length > 0) {
       const futureSessionIds = (futureSessions || []).map((s: any) => s.id)
       const { data: dependentBookings } = await supabase.from('bookings')
-        .select('id, user_id, session:sessions(id, date, time_start, course:courses(name)), profile:profiles(email, first_name)')
+        .select('id, user_id, session:sessions!bookings_session_id_fkey(id, date, time_start, course:courses(name)), profile:profiles(email, first_name)')
         .in('origin_session_id', futureSessionIds)
         .eq('status', 'active')
       const toCancel = ((dependentBookings || []) as any[]).filter(b => b.session?.date && b.session.date >= today)

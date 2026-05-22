@@ -30,7 +30,7 @@ export default function MeinePage() {
         supabase.from('enrollments').select('*, course:courses(*)').eq('user_id', user.id),
         // Einzelstunden: nur aktive (nicht stornierte)
         supabase.from('bookings')
-          .select('*, session:sessions(*, course:courses(name))')
+          .select('*, session:sessions!bookings_session_id_fkey(*, course:courses(name))')
           .eq('user_id', user.id)
           .eq('type', 'single')
           .eq('status', 'active')

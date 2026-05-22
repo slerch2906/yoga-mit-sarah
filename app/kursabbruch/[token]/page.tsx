@@ -104,9 +104,9 @@ export default function KursabbruchPage() {
               Was möchtest du?
             </p>
             <div className="text-xs text-yoga-text/55 bg-yoga-gray border border-yoga-border rounded-yoga px-3 py-2 mb-5">
-              💡 In deiner App-Übersicht siehst du das Guthaben bereits gutgeschrieben.
-              Bei der Wahl <strong>„Geld zurück"</strong> wird es wieder reduziert,
-              dafür bekommst du den Betrag in Geld zurück.
+              💡 Du siehst <strong>{entry.remaining_sessions} Credits</strong> bereits
+              als Guthaben in deiner Übersicht. Bei der Wahl <strong>„Geld zurück"</strong>
+              werden sie wieder entfernt — dafür bekommst du den Betrag in Geld zurück.
             </div>
 
             <div className="space-y-3">

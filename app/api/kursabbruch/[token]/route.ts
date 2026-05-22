@@ -52,30 +52,22 @@ export async function POST(
   const totalRefundCredits = updated.remaining_sessions ?? (guthabenVerrechnet + newCreditsCount)
 
   // === Wirtschaftslogik je nach Wahl ===
+  // Provisorisches Guthaben wurde schon beim Cancel angelegt (sichtbar während Wahlfrist).
+  // Hier nur noch je nach Choice das Endergebnis herstellen.
   if (choice === 'erstattung') {
-    // Verrechnetes Altguthaben dauerhaft entfernen (anti-Trigger-Refund).
-    // Der Trigger hat es beim Session-Cancel auto-refundet — wir reduzieren credits.total
-    // um den verrechneten Anteil, damit der Yogi nur sein ursprünglich freies Guthaben behält.
-    // Wert wird stattdessen in Geld erstattet.
+    // 1) Provisorisches Guthaben (=neu bezahlte Anteile) wieder löschen — Yogi
+    //    bekommt diesen Wert in Geld erstattet.
+    if (updated.provisional_credit_id) {
+      await supabase.from('credits').delete().eq('id', updated.provisional_credit_id)
+    }
+    // 2) Altguthaben dauerhaft reduzieren (anti-Trigger-Refund). Der Trigger hat
+    //    es beim Session-Cancel auto-refundet — wir reduzieren credits.total um den
+    //    verrechneten Anteil, damit der Yogi nur sein ursprünglich freies Guthaben behält.
     const { error: rpcErr } = await supabase.rpc('apply_cancellation_refund', { p_response_id: updated.id })
     if (rpcErr) console.error('apply_cancellation_refund:', rpcErr)
-  } else if (choice === 'guthaben') {
-    // Nur die NEU bezahlten Stunden als neues Guthaben gutschreiben.
-    // Das alte verrechnete Guthaben ist vom Trigger schon freigegeben — das ist genau richtig
-    // (der Yogi behält den Gegenwert, den er vor dem Kurs schon hatte).
-    if (newCreditsCount > 0) {
-      const expiry = new Date()
-      expiry.setFullYear(expiry.getFullYear() + 2)
-      await supabase.from('credits').insert({
-        user_id: updated.user_id,
-        course_id: null,
-        model: 'guthaben',
-        total: newCreditsCount,
-        used: 0,
-        expires_at: expiry.toISOString(),
-      })
-    }
   }
+  // choice === 'guthaben': nichts mehr tun. Der provisorische Credit bleibt als finale
+  // Gutschrift, und das auto-refundete Altguthaben bleibt frei. Yogi behält den vollen Wert.
 
   // Audit-Log
   try {

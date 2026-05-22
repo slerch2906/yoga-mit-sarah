@@ -408,6 +408,26 @@ export default function AdminKursePage() {
       // Dummy: fertig, kein Token/Email
       if (prof.is_dummy) continue
 
+      // Provisorisches Guthaben für die "neu bezahlten" Anteile — wird beim Cancel
+      // direkt sichtbar in /meine, damit Yogi seinen vollen Anspruch sieht (alle 4
+      // abgesagten Stunden statt nur das auto-refundete Altguthaben). Bei Choice
+      // "Erstattung" wird dieser Credit wieder gelöscht; bei Choice "Guthaben"
+      // bleibt er als finale Gutschrift.
+      let provisionalCreditId: string | null = null
+      if (newCreditsCount > 0) {
+        const expiry2y = new Date()
+        expiry2y.setFullYear(expiry2y.getFullYear() + 2)
+        const { data: provCred } = await supabase.from('credits').insert({
+          user_id: prof.id,
+          course_id: null,
+          model: 'guthaben',
+          total: newCreditsCount,
+          used: 0,
+          expires_at: expiry2y.toISOString(),
+        }).select('id').single()
+        provisionalCreditId = provCred?.id || null
+      }
+
       // Token anlegen + Snapshot speichern
       const token = crypto.randomUUID().replace(/-/g, '')
       await supabase.from('course_cancellation_responses').insert({
@@ -418,6 +438,7 @@ export default function AdminKursePage() {
         remaining_sessions: remainingCount,
         guthaben_breakdown: guthabenBreakdown,
         new_credits_count: newCreditsCount,
+        provisional_credit_id: provisionalCreditId,
       })
 
       // Email senden (via lib/email.ts mit korrektem x-function-secret Header)

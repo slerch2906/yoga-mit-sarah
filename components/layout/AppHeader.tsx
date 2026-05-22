@@ -11,11 +11,16 @@ interface AppHeaderProps {
 export default function AppHeader({ title, subtitle, rightElement, isAdmin, showBack }: AppHeaderProps) {
   return (
     <div className="app-header sticky top-0 z-10 relative overflow-hidden">
-      {/* Background-Layer mit Yoga-Foto, 50% Opacity, Logo + Text liegen darüber */}
+      {/* Foto-Layer (volle Deckkraft) + Farbschleier #cfcbca @ 70% darüber. Text/Logo via z-10. */}
       <div
         aria-hidden="true"
         className="absolute inset-0 bg-cover bg-center pointer-events-none"
-        style={{ backgroundImage: "url('/header-bg.jpg?v=2')", opacity: 0.4 }}
+        style={{ backgroundImage: "url('/header-bg.jpg?v=2')" }}
+      />
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 pointer-events-none"
+        style={{ backgroundColor: '#cfcbca', opacity: 0.7 }}
       />
       {rightElement}
       {isAdmin && (

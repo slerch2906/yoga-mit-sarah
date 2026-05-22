@@ -573,10 +573,18 @@ export default function AdminDashboard() {
         {sessions.length === 0 ? (
           <p className="text-sm text-yoga-text/40 text-center py-4">Keine Stunden diese Woche</p>
         ) : sessions.map(s => {
-          const isPast = new Date(`${s.date}T${s.time_start}`) < new Date()
+          const now = new Date()
+          const isPast = new Date(`${s.date}T${s.time_start}`) < now
+          // "Heute" = die Stunde findet am heutigen Kalendertag statt (auch nach Start, bis Mitternacht)
+          const sDate = new Date(`${s.date}T00:00:00`)
+          const isToday = sDate.getFullYear() === now.getFullYear()
+            && sDate.getMonth() === now.getMonth()
+            && sDate.getDate() === now.getDate()
+          // Highlight nur für heute UND nicht vorbei UND nicht abgesagt
+          const highlight = isToday && !isPast && !s.is_cancelled
           return (
             <button key={s.id} onClick={() => loadSessionDetail(s)}
-              className={`w-full card mb-3 text-left hover:border-yoga-border2 ${s.is_cancelled || isPast ? 'opacity-40' : ''}`}>
+              className={`w-full card mb-3 text-left hover:border-yoga-border2 ${s.is_cancelled || isPast ? 'opacity-40' : ''} ${highlight ? 'border-2 border-yoga-text' : ''}`}>
               <div className="flex items-start justify-between mb-2">
                 <div>
                   <div className="text-sm font-bold">{s.course?.name}</div>

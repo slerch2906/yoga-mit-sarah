@@ -23,6 +23,12 @@ function addDays(date: Date, days: number) {
 function formatDate(date: Date) {
   return `${WEEKDAYS[date.getDay()]}, ${date.getDate()}. ${MONTHS[date.getMonth()]}`
 }
+function isToday(date: Date): boolean {
+  const t = new Date()
+  return date.getFullYear() === t.getFullYear()
+    && date.getMonth() === t.getMonth()
+    && date.getDate() === t.getDate()
+}
 
 function formatWeekRange(start: Date): string {
   const end = new Date(start)
@@ -172,9 +178,21 @@ export default function KursePage() {
             <i className="ti ti-moon text-3xl block mb-2" />
             <p className="text-sm">Keine Stunden diese Woche</p>
           </div>
-        ) : Object.entries(byDay).map(([date, daySessions]) => (
+        ) : Object.entries(byDay).map(([date, daySessions]) => {
+          const dObj = new Date(date)
+          const today = isToday(dObj)
+          return (
           <div key={date} className="mb-4">
-            <p className="text-xs font-bold text-yoga-text/70 mb-1 mt-3 uppercase tracking-wide">{formatDate(new Date(date))}</p>
+            <p className="text-xs font-bold mb-1 mt-3 uppercase tracking-wide">
+              {today ? (
+                <>
+                  <span className="text-yoga-text">HEUTE</span>
+                  <span className="text-yoga-text/50"> · {formatDate(dObj)}</span>
+                </>
+              ) : (
+                <span className="text-yoga-text/70">{formatDate(dObj)}</span>
+              )}
+            </p>
             {daySessions.map(s => (
               <button key={s.id}
                 onClick={() => router.push(`/kurse/${s.id}`)}
@@ -195,7 +213,8 @@ export default function KursePage() {
               </button>
             ))}
           </div>
-        ))}
+          )
+        })}
       </div>
       <BottomNav isAdmin={profile?.is_admin} />
     </div>

@@ -283,10 +283,12 @@ export default function SessionDetailPage() {
     const { data: prof } = await supabase.from('profiles').select('email, first_name, notify_waitlist_joined').eq('id', user!.id).single()
 
     // Atomic Insert via SECURITY DEFINER RPC (verhindert dass Yogi alle waitlist-Counts lesen muss)
+    // RPC gibt unsubscribe_token zurück, damit Email-Link den Yogi ohne Login austragen kann.
     const { data: result } = await supabase.rpc('join_waitlist', {
       p_session_id: id, p_type: type,
     })
     const position = result?.position ?? 0
+    const unsubscribeToken = result?.unsubscribe_token
 
     // Wartelisten-Bestätigung nur wenn Yogi sie aktiviert hat (Default: ja). Nur waitlist (nicht notify).
     if (type === 'waitlist' && prof && prof.notify_waitlist_joined !== false) {
@@ -298,6 +300,7 @@ export default function SessionDetailPage() {
           date: session?.date || '',
           timeStart: session?.time_start || '',
           position,
+          unsubscribeToken,
         })
       } catch(e) {}
     }

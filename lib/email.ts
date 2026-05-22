@@ -30,7 +30,7 @@ export const Email = {
   bookingCancelled: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; creditReturned: boolean }) =>
     sendEmail('booking_cancelled', data),
 
-  waitlistJoined: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; position: number }) =>
+  waitlistJoined: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; position: number; unsubscribeToken?: string }) =>
     sendEmail('waitlist_joined', data),
 
   waitlistPromoted: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string }) =>

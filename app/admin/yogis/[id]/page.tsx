@@ -72,22 +72,20 @@ export default function AdminYogiDetailPage() {
   // (Ersatzstunden ersetzen das Original, zählen nicht doppelt; Anzeige als
   // "X von Y genutzt" mit "frei" = total - used).
   function courseAggregateForCredit(c: any) {
-    // Alle Bookings dieses Course-Credits + die ihrer Sessions im selben Kurs
-    const myBookingsOfCredit = bookings.filter(b => b.credit_id === c.id)
-    // Plus: alle bookings desselben users mit derselben course_id (Ersatzstunden
-    // können einen NEUEN credit_id-Link haben oder NULL nach cancelCourse —
-    // hier wollen wir alle Bookings im Kurs sehen, die mit diesem Credit
-    // wirtschaftlich verknüpft waren).
-    const sessionsInCourse = bookings
-      .filter(b => b.session?.course_id === c.course_id)
-      .map(b => b.session).filter(Boolean)
+    // Sarah 2026-05-22: Zähle NUR Bookings die a) auf diesen Credit zeigen UND
+    // b) zu einer Session DIESES Kurses gehören. Sonst können DB-Inkonsistenzen
+    // (z.B. eine Booking auf einen fremden Kurs mit altem credit_id-Link) die
+    // Zahl fälschlich erhöhen.
+    const myBookingsOfCredit = bookings.filter(b =>
+      b.credit_id === c.id && b.session?.course_id === c.course_id
+    )
+    const sessionsInCourse = myBookingsOfCredit.map(b => b.session).filter(Boolean)
     // Konvention: ABGESAGTE Session hat replacement_session_id = <Ersatz-id>.
     // Wir filtern die abgesagten Originale raus, sodass die Ersatzstunden zählen.
     const replacedIds = new Set(
       sessionsInCourse.filter((s: any) => s.replacement_session_id)
         .map((s: any) => s.id)
     )
-    // Effektive Bookings: nur die, deren Session NICHT ersetzt wurde
     const effective = myBookingsOfCredit.filter(b => b.session && !replacedIds.has(b.session.id))
     const total = effective.length
     const used = effective.filter(b => b.status === 'active').length

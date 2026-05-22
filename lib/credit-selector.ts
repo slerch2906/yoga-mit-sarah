@@ -41,16 +41,44 @@ export async function selectCreditForBooking(
   sessionTimeStart: string,      // HH:MM[:SS]
 ): Promise<CreditPickResult> {
   const sessionDt = new Date(`${sessionDate}T${sessionTimeStart}`).getTime()
+  const nowIso = new Date().toISOString()
+  const sessionIso = new Date(sessionDt).toISOString()
 
-  // Alle gültigen Credits laden
+  // Sarah-Regel 2026-05-22: Credit muss minutengenau bis zum SESSION-Zeitpunkt
+  // gültig sein, nicht nur bis jetzt. Sonst könnte ein Yogi heute eine Stunde
+  // in 3 Wochen buchen mit einem Credit, der in 5 Tagen abläuft → Buchung ohne
+  // Deckung. Wir laden also nur Credits deren expires_at > sessionDt.
   const { data: allCredits } = await supabase.from('credits')
     .select('*').eq('user_id', userId)
-    .gt('expires_at', new Date().toISOString())
+    .gt('expires_at', sessionIso)
+
+  // Plus separat: prüfen ob der Yogi überhaupt aktuell GÜLTIGE Credits hat
+  // (um zwischen "kein Credit" vs. "Credit läuft vorher ab" unterscheiden zu können)
+  const { data: currentCredits } = await supabase.from('credits')
+    .select('id, model, total, used, expires_at').eq('user_id', userId)
+    .gt('expires_at', nowIso)
 
   const candidates = (allCredits || []).filter((c: any) =>
     c.total > c.used && c.model !== 'guthaben'
   )
   if (candidates.length === 0) {
+    // Spezifischere Meldung: Credit existiert, läuft aber vor der Session ab
+    const expiringSoon = (currentCredits || []).filter((c: any) =>
+      c.total > c.used && c.model !== 'guthaben'
+    )
+    if (expiringSoon.length > 0) {
+      // Frühestes Ablaufdatum unter den freien Credits
+      const earliest = expiringSoon
+        .map((c: any) => new Date(c.expires_at).getTime())
+        .sort((a, b) => a - b)[0]
+      const dStr = new Date(earliest).toLocaleDateString('de-DE', {
+        day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Berlin'
+      })
+      return {
+        ok: false, reason: 'no_credit',
+        message: `Dein Credit läuft am ${dStr} ab und ist für diese Stunde nicht mehr gültig.`,
+      }
+    }
     return { ok: false, reason: 'no_credit', message: 'Du hast keinen freien Credit für diese Buchung.' }
   }
 

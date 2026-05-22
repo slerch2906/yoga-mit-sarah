@@ -12,6 +12,11 @@ export default function MeinePage() {
   const [profile, setProfile] = useState<any>(null)
   const [enrollments, setEnrollments] = useState<any[]>([])
   const [singleBookings, setSingleBookings] = useState<any[]>([])
+  // Sarah 2026-05-22: Vorhol-/Nachhol-Buchungen die in einer SESSION eines anderen
+  // Kurses landen (= Course-Credit aus Kurs A wird für Drop-In in Kurs B benutzt).
+  // Diese fallen sonst durch alle Filter: nicht type='single' und session.course_id
+  // ist nicht im enrolled-Set. → Separate Sektion.
+  const [replacementBookings, setReplacementBookings] = useState<any[]>([])
   const [courseSessions, setCourseSessions] = useState<Record<string, any[]>>({})
   const [credits, setCredits] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -49,6 +54,21 @@ export default function MeinePage() {
       setEnrollments(activeEnrols)
       setSingleBookings(singles || [])
       setCredits(crds || [])
+
+      // Vorhol-/Nachhol-Buchungen (cross-course): type='course' mit origin_session_id,
+      // deren Session NICHT im enrolled-Kurs liegt. Diese fallen sonst aus der Anzeige.
+      const enrolledCourseIds = new Set((enrols || []).map((e: any) => e.course_id))
+      const { data: replacements } = await supabase.from('bookings')
+        .select('*, session:sessions!bookings_session_id_fkey(*, course:courses(name)), origin:sessions!bookings_origin_session_id_fkey(date, time_start, course:courses(name))')
+        .eq('user_id', user.id)
+        .eq('type', 'course')
+        .eq('status', 'active')
+        .not('origin_session_id', 'is', null)
+      const crossCourseReplacements = (replacements || []).filter((b: any) => {
+        const cid = b.session?.course_id
+        return cid && !enrolledCourseIds.has(cid)
+      })
+      setReplacementBookings(crossCourseReplacements)
 
       if (enrols && enrols.length > 0) {
         const sessionsMap: Record<string, any[]> = {}
@@ -322,7 +342,43 @@ export default function MeinePage() {
           )
         })()}
 
-        {enrollments.length === 0 && singleBookings.length === 0 && (
+        {/* Vorhol-/Nachhol-Stunden mit Course-Credit aus anderem Kurs.
+            Z.B. Yogi hat Stunde im Kurs A abgesagt und holt sie in Kurs B nach. */}
+        {replacementBookings.length > 0 && (
+          <div className="mb-6">
+            <p className="section-label">Vorhol-/Nachhol-Stunden</p>
+            {replacementBookings.map(b => {
+              const originDate = b.origin?.date
+              const originTime = b.origin?.time_start
+              const originStr = originDate
+                ? new Date(`${originDate}T12:00:00Z`).toLocaleDateString('de-DE', {
+                    day:'numeric', month:'short', year:'numeric', timeZone:'Europe/Berlin'
+                  }) + (originTime ? ` · ${originTime.slice(0,5)} Uhr` : '')
+                : null
+              return (
+                <button key={b.id} onClick={() => router.push(`/kurse/${b.session?.id}`)}
+                  className="w-full card flex items-center gap-2.5 mb-1.5 text-left border-l-4 border-l-yoga-amber-text/40">
+                  <div className="flex-shrink-0 w-20">
+                    <div className="text-sm font-bold">{new Date(b.session?.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })}</div>
+                    <div className="text-xs text-yoga-text/50">{b.session?.time_start?.slice(0,5)} Uhr</div>
+                  </div>
+                  <div className="w-px h-6 bg-yoga-border2 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold truncate">{b.session?.course?.name}</div>
+                    {originStr && (
+                      <div className="text-xs text-yoga-amber-text">Ersatz für {originStr}</div>
+                    )}
+                  </div>
+                  {new Date(`${b.session?.date}T${b.session?.time_start}`) < new Date()
+                    ? <span className="badge badge-done">Teilgenommen </span>
+                    : <span className="badge badge-enrolled">Gebucht</span>}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {enrollments.length === 0 && singleBookings.length === 0 && replacementBookings.length === 0 && (
           <div className="text-center py-12 text-yoga-text/40">
             <i className="ti ti-heart text-3xl block mb-3" />
             <p className="text-sm">Noch keine Buchungen</p>

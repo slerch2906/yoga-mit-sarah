@@ -623,11 +623,18 @@ export default function AdminYogiDetailPage() {
           </div>
         )}
 
-        {/* Eingebuchte Kurse */}
-        {enrollments.length > 0 && (
+        {/* Eingebuchte Kurse — NUR aktive (nicht archivierte/abgesagte) Kurse.
+            Archivierte Kurse verschwinden hier; ihre Credits bleiben aber im
+            Credits-Block sichtbar bis sie ablaufen. */}
+        {(() => {
+          const activeEnrollments = enrollments.filter((e: any) =>
+            e.course?.is_active !== false && e.course?.is_cancelled !== true
+          )
+          if (activeEnrollments.length === 0) return null
+          return (
           <>
             <p className="section-label">Eingebuchte Kurse</p>
-            {enrollments.map(e => {
+            {activeEnrollments.map(e => {
               const ds = e.course?.date_start ? new Date(e.course.date_start) : null
               const de = e.course?.date_end ? new Date(e.course.date_end) : null
               const sameYear = ds && de && ds.getFullYear() === de.getFullYear()
@@ -694,7 +701,8 @@ export default function AdminYogiDetailPage() {
               )
             })}
           </>
-        )}
+          )
+        })()}
 
         {/* Eingebuchte Einzelstunden — alle zukünftigen active type='single' bookings.
             Sarah-Wunsch 2026-05-22: Admin braucht den Überblick auch wenn Yogi nicht

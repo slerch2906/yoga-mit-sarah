@@ -15,14 +15,36 @@ export default function PasswortResetPage() {
   const supabase = createClient()
   const router = useRouter()
 
-  // Supabase setzt den Access-Token via URL-Fragment beim Redirect
+  // Sarah 2026-05-22: @supabase/ssr 0.3.x nutzt PKCE-Flow. Recovery-Link redirected
+  // mit ?code=<auth_code> — den müssen wir explizit gegen eine Session tauschen,
+  // sonst bleibt der User unauthenticated und updateUser failed mit "Session abgelaufen".
+  // Eingeloggte User (regulärer Passwort-Ändern-Pfad) haben kein ?code — dort wird der
+  // Exchange übersprungen und die bestehende Session genutzt.
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
+    let cancelled = false
+    async function exchangeIfRecovery() {
+      if (typeof window === 'undefined') return
+      const url = new URL(window.location.href)
+      const code = url.searchParams.get('code')
+      if (!code) return
+      const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code)
+      if (cancelled) return
+      if (exchangeErr) {
+        setError('Der Reset-Link ist ungültig oder abgelaufen. Bitte fordere einen neuen an.')
+        return
+      }
+      // ?code aus URL entfernen damit Reload nicht erneut tauscht (Token ist single-use)
+      url.searchParams.delete('code')
+      window.history.replaceState(null, '', url.pathname + (url.search ? url.search : '') + url.hash)
+    }
+    exchangeIfRecovery()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
-        // User ist jetzt authenticated via recovery token - ok
+        // User ist jetzt authenticated via recovery — der Exchange oben hat schon geklappt
       }
     })
-    return () => subscription.unsubscribe()
+    return () => { cancelled = true; subscription.unsubscribe() }
   }, [])
 
   async function handleSubmit() {

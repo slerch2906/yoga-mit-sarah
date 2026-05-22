@@ -611,9 +611,11 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              <button onClick={() => setShowCancelForm(true)} className="btn-danger mt-4">
-                <i className="ti ti-calendar-x mr-1" /> Stunde absagen
-              </button>
+              {!selectedSession.is_cancelled && (
+                <button onClick={() => setShowCancelForm(true)} className="btn-danger mt-4">
+                  <i className="ti ti-calendar-x mr-1" /> Stunde absagen
+                </button>
+              )}
             </div>
           </div>
         )}

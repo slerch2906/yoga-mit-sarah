@@ -63,15 +63,11 @@ export default function SessionDetailPage() {
     setMyWaitlist(myWait)
     setFreeSpots(((sess as any)?.course?.max_spots || 0) - (bookingCount || 0))
 
-    // Freie Credits berechnen für DIESE Session:
-    // - Guthaben (aus Kursabbruch) ist nur für neue Kurse, nicht für Einzelstunden
-    // - Course-Credits sind NUR für den eigenen Kurs gültig (nicht für Drop-In in fremde Kurse!)
-    const sessCourseId = (sess as any)?.course_id
-    const available = (allCredits || []).filter(c =>
-      c.total > c.used
-      && c.model !== 'guthaben'
-      && (c.model !== 'course' || c.course_id === sessCourseId)
-    )
+    // Freie Credits berechnen: Guthaben (aus Kursabbruch) ist NUR für neue Kurse,
+    // nicht für Einzelstunden. Alle anderen Credit-Modelle (course/single/tenpack)
+    // sind universell einlösbar — auch ein Course-Credit kann für Drop-In in eine
+    // fremde Stunde verwendet werden (Sarah-Regel 2026-05-22).
+    const available = (allCredits || []).filter(c => c.total > c.used && c.model !== 'guthaben')
     const totalFree = available.reduce((sum, c) => sum + (c.total - c.used), 0)
     setFreeCredits(totalFree)
     const guthabenOnly = totalFree === 0 && (allCredits || []).some(c => c.model === 'guthaben' && c.total > c.used)

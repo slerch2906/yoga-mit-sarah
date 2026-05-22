@@ -71,30 +71,11 @@ export default function AdminYogiDetailPage() {
   // Sarah 2026-05-22: Course-Credit-Anzeige konsistent zur /meine-Logik
   // (Ersatzstunden ersetzen das Original, zählen nicht doppelt; Anzeige als
   // "X von Y genutzt" mit "frei" = total - used).
-  function courseAggregateForCredit(c: any) {
-    // Sarah 2026-05-22: Zähle NUR Bookings die a) auf diesen Credit zeigen UND
-    // b) zu einer Session DIESES Kurses gehören. Sonst können DB-Inkonsistenzen
-    // (z.B. eine Booking auf einen fremden Kurs mit altem credit_id-Link) die
-    // Zahl fälschlich erhöhen.
-    const myBookingsOfCredit = bookings.filter(b =>
-      b.credit_id === c.id && b.session?.course_id === c.course_id
-    )
-    const sessionsInCourse = myBookingsOfCredit.map(b => b.session).filter(Boolean)
-    // Konvention: ABGESAGTE Session hat replacement_session_id = <Ersatz-id>.
-    // Wir filtern die abgesagten Originale raus, sodass die Ersatzstunden zählen.
-    const replacedIds = new Set(
-      sessionsInCourse.filter((s: any) => s.replacement_session_id)
-        .map((s: any) => s.id)
-    )
-    const effective = myBookingsOfCredit.filter(b => b.session && !replacedIds.has(b.session.id))
-    const total = effective.length
-    const used = effective.filter(b => b.status === 'active').length
-    return { total, used, free: Math.max(0, total - used) }
-  }
-  function computeFree(c: any) {
-    if (c.model === 'course') return courseAggregateForCredit(c).free
-    return Math.max(0, c.total - c.used)
-  }
+  // Sarah-Regel 2026-05-22: Anzeige folgt direkt der DB-Wahrheit (credit.total/used).
+  // Der DB-Trigger zählt korrekt: aktive Bookings (egal in welchem Kurs der Yogi
+  // den Credit einlöst — auch für Drop-Ins). Cancelled Sessions und cancelled
+  // Bookings sind automatisch raus.
+  function computeFree(c: any) { return Math.max(0, c.total - c.used) }
   const freeCredits = credits.reduce((sum, c) => {
     if (new Date(c.expires_at) > new Date()) return sum + computeFree(c)
     return sum
@@ -746,10 +727,7 @@ export default function AdminYogiDetailPage() {
                       <div>
                         <div className="text-sm font-semibold">
                           {c.model === 'course'
-                            ? (() => {
-                                const agg = courseAggregateForCredit(c)
-                                return `${agg.used} / ${agg.total} genutzt · ${agg.free} frei`
-                              })()
+                            ? `${c.used} / ${c.total} genutzt · ${Math.max(0, c.total - c.used)} frei`
                             : `${free} von ${c.total} Credits frei`}
                         </div>
                         <div className="text-xs text-yoga-text/50 mt-0.5">

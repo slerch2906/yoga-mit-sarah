@@ -129,34 +129,15 @@ export default function MeinePage() {
   //             (Credit ggf. refundable bzw. später wieder buchbar)
   //
   // GUTHABEN / TENPACK / SINGLE: behält DB-Semantik (used aus DB-Trigger).
-  function courseAggregate(courseId: string) {
-    const sess = courseSessions[courseId] || []
-    // Sarah 2026-05-22: Konvention — eine ABGESAGTE Session bekommt
-    // replacement_session_id = <id der ERSATZSTUNDE> (siehe admin/dashboard
-    // cancelSession-Code). Wir wollen also die abgesagten Originale
-    // rausfiltern und die Ersatzstunden zählen lassen.
-    const replacedIds = new Set(
-      sess.filter((s: any) => s.replacement_session_id)
-          .map((s: any) => s.id)
-    )
-    const effective = sess.filter((s: any) => !replacedIds.has(s.id))
-    const withBooking = effective.filter((s: any) => s.myBooking)
-    const total = withBooking.length
-    const used = withBooking.filter((s: any) => s.myBooking?.status === 'active').length
-    return { total, used, free: Math.max(0, total - used) }
-  }
-  function computeUsedDisplay(c: any) {
-    if (c.model !== 'course') return c.used
-    return courseAggregate(c.course_id).used
-  }
-  function computeTotalDisplay(c: any) {
-    if (c.model !== 'course') return c.total
-    return courseAggregate(c.course_id).total
-  }
-  function computeFreeMeine(c: any) {
-    if (c.model !== 'course') return Math.max(0, c.total - c.used)
-    return courseAggregate(c.course_id).free
-  }
+  // Sarah-Regel 2026-05-22: Anzeige folgt direkt der DB-Wahrheit (credit.total/used).
+  // Der DB-Trigger pflegt credit.used korrekt — inkl. Drop-Ins in fremde Stunden,
+  // Ersatzstunden (cancelled sessions zählen nicht), und cancelled bookings.
+  // Damit ist die /meine-Anzeige immer konsistent mit dem tatsächlichen
+  // Credit-Stand: wenn ein Drop-In den Credit aufzehrt, sieht der Yogi 1 frei
+  // weniger.
+  function computeUsedDisplay(c: any) { return c.used }
+  function computeTotalDisplay(c: any) { return c.total }
+  function computeFreeMeine(c: any) { return Math.max(0, c.total - c.used) }
   // Anzeige-Filter: Guthaben/Tenpack/Single mit 0 freien Credits ausblenden
   // (sind komplett aufgebraucht und liefern dem Yogi keine Info mehr).
   // Course-Credits IMMER zeigen (zeigen Kursfortschritt + Verfallsdatum).

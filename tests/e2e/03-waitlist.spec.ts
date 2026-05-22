@@ -99,6 +99,25 @@ test.describe('Warteliste Benachrichtigung (Yogi2)', () => {
   })
 })
 
+// --- Wartelisten-Austrag via Email-Token (Sarah 2026-05-22) ---
+test.describe('Warteliste-Austrag via Email-Link', () => {
+  test.fixme('[E2E] Token-Link trägt aus + zeigt Bestätigung mit Kursname/Datum', async () => {
+    // 1) Yogi auf waitlist setzen via RPC join_waitlist
+    // 2) unsubscribe_token aus DB lesen
+    // 3) /warteliste/austragen?token=<token> (unangemeldet) öffnen
+    // 4) Erwartet: H2 "Von der Warteliste ausgetragen" + Kursname + Datum sichtbar
+    // 5) DB-Check: waitlist-Row gelöscht
+  })
+
+  test.fixme('[E2E] Zweiter Klick auf denselben Link → "Bereits ausgetragen"', async () => {
+    // Idempotenz: nach erstem Klick zeigt Page "Bereits ausgetragen", kein Crash, kein 500.
+  })
+
+  test.fixme('[E2E] Ungültiger / random Token → "Link ungültig"', async () => {
+    // /warteliste/austragen?token=<random-uuid> → invalid-State
+  })
+})
+
 // --- Warteliste hat Vorrang vor Benachrichtigung ---
 test.describe('Warteliste Priorität (Yogi1)', () => {
   test.use({ storageState: 'tests/.auth/yogi1.json' })

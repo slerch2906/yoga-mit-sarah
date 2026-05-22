@@ -96,12 +96,28 @@ export default function KursePage() {
 
     if (error) { console.error('Sessions:', error); setLoading(false); return }
 
+    // Ersatzstunden-Mapping: welche der sichtbaren Sessions sind selbst Ersatzstunden
+    // (= eine andere, abgesagte Session zeigt mit replacement_session_id auf sie).
+    const visibleIds = (data || []).map((s: any) => s.id)
+    let originMap: Record<string, any> = {}
+    if (visibleIds.length > 0) {
+      const { data: origins } = await supabase
+        .from('sessions')
+        .select('id, date, time_start, replacement_session_id')
+        .in('replacement_session_id', visibleIds)
+      for (const o of (origins || []) as any[]) {
+        if (o.replacement_session_id) originMap[o.replacement_session_id] = o
+      }
+    }
+
     const now = new Date()
     const enriched = (data || []).map((s: any) => ({
       ...s,
       booking_count: s.bookings.filter((b: any) => b.status === 'active').length,
       my_booking: s.bookings.find((b: any) => b.user_id === userId && b.status === 'active') || null,
       is_past: new Date(`${s.date}T${s.time_start}`) < now,
+      is_replacement: !!originMap[s.id],
+      original_session: originMap[s.id] || null,
     }))
     setSessions(enriched)
     setLoading(false)
@@ -207,7 +223,17 @@ export default function KursePage() {
                 </div>
                 <div className="w-px h-8 bg-yoga-border2 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold truncate">{s.course?.name}</div>
+                  <div className="text-sm font-semibold truncate">
+                    {s.course?.name}
+                    {s.is_replacement && (
+                      <span className="text-yoga-amber-text font-semibold"> · Ersatzstunde</span>
+                    )}
+                  </div>
+                  {s.is_replacement && s.original_session && (
+                    <div className="text-xs text-yoga-amber-text mt-0.5">
+                      für {new Date(s.original_session.date).toLocaleDateString('de-DE', { day:'numeric', month:'short' })} · {s.original_session.time_start?.slice(0,5)} Uhr
+                    </div>
+                  )}
                 </div>
                 {getBadge(s)}
               </button>

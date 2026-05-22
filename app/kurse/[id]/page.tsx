@@ -45,6 +45,8 @@ export default function SessionDetailPage() {
     ])
 
     // Replacement-Session separat laden (Self-Join via PostgREST war fehlerhaft → 400)
+    // 1) Wenn DIESE Session abgesagt wurde und auf einen Ersatz zeigt → "replacement"
+    // 2) Wenn eine andere (abgesagte) Session auf DIESE zeigt → "origin" (=> ich bin Ersatzstunde)
     let replacement: any = null
     if ((sess as any)?.replacement_session_id) {
       const { data: rep } = await supabase.from('sessions')
@@ -52,13 +54,20 @@ export default function SessionDetailPage() {
         .eq('id', (sess as any).replacement_session_id).maybeSingle()
       replacement = rep
     }
+    let origin: any = null
+    if (sess?.id) {
+      const { data: orig } = await supabase.from('sessions')
+        .select('id, date, time_start')
+        .eq('replacement_session_id', sess.id).maybeSingle()
+      origin = orig
+    }
 
     const { count: bookingCount } = await supabase
       .from('bookings').select('*', { count: 'exact', head: true })
       .eq('session_id', id).eq('status', 'active')
 
     setProfile(prof)
-    setSession(sess ? { ...sess, replacement } : sess)
+    setSession(sess ? { ...sess, replacement, origin } : sess)
     setMyBooking(myBook)
     setMyWaitlist(myWait)
     setFreeSpots(((sess as any)?.course?.max_spots || 0) - (bookingCount || 0))
@@ -342,10 +351,27 @@ export default function SessionDetailPage() {
           className="flex items-center gap-1 text-sm text-yoga-text/60 mb-2.5 hover:opacity-80">
           <i className="ti ti-arrow-left" /> Zurück
         </button>
-        <h2 className="text-lg font-bold mb-1">{course?.name}</h2>
+        <h2 className="text-lg font-bold mb-1">
+          {course?.name}
+          {(session as any).origin && (
+            <span className="text-yoga-amber-text font-semibold"> · Ersatzstunde</span>
+          )}
+        </h2>
         <p className="text-sm text-yoga-text/55 mb-2">
           {new Date(session.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · {session.time_start?.slice(0,5)} Uhr · {session.duration_min} min
         </p>
+        {(session as any).origin && (
+          <div className="bg-yoga-amber-bg/60 border border-yoga-amber-text/20 rounded-yoga px-3 py-2 mb-2 flex items-center gap-1.5 text-sm text-yoga-amber-text">
+            <i className="ti ti-arrow-back-up text-base" />
+            <span>
+              Ersatzstunde für{' '}
+              <strong>
+                {new Date((session as any).origin.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })}
+                {' · '}{(session as any).origin.time_start?.slice(0,5)} Uhr
+              </strong>
+            </span>
+          </div>
+        )}
         {course?.location && (
           <p className="text-sm text-yoga-text/50 mb-1"><i className="ti ti-map-pin mr-1" />{course.location}</p>
         )}

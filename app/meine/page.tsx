@@ -71,11 +71,24 @@ export default function MeinePage() {
           const rangeIds = new Set(
             activeOrdered.slice(fromUnit - 1, untilUnit).map((s: any) => s.id)
           )
+          // Ersatzstunden-Mapping: eine Session ist eine Ersatzstunde, wenn eine ANDERE
+          // (abgesagte) Session mit replacement_session_id auf sie verweist.
+          // Wir bauen den Lookup aus ALLEN sessions des Kurses (nicht nur visible),
+          // da die abgesagte Original-Session evtl. nicht im range/visible-Set steckt.
+          const replacementOrigin: Record<string, any> = {}
+          for (const s of (sessions || []) as any[]) {
+            if (s.replacement_session_id) {
+              replacementOrigin[s.replacement_session_id] = { date: s.date, time_start: s.time_start }
+            }
+          }
           // Anzeigen: aktive im Range + abgesagte (mit "Abgesagt"-Badge); excluded sind raus.
           sessionsMap[enrol.course_id] = visibleSessions
             .filter((s: any) => rangeIds.has(s.id) || isCancelled(s))
             .map((s: any) => ({
-              ...s, myBooking: myBookings?.find((b: any) => b.session_id === s.id),
+              ...s,
+              myBooking: myBookings?.find((b: any) => b.session_id === s.id),
+              is_replacement: !!replacementOrigin[s.id],
+              original_session: replacementOrigin[s.id] || null,
             }))
         }
         setCourseSessions(sessionsMap)
@@ -245,7 +258,17 @@ export default function MeinePage() {
                     </div>
                     <div className="w-px h-6 bg-yoga-border2 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold truncate">{enrol.course?.name}</div>
+                      <div className="text-sm font-semibold truncate">
+                        {enrol.course?.name}
+                        {s.is_replacement && (
+                          <span className="text-yoga-amber-text font-semibold"> · Ersatzstunde</span>
+                        )}
+                      </div>
+                      {s.is_replacement && s.original_session && (
+                        <div className="text-xs text-yoga-amber-text mt-0.5 truncate">
+                          für {new Date(s.original_session.date).toLocaleDateString('de-DE', { day:'numeric', month:'short' })} · {s.original_session.time_start?.slice(0,5)} Uhr
+                        </div>
+                      )}
                     </div>
                     {getStatusBadge(s)}
                   </button>

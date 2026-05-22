@@ -432,14 +432,32 @@ export default function AdminKursePage() {
   }
 
   async function archiveCourse(courseObj: any) {
-    // Prüfen ob Kurs noch aktive Termine in der Zukunft hat
+    // Sarah 2026-05-22: Admin darf jeden Kurs archivieren, auch mit zukünftigen
+    // Terminen. Bei zukünftigen Terminen oder Teilnehmern kommt ein expliziter
+    // Hinweis-Dialog mit "Trotzdem archivieren".
     const today = new Date().toISOString().split('T')[0]
-    const futureSessions = (courseObj.sessions || []).filter((s: any) => s.date >= today)
-    if (futureSessions.length > 0) {
-      alert(`Dieser Kurs hat noch ${futureSessions.length} zukünftige Termine und kann nicht archiviert werden. Erst nach dem letzten Termin möglich.`)
-      return
+    // Nur aktive (nicht gecancelte) zukünftige Sessions zählen — eine "abgesagte"
+    // Session ist effektiv schon weg, sollte den Admin nicht ausbremsen.
+    const futureSessions = (courseObj.sessions || [])
+      .filter((s: any) => s.date >= today && !s.is_cancelled)
+    const enrolledCount = courseObj.participant_count
+      ?? (courseObj.enrollments?.length ?? 0)
+
+    let confirmMsg: string
+    if (futureSessions.length === 0 && enrolledCount === 0) {
+      confirmMsg = 'Kurs archivieren?'
+    } else {
+      const parts: string[] = []
+      if (futureSessions.length > 0) {
+        parts.push(`${futureSessions.length} zukünftige ${futureSessions.length === 1 ? 'Stunde' : 'Stunden'}`)
+      }
+      if (enrolledCount > 0) {
+        parts.push(`${enrolledCount} ${enrolledCount === 1 ? 'angemeldeten Yogi' : 'angemeldete Yogis'}`)
+      }
+      confirmMsg = `Dieser Kurs hat noch ${parts.join(' und ')}.\n\nTrotzdem archivieren?`
     }
-    if (!confirm('Kurs archivieren?')) return
+
+    if (!confirm(confirmMsg)) return
     await supabase.from('courses').update({ is_active: false }).eq('id', courseObj.id)
     loadData()
   }

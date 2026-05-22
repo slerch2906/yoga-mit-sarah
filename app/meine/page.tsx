@@ -317,11 +317,19 @@ export default function MeinePage() {
           const trueSingles = singleBookings.filter((b: any) =>
             !b.session?.course_id || !enrolledCourseIds.has(b.session.course_id)
           )
-          if (trueSingles.length === 0) return null
+          // Cross-course Vorhol-/Nachhol-Buchungen einfach hier mit anzeigen — aus
+          // Yogi-Sicht ist es schlicht eine Einzelstunde. Die App kümmert sich im
+          // Hintergrund um den richtigen Credit (Sarah-Wunsch 2026-05-22).
+          const mergedSingles = [...trueSingles, ...replacementBookings].sort((a: any, b: any) => {
+            const ad = new Date(`${a.session?.date}T${a.session?.time_start}`).getTime()
+            const bd = new Date(`${b.session?.date}T${b.session?.time_start}`).getTime()
+            return ad - bd
+          })
+          if (mergedSingles.length === 0) return null
           return (
           <div className="mb-6">
             <p className="section-label">Einzelstunden</p>
-            {trueSingles.map(b => (
+            {mergedSingles.map(b => (
               <button key={b.id} onClick={() => router.push(`/kurse/${b.session?.id}`)}
                 className="w-full card flex items-center gap-2.5 mb-1.5 text-left border-l-4 border-l-yoga-text/20">
                 <div className="flex-shrink-0 w-20">
@@ -341,42 +349,6 @@ export default function MeinePage() {
           </div>
           )
         })()}
-
-        {/* Vorhol-/Nachhol-Stunden mit Course-Credit aus anderem Kurs.
-            Z.B. Yogi hat Stunde im Kurs A abgesagt und holt sie in Kurs B nach. */}
-        {replacementBookings.length > 0 && (
-          <div className="mb-6">
-            <p className="section-label">Vorhol-/Nachhol-Stunden</p>
-            {replacementBookings.map(b => {
-              const originDate = b.origin?.date
-              const originTime = b.origin?.time_start
-              const originStr = originDate
-                ? new Date(`${originDate}T12:00:00Z`).toLocaleDateString('de-DE', {
-                    day:'numeric', month:'short', year:'numeric', timeZone:'Europe/Berlin'
-                  }) + (originTime ? ` · ${originTime.slice(0,5)} Uhr` : '')
-                : null
-              return (
-                <button key={b.id} onClick={() => router.push(`/kurse/${b.session?.id}`)}
-                  className="w-full card flex items-center gap-2.5 mb-1.5 text-left border-l-4 border-l-yoga-amber-text/40">
-                  <div className="flex-shrink-0 w-20">
-                    <div className="text-sm font-bold">{new Date(b.session?.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })}</div>
-                    <div className="text-xs text-yoga-text/50">{b.session?.time_start?.slice(0,5)} Uhr</div>
-                  </div>
-                  <div className="w-px h-6 bg-yoga-border2 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold truncate">{b.session?.course?.name}</div>
-                    {originStr && (
-                      <div className="text-xs text-yoga-amber-text">Ersatz für {originStr}</div>
-                    )}
-                  </div>
-                  {new Date(`${b.session?.date}T${b.session?.time_start}`) < new Date()
-                    ? <span className="badge badge-done">Teilgenommen </span>
-                    : <span className="badge badge-enrolled">Gebucht</span>}
-                </button>
-              )
-            })}
-          </div>
-        )}
 
         {enrollments.length === 0 && singleBookings.length === 0 && replacementBookings.length === 0 && (
           <div className="text-center py-12 text-yoga-text/40">

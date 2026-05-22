@@ -16,11 +16,18 @@ export default function PasswortResetPage() {
   const supabase = createClient()
   const router = useRouter()
 
-  // Sarah 2026-05-22 (v2): robustes Bootstrapping für BEIDE Recovery-Flow-Typen.
+  // Sarah 2026-05-22 (v3): robustes Bootstrapping für ALLE Recovery-Flow-Typen.
+  //   - NEUER Pfad: ?token_hash=...&type=recovery → verifyOtp (cross-device + Brevo-safe)
   //   - PKCE-Flow: ?code=... in der URL → exchangeCodeForSession
   //   - Implicit-Flow: #access_token=...&refresh_token=... im URL-Hash → setSession
   //   - Bereits eingeloggt (regulärer "Passwort ändern" Pfad): existing session nutzen
   // Plus: sessionReady-Flag verhindert dass updateUser zu früh feuert (Race-Condition).
+  //
+  // Warum verifyOtp besser ist als action_link von Supabase:
+  // - action_link nutzt PKCE → braucht code_verifier auf demselben Gerät/Browser, das den
+  //   Reset ANGEFORDERT hat. Yogi fordert auf dem Handy an, klickt Link am Desktop → kaputt.
+  // - verifyOtp mit token_hash als Query-Param: keine client-side state nötig, funktioniert
+  //   geräteübergreifend, und Query-Params überleben Brevo-Click-Tracking-Redirects.
   useEffect(() => {
     let cancelled = false
     async function bootstrap() {
@@ -31,7 +38,27 @@ export default function PasswortResetPage() {
       const { data: { session: existing } } = await supabase.auth.getSession()
       if (existing && !cancelled) { setSessionReady(true); return }
 
-      // 2) PKCE-Flow: ?code=...
+      // 2) NEUER Pfad: ?token_hash=...&type=recovery (verifyOtp)
+      const tokenHash = url.searchParams.get('token_hash')
+      const otpType = url.searchParams.get('type')
+      if (tokenHash && otpType) {
+        const { error: verifyErr } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash, type: otpType as any,
+        })
+        if (cancelled) return
+        if (verifyErr) {
+          setError('Der Reset-Link ist ungültig oder abgelaufen. Bitte fordere einen neuen an.')
+          return
+        }
+        url.searchParams.delete('token_hash')
+        url.searchParams.delete('type')
+        const newSearch = url.searchParams.toString()
+        window.history.replaceState(null, '', url.pathname + (newSearch ? '?' + newSearch : ''))
+        setSessionReady(true)
+        return
+      }
+
+      // 3) PKCE-Flow: ?code=... (Fallback für alte Links)
       const code = url.searchParams.get('code')
       if (code) {
         const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code)
@@ -46,7 +73,7 @@ export default function PasswortResetPage() {
         return
       }
 
-      // 3) Implicit-Flow / Hash-Tokens: #access_token=...&refresh_token=...
+      // 4) Implicit-Flow / Hash-Tokens: #access_token=...&refresh_token=...
       // (Supabase Recovery-Links können je nach Server-Config in diesem Format kommen)
       const rawHash = window.location.hash.startsWith('#')
         ? window.location.hash.substring(1) : ''
@@ -77,7 +104,7 @@ export default function PasswortResetPage() {
         }
       }
 
-      // 4) Keine Session und kein Recovery-Token → User muss Link erneut anfordern
+      // 5) Keine Session und kein Recovery-Token → User muss Link erneut anfordern
       setError('Bitte öffne diese Seite über den Link in deiner Reset-Email oder logge dich erneut ein.')
     }
     bootstrap()

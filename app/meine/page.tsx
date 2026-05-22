@@ -59,7 +59,7 @@ export default function MeinePage() {
             .from('sessions').select('*').eq('course_id', enrol.course_id)
             .gte('date', enrolledFrom).order('date')
           const { data: myBookings } = await supabase
-            .from('bookings').select('*').eq('user_id', user.id)
+            .from('bookings').select('*, origin:sessions!bookings_origin_session_id_fkey(id, date, time_start, course:courses(name))').eq('user_id', user.id)
             .in('session_id', (sessions || []).map((s: any) => s.id))
           // Ausgeschlossene Stunden nie anzeigen (Setup-Excluded zählt nicht als Termin).
           const visibleSessions = (sessions || []).filter((s: any) => !isExcluded(s))
@@ -263,10 +263,18 @@ export default function MeinePage() {
                         {s.is_replacement && (
                           <span className="text-yoga-amber-text font-semibold"> · Ersatzstunde</span>
                         )}
+                        {s.myBooking?.origin && (
+                          <span className="text-yoga-amber-text font-semibold"> · Vorhol/Nachhol</span>
+                        )}
                       </div>
                       {s.is_replacement && s.original_session && (
                         <div className="text-xs text-yoga-amber-text mt-0.5 truncate">
                           für {new Date(s.original_session.date).toLocaleDateString('de-DE', { day:'numeric', month:'short' })} · {s.original_session.time_start?.slice(0,5)} Uhr
+                        </div>
+                      )}
+                      {s.myBooking?.origin && (
+                        <div className="text-xs text-yoga-amber-text mt-0.5 truncate">
+                          Ersatz für {new Date(s.myBooking.origin.date).toLocaleDateString('de-DE', { day:'numeric', month:'short' })} · {s.myBooking.origin.time_start?.slice(0,5)} Uhr
                         </div>
                       )}
                     </div>

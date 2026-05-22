@@ -351,6 +351,49 @@ export default function AdminKursePage() {
     }
     const remainingCount = (futureSessions || []).length
 
+    // Sarah-Regel 2026-05-22: Cascade-Stornierung von Ersatz-Buchungen.
+    // Alle aktiven Buchungen finden, deren origin_session_id auf eine der gerade
+    // stornierten zukünftigen Sessions zeigt — diese Vorhol-Stunden basieren auf
+    // einem nun ungültig gewordenen Anspruch und müssen mitsterben.
+    // WICHTIG: nur Buchungen deren EIGENE Session noch zukünftig ist (sonst:
+    // bereits besuchte Vorholstunde → bleibt bestehen, keine rückwirkende Änderung).
+    if ((futureSessions || []).length > 0) {
+      const futureSessionIds = (futureSessions || []).map((s: any) => s.id)
+      const { data: dependentBookings } = await supabase.from('bookings')
+        .select('id, user_id, session:sessions(id, date, time_start, course:courses(name)), profile:profiles(email, first_name)')
+        .in('origin_session_id', futureSessionIds)
+        .eq('status', 'active')
+      const toCancel = ((dependentBookings || []) as any[]).filter(b => b.session?.date && b.session.date >= today)
+      for (const b of toCancel) {
+        await supabase.from('bookings').update({
+          status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false
+        }).eq('id', b.id)
+        // Yogi informieren — die Vorhol-Stunde fällt weg weil Origin storniert wurde
+        if (b.profile?.email) {
+          try {
+            await Email.sessionCancelled({
+              email: b.profile.email,
+              firstName: b.profile.first_name || 'Yogi',
+              courseName: b.session?.course?.name || '',
+              date: b.session?.date || '',
+              timeStart: b.session?.time_start || '',
+              reason: `Diese Stunde war ein Ersatz für eine abgesagte Stunde im Kurs „${cancellingCourse.name}", der jetzt komplett abgebrochen wurde.`,
+            })
+          } catch (e) {}
+        }
+      }
+      if (toCancel.length > 0) {
+        await supabase.from('audit_log').insert({
+          action: 'cascade_replacement_cancelled',
+          details: {
+            course_id: cancellingCourse.id,
+            course_name: cancellingCourse.name,
+            cancelled_booking_count: toCancel.length,
+          }
+        })
+      }
+    }
+
     // 2) Kurs als abgebrochen markieren
     await supabase.from('courses').update({
       is_cancelled: true, is_active: false,

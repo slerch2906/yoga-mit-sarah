@@ -696,6 +696,41 @@ export default function AdminYogiDetailPage() {
           </>
         )}
 
+        {/* Eingebuchte Einzelstunden — alle zukünftigen active type='single' bookings.
+            Sarah-Wunsch 2026-05-22: Admin braucht den Überblick auch wenn Yogi nicht
+            (mehr) im Kurs ist (z.B. nach Kursabbruch noch in Drop-In Einzelstunden). */}
+        {(() => {
+          const today = new Date().toISOString().split('T')[0]
+          const futureSingles = bookings.filter((b: any) =>
+            b.type === 'single' && b.status === 'active' && b.session?.date && b.session.date >= today
+          ).sort((a: any, b: any) => {
+            const aKey = `${a.session?.date}T${a.session?.time_start}`
+            const bKey = `${b.session?.date}T${b.session?.time_start}`
+            return aKey.localeCompare(bKey)
+          })
+          if (futureSingles.length === 0) return null
+          return (
+            <>
+              <p className="section-label">Eingebuchte Einzelstunden</p>
+              {futureSingles.map((b: any) => (
+                <div key={b.id} className="card mb-2 flex items-center gap-2.5">
+                  <div className="flex-shrink-0 w-20">
+                    <div className="text-sm font-bold">
+                      {new Date(b.session.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })}
+                    </div>
+                    <div className="text-xs text-yoga-text/50">{b.session.time_start?.slice(0,5)} Uhr</div>
+                  </div>
+                  <div className="w-px h-6 bg-yoga-border2 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold truncate">{b.session?.course?.name || '—'}</div>
+                    <div className="text-xs text-yoga-text/45">Einzelstunde · {b.session?.duration_min || 75} min</div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )
+        })()}
+
         {/* Credits */}
         {/* Sichtbare Credits: course-credits IMMER (zeigen Fortschritt + Verfallsdatum),
             andere Modelle nur wenn noch Guthaben übrig ist. Verbrauchte Guthaben (0/0)

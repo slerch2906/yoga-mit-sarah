@@ -279,10 +279,21 @@ export default function MeinePage() {
         })}
 
         {/* Einzelstunden: nur aktive (nicht stornierte) */}
-        {singleBookings.length > 0 && (
+        {(() => {
+          // Bookings auf Sessions, deren Kurs der Yogi enrolled ist, gehören
+          // semantisch in den Kurs-Block oben — auch wenn DB type='single' sagt
+          // (z.B. weil ein fremder Course-Credit zur Bezahlung verwendet wurde).
+          // Hier filtern wir sie aus dem "Einzelstunden"-Block raus, damit sie
+          // nicht doppelt erscheinen.
+          const enrolledCourseIds = new Set(enrollments.map((e: any) => e.course_id))
+          const trueSingles = singleBookings.filter((b: any) =>
+            !b.session?.course_id || !enrolledCourseIds.has(b.session.course_id)
+          )
+          if (trueSingles.length === 0) return null
+          return (
           <div className="mb-6">
             <p className="section-label">Einzelstunden</p>
-            {singleBookings.map(b => (
+            {trueSingles.map(b => (
               <button key={b.id} onClick={() => router.push(`/kurse/${b.session?.id}`)}
                 className="w-full card flex items-center gap-2.5 mb-1.5 text-left border-l-4 border-l-yoga-text/20">
                 <div className="flex-shrink-0 w-20">
@@ -300,7 +311,8 @@ export default function MeinePage() {
               </button>
             ))}
           </div>
-        )}
+          )
+        })()}
 
         {enrollments.length === 0 && singleBookings.length === 0 && (
           <div className="text-center py-12 text-yoga-text/40">

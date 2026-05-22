@@ -160,10 +160,16 @@ export default function SessionDetailPage() {
     const { data: existingBooking } = await supabase.from('bookings')
       .select('*').eq('session_id', id).eq('user_id', user!.id).maybeSingle()
 
-    // Buchungstyp: 'course' wenn ein course-Credit des EIGENEN Kurses verwendet wird
-    // (Yogi nutzt eine bezahlte Kurseinheit), sonst 'single' (Drop-In mit Punktekarte etc.).
-    const bookingType = (bestCredit.model === 'course' && bestCredit.course_id === (session as any)?.course_id)
-      ? 'course' : 'single'
+    // Buchungstyp: 'course' wenn der Yogi entweder
+    //   a) einen Course-Credit des EIGENEN Kurses verwendet, ODER
+    //   b) im Kurs der Session enrolled ist (egal welcher Credit bezahlt).
+    // Sonst 'single' (Drop-In in fremden Kurs mit Punktekarte/Guthaben-Credit).
+    // Sarah-Regel 2026-05-22: wenn enrolled, gehört die Stunde in den Kurs-Block, nicht "Einzelstunden".
+    const sessCourseId = (session as any)?.course_id
+    const { data: enrolledHere } = await supabase.from('enrollments')
+      .select('id').eq('user_id', user!.id).eq('course_id', sessCourseId).maybeSingle()
+    const isOwnCourseCredit = bestCredit.model === 'course' && bestCredit.course_id === sessCourseId
+    const bookingType = (enrolledHere || isOwnCourseCredit) ? 'course' : 'single'
 
     let error = null
     if (existingBooking) {

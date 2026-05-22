@@ -712,10 +712,25 @@ export default function AdminYogiDetailPage() {
           // - nur ZUKÜNFTIGE Stunden (Datum+Uhrzeit vs. now, minutengenau)
           // - Session selbst nicht abgesagt
           // - Kurs nicht abgebrochen oder archiviert (is_active=true, !is_cancelled)
+          // Plus: Cross-course Vorhol-Buchungen (type='course' mit origin_session_id
+          // in einem fremden Kurs) werden hier mitgezeigt — aus Admin-Sicht sind
+          // das semantisch Einzelstunden. (Bookings im eigenen enrolled-Kurs gehören
+          // in den Kurs-Block oben.)
           const now = Date.now()
+          const enrolledCourseIds = new Set(
+            enrollments
+              .filter((e: any) => e.course?.is_active !== false && e.course?.is_cancelled !== true)
+              .map((e: any) => e.course_id)
+          )
           const futureSingles = bookings.filter((b: any) => {
-            if (b.type !== 'single' || b.status !== 'active') return false
+            if (b.status !== 'active') return false
             if (!b.session?.date || !b.session?.time_start) return false
+            const isTrueSingle = b.type === 'single'
+            const isCrossCourseReplacement = b.type === 'course'
+              && b.origin_session_id
+              && b.session?.course_id
+              && !enrolledCourseIds.has(b.session.course_id)
+            if (!isTrueSingle && !isCrossCourseReplacement) return false
             const sessDt = new Date(`${b.session.date}T${b.session.time_start}`).getTime()
             if (sessDt <= now) return false  // bereits gestartet/vorbei
             if (b.session?.is_cancelled) return false  // Stunde abgesagt

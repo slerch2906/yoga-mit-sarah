@@ -355,14 +355,42 @@ export default function AdminKursePage() {
       const prof = enroll.profile as any
       if (!prof) continue
 
-      // Alle Bookings dieses Yogis in zukünftigen Sessions stornieren
       const futureSessionIds = (futureSessions || []).map((s: any) => s.id)
+
+      // === SNAPSHOT vor Cancel: was hat der Yogi für die zukünftigen Stunden bezahlt? ===
+      // Pro aktiver Future-Booking schauen: zeigt credit_id auf model='guthaben' oder
+      // auf model='course' (oder NULL/anderes). Daraus ergibt sich:
+      //  - guthabenBreakdown: pro Altguthaben-Credit, wieviel verrechnet wurde
+      //  - newCreditsCount: wieviel der Yogi NEU für diesen Kurs bezahlt hat
+      // Dieser Snapshot ist die Wahrheit für die spätere Choice-Logik.
+      const guthabenCounts = new Map<string, number>()
+      let newCreditsCount = 0
+      if (futureSessionIds.length > 0) {
+        const { data: futureBookings } = await supabase.from('bookings')
+          .select('credit_id, credit:credits(id, model)')
+          .eq('user_id', prof.id)
+          .in('session_id', futureSessionIds)
+          .eq('status', 'active')
+        for (const b of (futureBookings || []) as any[]) {
+          const model = b.credit?.model
+          if (model === 'guthaben' && b.credit_id) {
+            guthabenCounts.set(b.credit_id, (guthabenCounts.get(b.credit_id) ?? 0) + 1)
+          } else {
+            // course, single, tenpack oder kein credit_id → Yogi hat neu bezahlt
+            newCreditsCount += 1
+          }
+        }
+      }
+      const guthabenBreakdown = Array.from(guthabenCounts.entries())
+        .map(([credit_id, count]) => ({ credit_id, count }))
+
+      // Bookings stornieren (Trigger feuert → setzt credit.used neu)
       if (futureSessionIds.length > 0) {
         await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
           .eq('user_id', prof.id).in('session_id', futureSessionIds)
       }
 
-      // Credits löschen (FK erst entkoppeln)
+      // Course-Credits dieses Kurses löschen (FK erst entkoppeln)
       const { data: yogiCredits } = await supabase.from('credits')
         .select('id').eq('user_id', prof.id).eq('course_id', cancellingCourse.id)
       if (yogiCredits && yogiCredits.length > 0) {
@@ -380,7 +408,7 @@ export default function AdminKursePage() {
       // Dummy: fertig, kein Token/Email
       if (prof.is_dummy) continue
 
-      // Token anlegen
+      // Token anlegen + Snapshot speichern
       const token = crypto.randomUUID().replace(/-/g, '')
       await supabase.from('course_cancellation_responses').insert({
         course_id: cancellingCourse.id,
@@ -388,6 +416,8 @@ export default function AdminKursePage() {
         token,
         expires_at: expiresAt.toISOString(),
         remaining_sessions: remainingCount,
+        guthaben_breakdown: guthabenBreakdown,
+        new_credits_count: newCreditsCount,
       })
 
       // Email senden (via lib/email.ts mit korrektem x-function-secret Header)

@@ -25,7 +25,7 @@ export async function POST(
     .update({ choice, responded_at: now })
     .eq('token', token)
     .is('choice', null)
-    .select('*, course:courses(name)')
+    .select('*, course:courses(name), profile:profiles(email, first_name)')
     .maybeSingle()
 
   if (error) {
@@ -43,31 +43,84 @@ export async function POST(
     return NextResponse.json({ alreadyChosen: existing?.choice })
   }
 
-  // Credit anlegen bei Guthaben-Wahl
-  if (choice === 'guthaben') {
-    const expiry = new Date()
-    expiry.setFullYear(expiry.getFullYear() + 2)
-    await supabase.from('credits').insert({
-      user_id: updated.user_id,
-      course_id: null,
-      model: 'guthaben',
-      total: updated.remaining_sessions,
-      used: 0,
-      expires_at: expiry.toISOString(),
-    })
+  const courseName = updated.course?.name || ''
+  const yogiEmail = updated.profile?.email
+  const yogiFirstName = updated.profile?.first_name || 'Yogi'
+  const newCreditsCount = updated.new_credits_count ?? 0
+  const guthabenVerrechnet = (Array.isArray(updated.guthaben_breakdown) ? updated.guthaben_breakdown : [])
+    .reduce((s: number, item: any) => s + (item?.count ?? 0), 0)
+  const totalRefundCredits = updated.remaining_sessions ?? (guthabenVerrechnet + newCreditsCount)
+
+  // === Wirtschaftslogik je nach Wahl ===
+  if (choice === 'erstattung') {
+    // Verrechnetes Altguthaben dauerhaft entfernen (anti-Trigger-Refund).
+    // Der Trigger hat es beim Session-Cancel auto-refundet — wir reduzieren credits.total
+    // um den verrechneten Anteil, damit der Yogi nur sein ursprünglich freies Guthaben behält.
+    // Wert wird stattdessen in Geld erstattet.
+    const { error: rpcErr } = await supabase.rpc('apply_cancellation_refund', { p_response_id: updated.id })
+    if (rpcErr) console.error('apply_cancellation_refund:', rpcErr)
+  } else if (choice === 'guthaben') {
+    // Nur die NEU bezahlten Stunden als neues Guthaben gutschreiben.
+    // Das alte verrechnete Guthaben ist vom Trigger schon freigegeben — das ist genau richtig
+    // (der Yogi behält den Gegenwert, den er vor dem Kurs schon hatte).
+    if (newCreditsCount > 0) {
+      const expiry = new Date()
+      expiry.setFullYear(expiry.getFullYear() + 2)
+      await supabase.from('credits').insert({
+        user_id: updated.user_id,
+        course_id: null,
+        model: 'guthaben',
+        total: newCreditsCount,
+        used: 0,
+        expires_at: expiry.toISOString(),
+      })
+    }
   }
 
-  // Admin-Email – Best-Effort: Email-Failure darf nicht den Choice-Save kippen
+  // Audit-Log
+  try {
+    await supabase.from('audit_log').insert({
+      user_id: updated.user_id,
+      action: 'yogi_course_cancellation_choice',
+      details: {
+        course_id: updated.course_id,
+        course_name: courseName,
+        choice,
+        remaining_sessions: totalRefundCredits,
+        guthaben_verrechnet: guthabenVerrechnet,
+        new_credits_count: newCreditsCount,
+      },
+    })
+  } catch (auditErr) {
+    console.error('Audit-Log Kursabbruch-Wahl:', auditErr)
+  }
+
+  // Yogi-Bestätigungs-Email (Best-Effort)
+  if (yogiEmail) {
+    try {
+      await Email.yogiCourseCancelChoice({
+        email: yogiEmail,
+        firstName: yogiFirstName,
+        courseName,
+        choice,
+        refundCredits: totalRefundCredits,
+        guthabenCredits: newCreditsCount,
+      })
+    } catch (emailErr) {
+      console.error('Yogi-Bestätigung Kursabbruch-Wahl:', emailErr)
+    }
+  }
+
+  // Admin-Email (Best-Effort, schluckt aber loggt)
   try {
     await Email.adminYogiChoice({
       userId: updated.user_id,
-      courseName: updated.course?.name || '',
+      courseName,
       choice,
-      remainingSessions: updated.remaining_sessions,
+      remainingSessions: totalRefundCredits,
     })
   } catch (emailErr) {
-    console.error('Admin-Email für Kursabbruch-Wahl fehlgeschlagen:', emailErr)
-    // Choice wurde dennoch gespeichert
+    console.error('Admin-Email Kursabbruch-Wahl:', emailErr)
   }
 
   return NextResponse.json({ ok: true, choice })

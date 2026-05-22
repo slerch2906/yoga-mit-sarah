@@ -12,36 +12,79 @@ export default function PasswortResetPage() {
   const [done, setDone] = useState(false)
   const [showPw, setShowPw] = useState(false)
   const [showPw2, setShowPw2] = useState(false)
+  const [sessionReady, setSessionReady] = useState(false)
   const supabase = createClient()
   const router = useRouter()
 
-  // Sarah 2026-05-22: @supabase/ssr 0.3.x nutzt PKCE-Flow. Recovery-Link redirected
-  // mit ?code=<auth_code> — den müssen wir explizit gegen eine Session tauschen,
-  // sonst bleibt der User unauthenticated und updateUser failed mit "Session abgelaufen".
-  // Eingeloggte User (regulärer Passwort-Ändern-Pfad) haben kein ?code — dort wird der
-  // Exchange übersprungen und die bestehende Session genutzt.
+  // Sarah 2026-05-22 (v2): robustes Bootstrapping für BEIDE Recovery-Flow-Typen.
+  //   - PKCE-Flow: ?code=... in der URL → exchangeCodeForSession
+  //   - Implicit-Flow: #access_token=...&refresh_token=... im URL-Hash → setSession
+  //   - Bereits eingeloggt (regulärer "Passwort ändern" Pfad): existing session nutzen
+  // Plus: sessionReady-Flag verhindert dass updateUser zu früh feuert (Race-Condition).
   useEffect(() => {
     let cancelled = false
-    async function exchangeIfRecovery() {
+    async function bootstrap() {
       if (typeof window === 'undefined') return
       const url = new URL(window.location.href)
+
+      // 1) Reguläre Session schon da? (z.B. Yogi ändert Passwort über Profil)
+      const { data: { session: existing } } = await supabase.auth.getSession()
+      if (existing && !cancelled) { setSessionReady(true); return }
+
+      // 2) PKCE-Flow: ?code=...
       const code = url.searchParams.get('code')
-      if (!code) return
-      const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code)
-      if (cancelled) return
-      if (exchangeErr) {
-        setError('Der Reset-Link ist ungültig oder abgelaufen. Bitte fordere einen neuen an.')
+      if (code) {
+        const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code)
+        if (cancelled) return
+        if (exchangeErr) {
+          setError('Der Reset-Link ist ungültig oder abgelaufen. Bitte fordere einen neuen an.')
+          return
+        }
+        url.searchParams.delete('code')
+        window.history.replaceState(null, '', url.pathname + (url.search || '') + url.hash)
+        setSessionReady(true)
         return
       }
-      // ?code aus URL entfernen damit Reload nicht erneut tauscht (Token ist single-use)
-      url.searchParams.delete('code')
-      window.history.replaceState(null, '', url.pathname + (url.search ? url.search : '') + url.hash)
+
+      // 3) Implicit-Flow / Hash-Tokens: #access_token=...&refresh_token=...
+      // (Supabase Recovery-Links können je nach Server-Config in diesem Format kommen)
+      const rawHash = window.location.hash.startsWith('#')
+        ? window.location.hash.substring(1) : ''
+      if (rawHash) {
+        const hashParams = new URLSearchParams(rawHash)
+        const accessToken = hashParams.get('access_token')
+        const refreshToken = hashParams.get('refresh_token')
+        const tokenType = hashParams.get('type')
+        if (accessToken && refreshToken) {
+          const { error: setErr } = await supabase.auth.setSession({
+            access_token: accessToken, refresh_token: refreshToken,
+          })
+          if (cancelled) return
+          if (setErr) {
+            setError('Der Reset-Link ist ungültig oder abgelaufen. Bitte fordere einen neuen an.')
+            return
+          }
+          // Hash aus URL entfernen
+          window.history.replaceState(null, '', url.pathname + (url.search || ''))
+          setSessionReady(true)
+          return
+        }
+        // Fehler-Hash: ?error=...&error_description=...
+        const errDesc = hashParams.get('error_description')
+        if (errDesc) {
+          setError(decodeURIComponent(errDesc.replace(/\+/g, ' ')))
+          return
+        }
+      }
+
+      // 4) Keine Session und kein Recovery-Token → User muss Link erneut anfordern
+      setError('Bitte öffne diese Seite über den Link in deiner Reset-Email oder logge dich erneut ein.')
     }
-    exchangeIfRecovery()
+    bootstrap()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        // User ist jetzt authenticated via recovery — der Exchange oben hat schon geklappt
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+        setSessionReady(true)
       }
     })
     return () => { cancelled = true; subscription.unsubscribe() }
@@ -52,12 +95,19 @@ export default function PasswortResetPage() {
     if (password !== confirm) { setError('Passwörter stimmen nicht überein.'); return }
     setLoading(true); setError('')
 
-    // updateUser funktioniert sowohl für eingeloggte User als auch nach Reset-Link
+    // Defensiv: nochmal Session checken, falls Bootstrap noch nicht durch war.
+    // Verhindert Race-Condition wo updateUser ohne Session-Context feuert.
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      setError('Keine aktive Sitzung. Bitte klicke nochmal auf den Link in deiner Reset-Email.')
+      setLoading(false)
+      return
+    }
+
     const { error: err } = await supabase.auth.updateUser({ password })
     if (err) {
-      // Wenn Session ungültig: Reset-Link nötig
       if (err.message?.includes('session') || err.message?.includes('token') || err.status === 401) {
-        setError('Sitzung abgelaufen. Bitte melde dich erneut an oder nutze den Passwort-Reset-Link.')
+        setError('Sitzung abgelaufen. Bitte fordere einen neuen Reset-Link an.')
       } else {
         setError(err.message)
       }

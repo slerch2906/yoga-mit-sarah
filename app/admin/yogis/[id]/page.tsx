@@ -708,14 +708,15 @@ export default function AdminYogiDetailPage() {
             Sarah-Wunsch 2026-05-22: Admin braucht den Überblick auch wenn Yogi nicht
             (mehr) im Kurs ist (z.B. nach Kursabbruch noch in Drop-In Einzelstunden). */}
         {(() => {
-          // Filter (Sarah-Regel 2026-05-22):
+          // Sarah-Regel 2026-05-22 (final):
+          // "Eingebuchte Einzelstunden" = ALLE active future bookings deren Session
+          // NICHT in einem aktiv-enrolled Kurs des Yogi liegt. Egal welcher
+          // booking.type oder Credit. (Drop-In, Vorhol/Nachhol, Tenpack — alles
+          // gleich.) Buchungen im eigenen Kurs gehören in den Kurs-Block.
+          // Zusätzliche Filter:
           // - nur ZUKÜNFTIGE Stunden (Datum+Uhrzeit vs. now, minutengenau)
           // - Session selbst nicht abgesagt
-          // - Kurs nicht abgebrochen oder archiviert (is_active=true, !is_cancelled)
-          // Plus: Cross-course Vorhol-Buchungen (type='course' mit origin_session_id
-          // in einem fremden Kurs) werden hier mitgezeigt — aus Admin-Sicht sind
-          // das semantisch Einzelstunden. (Bookings im eigenen enrolled-Kurs gehören
-          // in den Kurs-Block oben.)
+          // - Kurs nicht abgebrochen oder archiviert
           const now = Date.now()
           const enrolledCourseIds = new Set(
             enrollments
@@ -725,12 +726,8 @@ export default function AdminYogiDetailPage() {
           const futureSingles = bookings.filter((b: any) => {
             if (b.status !== 'active') return false
             if (!b.session?.date || !b.session?.time_start) return false
-            const isTrueSingle = b.type === 'single'
-            const isCrossCourseReplacement = b.type === 'course'
-              && b.origin_session_id
-              && b.session?.course_id
-              && !enrolledCourseIds.has(b.session.course_id)
-            if (!isTrueSingle && !isCrossCourseReplacement) return false
+            // Session im eigenen aktiv-enrolled Kurs → gehört in den Kurs-Block, nicht hier
+            if (b.session?.course_id && enrolledCourseIds.has(b.session.course_id)) return false
             const sessDt = new Date(`${b.session.date}T${b.session.time_start}`).getTime()
             if (sessDt <= now) return false  // bereits gestartet/vorbei
             if (b.session?.is_cancelled) return false  // Stunde abgesagt

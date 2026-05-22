@@ -11,12 +11,15 @@ import BottomNav from '@/components/layout/BottomNav'
 export default function MeinePage() {
   const [profile, setProfile] = useState<any>(null)
   const [enrollments, setEnrollments] = useState<any[]>([])
+  // Sarah-Regel 2026-05-22 (final):
+  // "Einzelstunden" = ALLE active bookings die NICHT in einer Session des eigenen
+  // aktiv-enrolled Kurses sind. Egal welcher booking.type, egal welcher Credit.
+  // Beispiele:
+  // - Drop-In in fremder Kurs-Session → Einzelstunde
+  // - Vorhol/Nachhol mit Course-Credit aus altem Kurs in fremder Session → Einzelstunde
+  // - Drop-In aus Tenpack/Single-Credit → Einzelstunde
+  // - Buchung in eigener Kursstunde (auch nach Ab+Wiederanmeldung) → Kurs-Block
   const [singleBookings, setSingleBookings] = useState<any[]>([])
-  // Sarah 2026-05-22: Vorhol-/Nachhol-Buchungen die in einer SESSION eines anderen
-  // Kurses landen (= Course-Credit aus Kurs A wird für Drop-In in Kurs B benutzt).
-  // Diese fallen sonst durch alle Filter: nicht type='single' und session.course_id
-  // ist nicht im enrolled-Set. → Separate Sektion.
-  const [replacementBookings, setReplacementBookings] = useState<any[]>([])
   const [courseSessions, setCourseSessions] = useState<Record<string, any[]>>({})
   const [credits, setCredits] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -30,14 +33,14 @@ export default function MeinePage() {
       const user = await getCurrentUser()
       if (!user) { window.location.href = '/login'; return }
 
-      const [{ data: prof }, { data: enrols }, { data: singles }, { data: crds }] = await Promise.all([
+      const [{ data: prof }, { data: enrols }, { data: allBookings }, { data: crds }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase.from('enrollments').select('*, course:courses(*)').eq('user_id', user.id),
-        // Einzelstunden: nur aktive (nicht stornierte)
+        // ALLE active bookings laden. UI-Filter trennt Kurs-Block (eigener Kurs)
+        // von Einzelstunden (alle anderen Sessions).
         supabase.from('bookings')
           .select('*, session:sessions!bookings_session_id_fkey(*, course:courses(name))')
           .eq('user_id', user.id)
-          .eq('type', 'single')
           .eq('status', 'active')
           .order('created_at', { ascending: false }),
         supabase.from('credits').select('*, course:courses(name)').eq('user_id', user.id)
@@ -52,23 +55,8 @@ export default function MeinePage() {
         !e.course?.date_end || e.course.date_end >= today
       )
       setEnrollments(activeEnrols)
-      setSingleBookings(singles || [])
+      setSingleBookings(allBookings || [])
       setCredits(crds || [])
-
-      // Vorhol-/Nachhol-Buchungen (cross-course): type='course' mit origin_session_id,
-      // deren Session NICHT im enrolled-Kurs liegt. Diese fallen sonst aus der Anzeige.
-      const enrolledCourseIds = new Set((enrols || []).map((e: any) => e.course_id))
-      const { data: replacements } = await supabase.from('bookings')
-        .select('*, session:sessions!bookings_session_id_fkey(*, course:courses(name)), origin:sessions!bookings_origin_session_id_fkey(date, time_start, course:courses(name))')
-        .eq('user_id', user.id)
-        .eq('type', 'course')
-        .eq('status', 'active')
-        .not('origin_session_id', 'is', null)
-      const crossCourseReplacements = (replacements || []).filter((b: any) => {
-        const cid = b.session?.course_id
-        return cid && !enrolledCourseIds.has(cid)
-      })
-      setReplacementBookings(crossCourseReplacements)
 
       if (enrols && enrols.length > 0) {
         const sessionsMap: Record<string, any[]> = {}
@@ -306,30 +294,25 @@ export default function MeinePage() {
           )
         })}
 
-        {/* Einzelstunden: nur aktive (nicht stornierte) */}
+        {/* Einzelstunden — alle Buchungen die NICHT in einem aktiv-enrolled Kurs sind.
+            Regel (Sarah 2026-05-22): egal welcher booking.type oder Credit-Modell.
+            Drop-In, Vorhol/Nachhol, Tenpack-Stunde, etc. — alles was außerhalb der
+            eigenen Kurse läuft, landet hier. Buchungen in eigenen Kursstunden bleiben
+            immer im Kurs-Block oben (auch nach Ab- und Wiederanmeldung). */}
         {(() => {
-          // Bookings auf Sessions, deren Kurs der Yogi enrolled ist, gehören
-          // semantisch in den Kurs-Block oben — auch wenn DB type='single' sagt
-          // (z.B. weil ein fremder Course-Credit zur Bezahlung verwendet wurde).
-          // Hier filtern wir sie aus dem "Einzelstunden"-Block raus, damit sie
-          // nicht doppelt erscheinen.
           const enrolledCourseIds = new Set(enrollments.map((e: any) => e.course_id))
-          const trueSingles = singleBookings.filter((b: any) =>
-            !b.session?.course_id || !enrolledCourseIds.has(b.session.course_id)
-          )
-          // Cross-course Vorhol-/Nachhol-Buchungen einfach hier mit anzeigen — aus
-          // Yogi-Sicht ist es schlicht eine Einzelstunde. Die App kümmert sich im
-          // Hintergrund um den richtigen Credit (Sarah-Wunsch 2026-05-22).
-          const mergedSingles = [...trueSingles, ...replacementBookings].sort((a: any, b: any) => {
-            const ad = new Date(`${a.session?.date}T${a.session?.time_start}`).getTime()
-            const bd = new Date(`${b.session?.date}T${b.session?.time_start}`).getTime()
-            return ad - bd
-          })
-          if (mergedSingles.length === 0) return null
+          const singles = singleBookings
+            .filter((b: any) => !b.session?.course_id || !enrolledCourseIds.has(b.session.course_id))
+            .sort((a: any, b: any) => {
+              const ad = new Date(`${a.session?.date}T${a.session?.time_start}`).getTime()
+              const bd = new Date(`${b.session?.date}T${b.session?.time_start}`).getTime()
+              return ad - bd
+            })
+          if (singles.length === 0) return null
           return (
           <div className="mb-6">
             <p className="section-label">Einzelstunden</p>
-            {mergedSingles.map(b => (
+            {singles.map(b => (
               <button key={b.id} onClick={() => router.push(`/kurse/${b.session?.id}`)}
                 className="w-full card flex items-center gap-2.5 mb-1.5 text-left border-l-4 border-l-yoga-text/20">
                 <div className="flex-shrink-0 w-20">
@@ -350,7 +333,7 @@ export default function MeinePage() {
           )
         })()}
 
-        {enrollments.length === 0 && singleBookings.length === 0 && replacementBookings.length === 0 && (
+        {enrollments.length === 0 && singleBookings.length === 0 && (
           <div className="text-center py-12 text-yoga-text/40">
             <i className="ti ti-heart text-3xl block mb-3" />
             <p className="text-sm">Noch keine Buchungen</p>

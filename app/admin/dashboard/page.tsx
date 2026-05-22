@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Email } from '@/lib/email'
 import { useSwipe } from '@/lib/useSwipe'
+import { selectCreditForBooking } from '@/lib/credit-selector'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -234,24 +235,44 @@ export default function AdminDashboard() {
   async function addYogiToSession(yogi: any) {
     if (!selectedSession) return
     setDashAddingYogi(true)
-    // Find free credit
-    const now = new Date().toISOString()
-    const freeCredit = (yogi.credits || []).find((cr: any) =>
-      new Date(cr.expires_at) > new Date() && (cr.total - cr.used) > 0
+
+    // Sarah-Regel 2026-05-22: gleiche Logic wie Yogi-Selbstbuchung.
+    // Course-Credit zuerst (mit minutengenauem Window-Check), dann Single/Tenpack/Quartal.
+    const pick = await selectCreditForBooking(
+      supabase, yogi.id, selectedSession.id,
+      selectedSession.date, selectedSession.time_start
     )
-    let creditId = freeCredit?.id || null
-    if (!creditId) {
-      // Quick credit vergeben
+
+    let creditId: string | null = null
+    let originSessionId: string | null = null
+    let usedModel: string = 'single'
+
+    if (pick.ok) {
+      creditId = pick.creditId
+      originSessionId = pick.originSessionId
+      usedModel = pick.usedModel
+    } else {
+      // Kein passender Credit/Anspruch → Admin entscheidet ob trotzdem
+      const proceed = confirm(`${pick.message}\n\nSoll ich trotzdem einen Quick-Credit (1 Einzelstunde) für diese Buchung anlegen?`)
+      if (!proceed) {
+        setDashAddingYogi(false)
+        return
+      }
       const expiry = new Date(); expiry.setFullYear(expiry.getFullYear() + 1)
       const { data: nc } = await supabase.from('credits').insert({
         user_id: yogi.id, total: 1, used: 1, expires_at: expiry.toISOString(), model: 'single', course_id: null
       }).select('id').single()
       creditId = nc?.id || null
     }
-    // credit.used wird durch trg_sync_credit_used aktualisiert (außer bei frisch erstelltem
-    // Quick-Credit oben, der mit used=1 direkt initialisiert wird)
+
+    // Yogi enrolled in Kurs der Session? Dann type=course (gehört in den Kurs-Block, nicht Einzelstunden)
+    const { data: enrolledHere } = await supabase.from('enrollments')
+      .select('id').eq('user_id', yogi.id).eq('course_id', selectedSession.course_id).maybeSingle()
+    const bookingType = (enrolledHere || usedModel === 'course') ? 'course' : 'single'
+
     await supabase.from('bookings').insert({
-      user_id: yogi.id, session_id: selectedSession.id, credit_id: creditId, type: 'single', status: 'active'
+      user_id: yogi.id, session_id: selectedSession.id, credit_id: creditId, type: bookingType, status: 'active',
+      origin_session_id: originSessionId,
     })
     setDashAddingYogi(false)
     setShowDashAddYogi(false)

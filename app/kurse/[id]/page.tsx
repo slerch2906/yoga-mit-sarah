@@ -7,6 +7,7 @@ import { getServerNow } from '@/lib/server-time'
 import { Email } from '@/lib/email'
 import { getCurrentUser } from '@/lib/auth'
 import { isExcluded, isCancelled } from '@/lib/session-status'
+import { selectCreditForBooking } from '@/lib/credit-selector'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -160,102 +161,41 @@ export default function SessionDetailPage() {
     const { data: existingBooking } = await supabase.from('bookings')
       .select('*').eq('session_id', id).eq('user_id', user!.id).maybeSingle()
 
+    // Smart Credit-Picker (Sarah-Regel 2026-05-22):
+    //   1. Course-Credit zuerst probieren (mit minutengenauem 10d-/8d-Fenster-Check)
+    //   2. Falls Fenster nicht passt: Fallback auf Single/Tenpack/Quartal
+    //   3. Falls weder noch → Fehlermeldung
+    const pick = await selectCreditForBooking(supabase, user!.id, id as string, session!.date, session!.time_start)
+    if (!pick.ok) {
+      alert(pick.message)
+      setActionLoading(false)
+      return
+    }
+    const chosenCreditId = pick.creditId
+    const originSessionId = pick.originSessionId
+
     // Buchungstyp: 'course' wenn der Yogi entweder
     //   a) einen Course-Credit des EIGENEN Kurses verwendet, ODER
     //   b) im Kurs der Session enrolled ist (egal welcher Credit bezahlt).
     // Sonst 'single' (Drop-In in fremden Kurs mit Punktekarte/Guthaben-Credit).
-    // Sarah-Regel 2026-05-22: wenn enrolled, gehört die Stunde in den Kurs-Block, nicht "Einzelstunden".
     const sessCourseId = (session as any)?.course_id
     const { data: enrolledHere } = await supabase.from('enrollments')
       .select('id').eq('user_id', user!.id).eq('course_id', sessCourseId).maybeSingle()
-    const isOwnCourseCredit = bestCredit.model === 'course' && bestCredit.course_id === sessCourseId
-    const bookingType = (enrolledHere || isOwnCourseCredit) ? 'course' : 'single'
-
-    // Sarah-Regel 2026-05-22: Origin-Verknüpfung für Vorhol-/Nachhol-Buchungen.
-    // Nur wenn ein COURSE-Credit verwendet wird (Punktekarte/Quartal/Guthaben bleiben frei).
-    // Logik: finde die früheste anstehende cancelled course-Booking des Yogis,
-    // deren "Anspruch" noch nicht verbraucht ist (= keine andere active Booking
-    // mit dieser origin_session_id existiert). Validierung:
-    //   - Origin in Zukunft → Vorholen, neue Booking max 10 Tage vor Origin
-    //   - Origin in Vergangenheit → Nachholen, neue Booking max 8 Tage nach Kursende
-    let originSessionId: string | null = null
-    if (bestCredit.model === 'course' && session?.course_id) {
-      // Hole alle cancelled bookings des Yogis (kursübergreifend), die mit einem
-      // course-Credit verknüpft waren. Sortiert nach session.date ASC.
-      const { data: cancelled } = await supabase.from('bookings')
-        .select('id, session:sessions!bookings_session_id_fkey(id, date, time_start, course:courses(name, date_end)), credit:credits(model)')
-        .eq('user_id', user!.id)
-        .eq('status', 'cancelled')
-      const cancelledCourse = ((cancelled || []) as any[])
-        .filter(b => b.session?.date && (b as any).credit?.model === 'course')
-        .sort((a: any, b: any) => (a.session.date as string).localeCompare(b.session.date as string))
-
-      // Welche Origins sind bereits durch eine active Ersatz-Booking verbraucht?
-      const { data: alreadyClaimed } = await supabase.from('bookings')
-        .select('origin_session_id')
-        .eq('user_id', user!.id)
-        .eq('status', 'active')
-        .not('origin_session_id', 'is', null)
-      const claimedIds = new Set((alreadyClaimed || []).map((b: any) => b.origin_session_id))
-
-      const newBookingDate = session.date as string
-      const todayStr = new Date().toISOString().split('T')[0]
-
-      for (const cb of cancelledCourse) {
-        if (claimedIds.has(cb.session.id)) continue
-        const cancelledDate = cb.session.date as string
-
-        if (cancelledDate >= todayStr) {
-          // VORHOLEN: cancelled liegt in der Zukunft (oder heute) → 10-Tage-Vorholfenster
-          const tenDaysBefore = new Date(`${cancelledDate}T00:00:00`)
-          tenDaysBefore.setDate(tenDaysBefore.getDate() - 10)
-          const tenDaysBeforeStr = tenDaysBefore.toISOString().split('T')[0]
-          if (newBookingDate < tenDaysBeforeStr) {
-            // Yogi versucht zu früh — Hinweis
-            const dStr = new Date(cancelledDate).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })
-            alert(`Vorholen einer abgesagten Stunde ist frühestens 10 Tage vor der abgesagten Stunde möglich. Deine nächste abgesagte Stunde ist am ${dStr}.`)
-            setActionLoading(false)
-            return
-          }
-        } else {
-          // NACHHOLEN: cancelled liegt in der Vergangenheit → muss innerhalb
-          // 8 Tage nach Kursende des Origin-Kurses sein
-          const courseEnd = cb.session.course?.date_end
-          if (courseEnd) {
-            const maxDate = new Date(`${courseEnd}T00:00:00`)
-            maxDate.setDate(maxDate.getDate() + 8)
-            const maxDateStr = maxDate.toISOString().split('T')[0]
-            if (newBookingDate > maxDateStr) {
-              const eStr = new Date(courseEnd).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })
-              alert(`Nachholen einer Stunde ist max. 8 Tage nach Kursende möglich. Kursende deiner abgesagten Stunde war: ${eStr}.`)
-              setActionLoading(false)
-              return
-            }
-          }
-        }
-
-        // Anspruch valide → diese Origin verwenden
-        originSessionId = cb.session.id
-        break
-      }
-    }
+    const usedIsCourseModel = pick.usedModel === 'course'
+    const bookingType = (enrolledHere || usedIsCourseModel) ? 'course' : 'single'
 
     let error = null
     if (existingBooking) {
-      // Bestehende Buchung reaktivieren — type MUSS überschrieben werden,
-      // sonst bleibt z.B. eine alte cancelled course-booking type=course
-      // beim Drop-In und wird in /meine als Single-Booking nicht angezeigt.
       const { error: updateError } = await supabase.from('bookings').update({
-        status: 'active', credit_id: bestCredit.id, type: bookingType,
+        status: 'active', credit_id: chosenCreditId, type: bookingType,
         origin_session_id: originSessionId,
         cancelled_at: null, cancel_late: false
       }).eq('id', existingBooking.id)
       error = updateError
     } else {
-      // Neue Buchung anlegen
       const { error: insertError } = await supabase.from('bookings').insert({
         user_id: user!.id, session_id: id,
-        credit_id: bestCredit.id, type: bookingType, status: 'active',
+        credit_id: chosenCreditId, type: bookingType, status: 'active',
         origin_session_id: originSessionId,
       })
       error = insertError

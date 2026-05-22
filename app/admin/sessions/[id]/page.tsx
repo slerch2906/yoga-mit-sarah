@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Email } from '@/lib/email'
 import { isExcluded } from '@/lib/session-status'
+import { selectCreditForBooking } from '@/lib/credit-selector'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -143,12 +144,25 @@ export default function AdminSessionPage() {
   }
 
   async function handleAddYogi(yogi: any) {
-    const credit = getBestCredit(yogi)
-    if (!credit) { setQuickCreditYogi(yogi); return }
+    if (!session) { setQuickCreditYogi(yogi); return }
+    // Sarah-Regel 2026-05-22: Course-Credit vor Single/Tenpack/Quartal, minutengenauer 10d/8d-Check.
+    const pick = await selectCreditForBooking(supabase, yogi.id, id as string, session.date, session.time_start)
+    if (!pick.ok) {
+      // Course-Credit-Fenster verletzt oder kein Credit → Admin entscheidet (Quick-Credit Dialog)
+      const proceed = confirm(`${pick.message}\n\nSoll trotzdem ein Quick-Credit (1 Einzelstunde) angelegt werden?`)
+      if (!proceed) return
+      setQuickCreditYogi(yogi)
+      return
+    }
     setAddingYogi(true)
+    // Yogi enrolled im Session-Kurs? → type=course (gehört in Kurs-Block in /meine)
+    const { data: enrolledHere } = await supabase.from('enrollments')
+      .select('id').eq('user_id', yogi.id).eq('course_id', (session as any).course?.id).maybeSingle()
+    const bookingType = (enrolledHere || pick.usedModel === 'course') ? 'course' : 'single'
     const { error: bookingError } = await supabase.from('bookings').upsert({
       user_id: yogi.id, session_id: id,
-      credit_id: credit.id, type: 'single', status: 'active',
+      credit_id: pick.creditId, type: bookingType, status: 'active',
+      origin_session_id: pick.originSessionId,
       cancelled_at: null, cancel_late: false,
     }, { onConflict: 'user_id,session_id' })
     if (bookingError) {
@@ -156,10 +170,9 @@ export default function AdminSessionPage() {
       alert('Buchung konnte nicht angelegt werden.')
       return
     }
-    // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
     await supabase.from('audit_log').insert({
       action: 'admin_added_yogi_to_session',
-      details: { user_id: yogi.id, session_id: id, credit_id: credit.id }
+      details: { user_id: yogi.id, session_id: id, credit_id: pick.creditId, origin_session_id: pick.originSessionId }
     })
     setShowAddYogi(false); setYogiSearch(''); setYogiResults([]); setSelectedYogi(null)
     setAddingYogi(false); loadData()

@@ -37,7 +37,7 @@ function RegisterInner() {
       const fetchError = !res.ok
 
       if (fetchError || !data) {
-        setError('Einladungslink ungültig. Bitte wende dich an Sarah.')
+        setError('Einladung ist abgelaufen oder ungültig. Bitte wende dich an Sarah.')
         setChecking(false)
         return
       }
@@ -47,7 +47,9 @@ function RegisterInner() {
         return
       }
       if (new Date(data.expires_at) < new Date()) {
-        setError('Einladungslink abgelaufen. Bitte wende dich an Sarah.')
+        // Sarah-Regel 2026-05-22: Admin kann Einladung "zurückziehen" indem er sie löscht
+        // (soft-delete via expires_at = now). Dieser Pfad fängt beide Fälle ab.
+        setError('Einladung ist abgelaufen. Bitte wende dich an Sarah.')
         setChecking(false)
         return
       }

@@ -228,7 +228,9 @@ export default function RechtlichesPage() {
             <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• Abmeldung bis 3 Stunden vor Kursbeginn: Credit wird zurückgebucht.</p>
             <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• Abmeldung weniger als 3 Stunden vorher: kein Credit zurück.</p>
             <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• Warteliste: Nach automatischem Nachrücken 1 Stunde Zeit zur kostenlosen Abmeldung.</p>
-            <p className="text-sm text-yoga-text/80 leading-relaxed mb-4">• Nachholen: Stunden können bis <strong>8 Tage nach Kursende</strong> nachgeholt werden – Credits sind bis dahin gültig und können für andere Stunden genutzt werden.</p>
+            <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• Nachholen: Stunden können bis <strong>8 Tage nach Kursende</strong> nachgeholt werden – Credits sind bis dahin gültig und können für andere Stunden genutzt werden.</p>
+            <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• Vorholen: Stunden dürfen <strong>maximal 10 Tage im Voraus</strong> vorgezogen werden.</p>
+            <p className="text-sm text-yoga-text/80 leading-relaxed mb-4">• Ein Anspruch auf einen freien Platz in einer bestimmten Stunde oder zu einem bestimmten Zeitpunkt besteht nicht. Das Nachholen erfolgt ausschließlich im Rahmen freier Kapazitäten.</p>
             <h3 className="text-sm font-bold mb-2">Rücktritt vom Kurs</h3>
             <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• Bis 7 Tage vor Kursbeginn: kostenfreier Rücktritt möglich.</p>
             <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• Ab dem 7. Tag vor Kursbeginn: Stornogebühr <strong>30 €</strong>.</p>

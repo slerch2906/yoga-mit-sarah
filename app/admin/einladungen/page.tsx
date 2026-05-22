@@ -17,17 +17,28 @@ export default function EinladungenPage() {
   useEffect(() => { loadData() }, [])
 
   async function loadData() {
+    // Sarah-Regel 2026-05-22: gelöschte Einladungen werden via expires_at < now
+    // soft-gelöscht (statt physical DELETE), damit der Link in /register sofort
+    // ungültig wird. Wir blenden diese hier aus, damit die Admin-Liste sauber bleibt.
+    const nowIso = new Date().toISOString()
     const { data } = await supabase
       .from('invitations')
       .select('*, course:courses(name)')
       .order('created_at', { ascending: false })
-    setInvitations(data || [])
+    const visible = (data || []).filter((inv: any) => {
+      // Nicht-akzeptierte abgelaufene = "wurde zurückgezogen" → ausblenden
+      if (!inv.accepted_at && inv.expires_at && inv.expires_at < nowIso) return false
+      return true
+    })
+    setInvitations(visible)
     setLoading(false)
   }
 
   async function deleteInvitation(id: string) {
-    if (!confirm('Einladung löschen?')) return
-    await supabase.from('invitations').delete().eq('id', id)
+    if (!confirm('Einladung löschen? Der Link wird sofort ungültig — falls der Yogi noch nicht registriert ist, kann er sich damit nicht mehr anmelden.')) return
+    // Soft-delete: expires_at auf jetzt setzen → Link in /register wirft sofort
+    // "Einladung abgelaufen". Bewahrt Audit-Trail, kein FK-Cascade-Risiko.
+    await supabase.from('invitations').update({ expires_at: new Date().toISOString() }).eq('id', id)
     loadData()
   }
 

@@ -656,16 +656,37 @@ export default function AdminYogiDetailPage() {
                 ? (sameYear ? `${fmtShort(ds)} – ${fmtFull(de)}` : `${fmtFull(ds)} – ${fmtFull(de)}`)
                 : ds ? `ab ${fmtFull(ds)}`
                 : null
+              // Mid-Course-Einstieg: Yogi's erste Session-Datum in diesem Kurs > Kursbeginn
+              // → wir zeigen "Eingestiegen ab DD.MM., X Credits" damit der Admin sofort sieht
+              // warum der Yogi weniger Credits hat als der Kurs insgesamt.
+              const yogiBookingsForCourse = bookings.filter(b => b.session?.course_id === e.course_id)
+              const firstSessionDateStr = yogiBookingsForCourse.length > 0
+                ? yogiBookingsForCourse.map(b => b.session?.date).filter(Boolean).sort()[0]
+                : null
+              const courseStartStr = e.course?.date_start
+              const isMidCourse = !!(firstSessionDateStr && courseStartStr && firstSessionDateStr > courseStartStr)
+              const yogiCourseCredit = credits.find((c: any) => c.model === 'course' && c.course_id === e.course_id)
+              const yogiUnits = yogiCourseCredit?.total ?? 0
               return (
               <div key={e.id} className="card mb-3">
                 <div className="text-base font-bold mb-1">{e.course?.name}</div>
                 <div className="text-sm text-yoga-text/50">{e.course?.weekday}</div>
                 {dateLabel && (
-                  <div className="text-xs text-yoga-text/55 mt-0.5 mb-3 flex items-center gap-1">
+                  <div className="text-xs text-yoga-text/55 mt-0.5 flex items-center gap-1">
                     <i className="ti ti-calendar text-sm" />{dateLabel}
                   </div>
                 )}
-                {!dateLabel && <div className="mb-3" />}
+                {isMidCourse && firstSessionDateStr && (
+                  <div className="text-xs text-yoga-amber-text bg-yoga-amber-bg/60 border border-yoga-amber-text/20 rounded-yoga px-2 py-1.5 mt-2 mb-3 flex items-center gap-1.5">
+                    <i className="ti ti-arrow-narrow-right text-sm flex-shrink-0" />
+                    <span>
+                      Eingestiegen ab <strong>{new Date(firstSessionDateStr).toLocaleDateString('de-DE', { day:'numeric', month:'short', year:'numeric' })}</strong>
+                      {yogiUnits > 0 && <> · {yogiUnits} {yogiUnits === 1 ? 'Credit' : 'Credits'}</>}
+                    </span>
+                  </div>
+                )}
+                {!isMidCourse && !dateLabel && <div className="mb-3" />}
+                {!isMidCourse && dateLabel && <div className="mb-3" />}
                 {removing === e.course_id ? (
                   <div className="bg-yoga-red-bg rounded-yoga p-3 border border-yoga-red-text/20">
                     <p className="text-sm font-bold text-yoga-red-text mb-2">Wirklich austragen?</p>

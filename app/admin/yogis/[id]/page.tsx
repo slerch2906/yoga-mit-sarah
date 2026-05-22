@@ -697,10 +697,18 @@ export default function AdminYogiDetailPage() {
         )}
 
         {/* Credits */}
-        {credits.length > 0 && (
+        {/* Sichtbare Credits: course-credits IMMER (zeigen Fortschritt + Verfallsdatum),
+            andere Modelle nur wenn noch Guthaben übrig ist. Verbrauchte Guthaben (0/0)
+            werden ausgeblendet — konsistent zur /meine-Ansicht. */}
+        {(() => {
+          const visibleCredits = credits.filter((c: any) =>
+            c.model === 'course' || Math.max(0, c.total - c.used) > 0
+          )
+          if (visibleCredits.length === 0) return null
+          return (
           <>
             <p className="section-label mt-2">Credits verwalten</p>
-            {credits.map(c => {
+            {visibleCredits.map(c => {
               const free = computeFree(c)
               const isExpired = new Date(c.expires_at) < new Date()
               return (
@@ -756,7 +764,8 @@ export default function AdminYogiDetailPage() {
               )
             })}
           </>
-        )}
+          )
+        })()}
 
         {/* Yogi löschen */}
         <div className="mt-6 pt-4 border-t border-yoga-border">

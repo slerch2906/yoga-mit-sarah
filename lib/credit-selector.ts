@@ -126,36 +126,42 @@ async function tryCourseCredit(
     .not('origin_session_id', 'is', null)
   const claimedIds = new Set((claimedRows || []).map((r: any) => r.origin_session_id))
 
-  let nextValidDt: number | null = null
+  // Vereinheitlichtes Window pro Origin: [origin - 10d, courseEnd + 8d]
+  // - Untergrenze: max 10 Tage vor abgesagter Stunde ("Vorholen")
+  // - Obergrenze: 8 Tage nach Kursende ("Nachholen")
+  // - Buchungen ZWISCHEN Origin und Kursende sind problemlos erlaubt (kein extra Check)
+  //   Beispiel: Origin am 28.5., heute 22.5., neue Buchung am 1.6. → erlaubt, weil 1.6.
+  //   im Window [18.5., Kursende+8d] liegt.
+  let nextValidDt: number | null = null  // frühest-möglicher Zeitpunkt (für Error-Hinweis)
+  const now = Date.now()
   for (const cb of cancelledSorted) {
     if (claimedIds.has(cb.session.id)) continue
     if (cb.session.id === sessionId) continue // gleiche Session — wäre Reaktivierung, nicht Vorholen
 
     const originDt = new Date(`${cb.session.date}T${cb.session.time_start}`).getTime()
-    const now = Date.now()
+    const windowStart = originDt - TEN_DAYS_MS
+    const courseEnd = cb.session.course?.date_end
+    const windowEnd = courseEnd
+      ? new Date(`${courseEnd}T23:59:59`).getTime() + EIGHT_DAYS_MS
+      : Number.POSITIVE_INFINITY
 
-    if (originDt >= now) {
-      // VORHOLEN: Origin liegt in der Zukunft. Session muss in [origin - 10d, origin) liegen.
-      const windowStart = originDt - TEN_DAYS_MS
-      if (sessionDt >= windowStart && sessionDt < originDt) {
-        return { ok: true, creditId: courseCredit.id, originSessionId: cb.session.id, usedModel: 'course' }
-      }
-      // Erste passende Origin merken um die User-Message konkret zu machen
+    if (sessionDt < windowStart) {
+      // Zu früh — Vorholfenster für diese Origin noch nicht offen.
+      // Merke windowStart für eine konkrete User-Message (frühestens dann)
       if (nextValidDt === null || windowStart < nextValidDt) nextValidDt = windowStart
-    } else {
-      // NACHHOLEN: Origin liegt in der Vergangenheit. Session muss <= origin.course.date_end + 8d sein.
-      const courseEnd = cb.session.course?.date_end
-      if (courseEnd) {
-        const courseEndDt = new Date(`${courseEnd}T23:59:59`).getTime() + EIGHT_DAYS_MS
-        if (sessionDt > originDt && sessionDt <= courseEndDt) {
-          return { ok: true, creditId: courseCredit.id, originSessionId: cb.session.id, usedModel: 'course' }
-        }
-      }
+      continue
     }
+    if (sessionDt > windowEnd) {
+      // Zu spät — diese Origin verfällt nach Kursende+8d. Andere Origin probieren.
+      continue
+    }
+    // Valid — diese Origin verwenden
+    return { ok: true, creditId: courseCredit.id, originSessionId: cb.session.id, usedModel: 'course' }
   }
 
   // Kein verfügbarer Anspruch passt → window_blocked Message
-  if (nextValidDt !== null) {
+  // Aber nur wenn nextValidDt wirklich in der ZUKUNFT liegt (sonst irreführend).
+  if (nextValidDt !== null && nextValidDt > now) {
     const dStr = new Date(nextValidDt).toLocaleString('de-DE', {
       weekday: 'short', day: 'numeric', month: 'long', year: 'numeric',
       hour: '2-digit', minute: '2-digit',

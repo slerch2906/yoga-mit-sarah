@@ -63,8 +63,15 @@ export default function SessionDetailPage() {
     setMyWaitlist(myWait)
     setFreeSpots(((sess as any)?.course?.max_spots || 0) - (bookingCount || 0))
 
-    // Freie Credits berechnen: Guthaben (aus Kursabbruch) ist nur für neue Kurse, nicht für Einzelstunden
-    const available = (allCredits || []).filter(c => c.total > c.used && c.model !== 'guthaben')
+    // Freie Credits berechnen für DIESE Session:
+    // - Guthaben (aus Kursabbruch) ist nur für neue Kurse, nicht für Einzelstunden
+    // - Course-Credits sind NUR für den eigenen Kurs gültig (nicht für Drop-In in fremde Kurse!)
+    const sessCourseId = (sess as any)?.course_id
+    const available = (allCredits || []).filter(c =>
+      c.total > c.used
+      && c.model !== 'guthaben'
+      && (c.model !== 'course' || c.course_id === sessCourseId)
+    )
     const totalFree = available.reduce((sum, c) => sum + (c.total - c.used), 0)
     setFreeCredits(totalFree)
     const guthabenOnly = totalFree === 0 && (allCredits || []).some(c => c.model === 'guthaben' && c.total > c.used)
@@ -148,11 +155,18 @@ export default function SessionDetailPage() {
     const { data: existingBooking } = await supabase.from('bookings')
       .select('*').eq('session_id', id).eq('user_id', user!.id).maybeSingle()
 
+    // Buchungstyp: 'course' wenn ein course-Credit des EIGENEN Kurses verwendet wird
+    // (Yogi nutzt eine bezahlte Kurseinheit), sonst 'single' (Drop-In mit Punktekarte etc.).
+    const bookingType = (bestCredit.model === 'course' && bestCredit.course_id === (session as any)?.course_id)
+      ? 'course' : 'single'
+
     let error = null
     if (existingBooking) {
-      // Bestehende Buchung reaktivieren
+      // Bestehende Buchung reaktivieren — type MUSS überschrieben werden,
+      // sonst bleibt z.B. eine alte cancelled course-booking type=course
+      // beim Drop-In und wird in /meine als Single-Booking nicht angezeigt.
       const { error: updateError } = await supabase.from('bookings').update({
-        status: 'active', credit_id: bestCredit.id,
+        status: 'active', credit_id: bestCredit.id, type: bookingType,
         cancelled_at: null, cancel_late: false
       }).eq('id', existingBooking.id)
       error = updateError
@@ -160,7 +174,7 @@ export default function SessionDetailPage() {
       // Neue Buchung anlegen
       const { error: insertError } = await supabase.from('bookings').insert({
         user_id: user!.id, session_id: id,
-        credit_id: bestCredit.id, type: 'single', status: 'active'
+        credit_id: bestCredit.id, type: bookingType, status: 'active'
       })
       error = insertError
     }

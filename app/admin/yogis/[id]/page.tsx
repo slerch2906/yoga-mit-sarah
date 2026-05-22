@@ -630,10 +630,26 @@ export default function AdminYogiDetailPage() {
         {enrollments.length > 0 && (
           <>
             <p className="section-label">Eingebuchte Kurse</p>
-            {enrollments.map(e => (
+            {enrollments.map(e => {
+              const ds = e.course?.date_start ? new Date(e.course.date_start) : null
+              const de = e.course?.date_end ? new Date(e.course.date_end) : null
+              const sameYear = ds && de && ds.getFullYear() === de.getFullYear()
+              const fmtShort = (d: Date) => d.toLocaleDateString('de-DE', { day:'numeric', month:'short' })
+              const fmtFull = (d: Date) => d.toLocaleDateString('de-DE', { day:'numeric', month:'short', year:'numeric' })
+              const dateLabel = ds && de
+                ? (sameYear ? `${fmtShort(ds)} – ${fmtFull(de)}` : `${fmtFull(ds)} – ${fmtFull(de)}`)
+                : ds ? `ab ${fmtFull(ds)}`
+                : null
+              return (
               <div key={e.id} className="card mb-3">
                 <div className="text-base font-bold mb-1">{e.course?.name}</div>
-                <div className="text-sm text-yoga-text/50 mb-3">{e.course?.weekday}</div>
+                <div className="text-sm text-yoga-text/50">{e.course?.weekday}</div>
+                {dateLabel && (
+                  <div className="text-xs text-yoga-text/55 mt-0.5 mb-3 flex items-center gap-1">
+                    <i className="ti ti-calendar text-sm" />{dateLabel}
+                  </div>
+                )}
+                {!dateLabel && <div className="mb-3" />}
                 {removing === e.course_id ? (
                   <div className="bg-yoga-red-bg rounded-yoga p-3 border border-yoga-red-text/20">
                     <p className="text-sm font-bold text-yoga-red-text mb-2">Wirklich austragen?</p>
@@ -657,7 +673,8 @@ export default function AdminYogiDetailPage() {
                   </button>
                 )}
               </div>
-            ))}
+              )
+            })}
           </>
         )}
 

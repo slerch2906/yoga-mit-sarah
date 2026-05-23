@@ -8,8 +8,8 @@ const navItems = [
   { href: '/admin/dashboard',   label: 'Dashboard',   icon: 'ti-dashboard' },
   { href: '/admin/yogis',       label: 'Yogis',        icon: 'ti-users' },
   { href: '/admin/kurse',       label: 'Kurse',        icon: 'ti-calendar' },
+  // Sarah-Wunsch 2026-05-23: Einladungs-Liste in /admin/einladen integriert
   { href: '/admin/einladen',    label: 'Einladen',     icon: 'ti-user-plus' },
-  { href: '/admin/einladungen', label: 'Einladungen',  icon: 'ti-mail' },
   { href: '/admin/protokoll',   label: 'Protokoll',    icon: 'ti-list-details' },
   { href: '/admin/nachweise',   label: 'AGB-Nachweise', icon: 'ti-shield-check' },
   { href: '/profil',            label: 'Mein Profil',  icon: 'ti-user' },

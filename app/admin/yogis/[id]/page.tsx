@@ -55,7 +55,7 @@ export default function AdminYogiDetailPage() {
         .select('*, session:sessions!bookings_session_id_fkey(id, date, time_start, duration_min, is_cancelled, replacement_session_id, course_id, course:courses(name, is_active, is_cancelled))')
         .eq('user_id', id).order('created_at', { ascending: false }),
       supabase.from('credits').select('*, course:courses(name)').eq('user_id', id).order('created_at', { ascending: false }),
-      supabase.from('enrollments').select('*, course:courses(*, sessions(id, date, time_start, is_cancelled, replacement_session_id, course_id))').eq('user_id', id),
+      supabase.from('enrollments').select('*, course:courses(*, sessions(id, date, time_start, is_cancelled, cancel_reason, replacement_session_id, course_id))').eq('user_id', id),
       supabase.from('courses').select('*, sessions(date, is_cancelled, cancel_reason), enrollments(id)').eq('is_active', true).order('name'),
     ])
     setYogi(y); setBookings(b || []); setCredits(c || [])
@@ -713,6 +713,15 @@ export default function AdminYogiDetailPage() {
                       bookingsBySession.set(b.session.id, b)
                     }
                   }
+                  // Ersatzstunden-Set: jede Session deren ID als replacement_session_id
+                  // auf einer ANDEREN (abgesagten) Session steht, ist eine Ersatzstunde.
+                  // Wir nutzen ALLE sessions des Kurses (auch excluded), weil ausgeschlossene
+                  // Stunden auch replacements haben können.
+                  const allSessions = (e.course?.sessions || []) as any[]
+                  const replacementIds = new Set<string>()
+                  for (const s of allSessions) {
+                    if (s.replacement_session_id) replacementIds.add(s.replacement_session_id)
+                  }
                   const sorted = [...courseSessions].sort((a, b) =>
                     (a.date + (a.time_start||'')).localeCompare(b.date + (b.time_start||''))
                   )
@@ -737,12 +746,18 @@ export default function AdminYogiDetailPage() {
                             // Kein Booking — Yogi war für diese Session nicht eingebucht (mid-course Einstieg)
                             badge = { label: '—', bg: '#f5f2f0', fg: '#999' }
                           }
+                          const isReplacement = replacementIds.has(s.id)
                           return (
                             <button key={s.id} onClick={() => router.push(`/admin/sessions/${s.id}`)}
                               className="w-full text-left flex items-center justify-between gap-2 py-1.5 px-2 rounded-yoga bg-yoga-gray hover:bg-yoga-border2 transition-colors border-0 cursor-pointer text-xs">
-                              <span className="font-medium text-yoga-text/85 truncate">
+                              <span className="font-medium text-yoga-text/85 truncate flex items-center gap-1.5">
                                 {new Date(s.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })}
                                 {s.time_start && ` · ${s.time_start.slice(0,5)} Uhr`}
+                                {isReplacement && (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-yoga-amber-text bg-yoga-amber-bg/70 rounded-full px-1.5 py-0.5">
+                                    <i className="ti ti-refresh text-[10px]" />Ersatzstunde
+                                  </span>
+                                )}
                               </span>
                               <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap"
                                 style={{ background: badge.bg, color: badge.fg }}>

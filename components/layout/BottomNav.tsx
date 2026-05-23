@@ -20,8 +20,8 @@ const adminNav: NavItem[] = [
   { href: '/admin/dashboard',   label: 'Dashboard',   icon: 'ti-dashboard' },
   { href: '/admin/yogis',       label: 'Yogis',        icon: 'ti-users' },
   { href: '/admin/kurse',       label: 'Kurse',        icon: 'ti-calendar' },
+  // Sarah-Wunsch 2026-05-23: Einladungen-Liste in /admin/einladen integriert
   { href: '/admin/einladen',    label: 'Einladen',     icon: 'ti-user-plus' },
-  { href: '/admin/einladungen', label: 'Einladungen',  icon: 'ti-mail' },
   { href: '/profil',            label: 'Profil',       icon: 'ti-user' },
 ]
 

@@ -469,6 +469,41 @@ export default function ProfilPage() {
           ))}
         </div>
 
+        {/* AGB-Push (nur für Admin) — Sarah-Wunsch 2026-05-23 */}
+        {profile?.is_admin && (
+          <>
+            <p className="section-label">AGB-Verwaltung (Admin)</p>
+            <div className="card mb-4">
+              <p className="text-xs text-yoga-text/60 mb-2">
+                Aktuelle AGB-Version: <strong>{CURRENT_AGB_VERSION}</strong>
+              </p>
+              <p className="text-xs text-yoga-text/55 mb-3 leading-relaxed">
+                Wenn du die AGB auf der Webseite geändert hast: Push die neue Version hier.
+                Alle Yogis müssen die AGB beim nächsten Login mit Changelog neu bestätigen.
+              </p>
+              <p className="text-xs text-yoga-text/45 mb-3 bg-yoga-gray rounded-yoga p-2 leading-relaxed">
+                <i className="ti ti-info-circle mr-1" />
+                Technischer Hinweis: Version + Changelog werden im Code (<code>lib/agb-version.ts</code>) gepflegt — der Button unten löst nur die Re-Acceptance aus.
+                Wenn du die Version+Changelog selbst eintragen willst, sag Sarah bzw. Claude Bescheid — wir bauen ein vollständiges Admin-Formular dafür.
+              </p>
+              <button onClick={async () => {
+                if (!confirm(`Wirklich alle Yogis zwingen, AGB Version ${CURRENT_AGB_VERSION} neu zu bestätigen?\n\nDas setzt bei allen Yogis agb_version auf ${CURRENT_AGB_VERSION - 1} → beim nächsten Login werden sie zur /rechtliches-Seite umgeleitet.`)) return
+                const newVal = CURRENT_AGB_VERSION - 1
+                const { error, count } = await supabase.from('profiles')
+                  .update({ agb_version: newVal })
+                  .gte('agb_version', newVal + 1)
+                  .select('id', { count: 'exact', head: true })
+                if (error) { alert('Fehler: ' + error.message); return }
+                alert(`${count ?? 0} Yogis wurden zurückgesetzt — sie müssen beim nächsten Login die AGB neu bestätigen.`)
+              }}
+                className="btn-secondary text-sm">
+                <i className="ti ti-bell mr-1" />
+                Alle Yogis zur Re-Bestätigung zwingen
+              </button>
+            </div>
+          </>
+        )}
+
         {/* App installieren Button */}
         <InstallButton />
 

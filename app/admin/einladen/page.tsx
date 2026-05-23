@@ -17,15 +17,63 @@ function EinladenInner() {
   const [success, setSuccess] = useState(false)
   const [inviteLink, setInviteLink] = useState('')
   const [copied, setCopied] = useState(false)
+  // Sarah-Wunsch 2026-05-23: Einladungs-Liste hier (aufklappbar) integrieren
+  const [invitations, setInvitations] = useState<any[]>([])
+  const [showOpen, setShowOpen] = useState(false)
+  const [showAccepted, setShowAccepted] = useState(false)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [sendingReminder, setSendingReminder] = useState<string | null>(null)
   const supabase = createClient()
 
-  useEffect(() => { loadCourses() }, [])
+  useEffect(() => { loadCourses(); loadInvitations() }, [])
 
   async function loadCourses() {
     const { data } = await supabase.from('courses')
       .select('id, name, weekday, total_units, date_start, date_end, is_single, sessions(id, date, is_cancelled)')
       .eq('is_active', true).order('name')
     setCourses(data || [])
+  }
+
+  async function loadInvitations() {
+    // Soft-deleted Einladungen (expires_at < now & nicht akzeptiert) ausblenden
+    const nowIso = new Date().toISOString()
+    const { data } = await supabase.from('invitations')
+      .select('*, course:courses(name)')
+      .order('created_at', { ascending: false })
+    const visible = (data || []).filter((inv: any) => {
+      if (!inv.accepted_at && inv.expires_at && inv.expires_at < nowIso) return false
+      return true
+    })
+    setInvitations(visible)
+  }
+
+  async function deleteInvitation(id: string) {
+    if (!confirm('Einladung löschen? Der Link wird sofort ungültig.')) return
+    await supabase.from('invitations').update({ expires_at: new Date().toISOString() }).eq('id', id)
+    loadInvitations()
+  }
+
+  async function sendReminder(inv: any) {
+    setSendingReminder(inv.id)
+    try {
+      const link = `${window.location.origin}/register?token=${inv.token}`
+      await Email.invitationReminder({
+        email: inv.email, firstName: inv.first_name || 'Yogi',
+        courseName: inv.course?.name || undefined, inviteLink: link,
+      })
+      alert('Erinnerung gesendet an ' + inv.email)
+    } catch (e) { alert('Netzwerkfehler: ' + String(e)) }
+    setSendingReminder(null)
+  }
+
+  async function copyExistingLink(token: string, id: string) {
+    const link = `${window.location.origin}/register?token=${token}`
+    try { await navigator.clipboard.writeText(link) } catch {
+      const el = document.createElement('textarea'); el.value = link
+      document.body.appendChild(el); el.select(); document.execCommand('copy')
+      document.body.removeChild(el)
+    }
+    setCopiedId(id); setTimeout(() => setCopiedId(null), 2000)
   }
 
   function getRemainingUnits(course: any) {
@@ -196,6 +244,89 @@ function EinladenInner() {
             {loading ? 'Wird erstellt...' : 'Einladungslink erstellen'}
           </button>
         </form>
+
+        {/* Sarah-Wunsch 2026-05-23: Einladungs-Liste hier integriert (aufklappbar) */}
+        {(() => {
+          const open = invitations.filter(i => !i.used && new Date(i.expires_at) > new Date())
+          const accepted = invitations.filter(i => i.used)
+          return (
+            <div className="mt-8 space-y-4">
+              {open.length > 0 && (
+                <div>
+                  <button onClick={() => setShowOpen(!showOpen)}
+                    className="w-full flex items-center justify-between py-2 px-1 text-sm font-semibold text-yoga-text/70 bg-transparent border-0 cursor-pointer">
+                    <span>Ausstehende Einladungen ({open.length})</span>
+                    <i className={`ti ti-chevron-${showOpen ? 'up' : 'down'}`} />
+                  </button>
+                  {showOpen && (
+                    <div className="space-y-2 mt-1">
+                      {open.map(inv => (
+                        <div key={inv.id} className="card">
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-semibold">{inv.first_name} {inv.last_name}</div>
+                              <div className="text-xs text-yoga-text/50 truncate">{inv.email}</div>
+                              {inv.course && (
+                                <div className="text-xs text-yoga-text/40 mt-0.5">
+                                  <i className="ti ti-calendar mr-1" />{inv.course.name} · {inv.credits_to_assign} Credits
+                                </div>
+                              )}
+                              <div className="text-xs text-yoga-text/40 mt-0.5">
+                                Gültig bis {new Date(inv.expires_at).toLocaleDateString('de-DE')}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex gap-1.5 flex-wrap">
+                            <button onClick={() => copyExistingLink(inv.token, inv.id)}
+                              className="text-xs bg-yoga-gray rounded-full px-2.5 py-1 font-semibold border-0 cursor-pointer">
+                              <i className={`ti ${copiedId === inv.id ? 'ti-check' : 'ti-copy'} mr-1`} />
+                              {copiedId === inv.id ? 'Kopiert' : 'Link kopieren'}
+                            </button>
+                            <button onClick={() => sendReminder(inv)} disabled={sendingReminder === inv.id}
+                              className="text-xs bg-yoga-gray rounded-full px-2.5 py-1 font-semibold border-0 cursor-pointer">
+                              <i className="ti ti-mail mr-1" />
+                              {sendingReminder === inv.id ? '...' : 'Erinnerung'}
+                            </button>
+                            <button onClick={() => deleteInvitation(inv.id)}
+                              className="text-xs bg-yoga-red-bg text-yoga-red-text rounded-full px-2.5 py-1 font-semibold border-0 cursor-pointer">
+                              Löschen
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {accepted.length > 0 && (
+                <div>
+                  <button onClick={() => setShowAccepted(!showAccepted)}
+                    className="w-full flex items-center justify-between py-2 px-1 text-sm font-semibold text-yoga-text/70 bg-transparent border-0 cursor-pointer">
+                    <span>Angenommene Einladungen ({accepted.length})</span>
+                    <i className={`ti ti-chevron-${showAccepted ? 'up' : 'down'}`} />
+                  </button>
+                  {showAccepted && (
+                    <div className="space-y-2 mt-1">
+                      {accepted.map(inv => (
+                        <div key={inv.id} className="card opacity-75">
+                          <div className="text-sm font-semibold">{inv.first_name} {inv.last_name}</div>
+                          <div className="text-xs text-yoga-text/50 truncate">{inv.email}</div>
+                          {inv.accepted_at && (
+                            <div className="text-xs text-yoga-green-text mt-1">
+                              <i className="ti ti-check mr-0.5" />
+                              Angenommen am {new Date(inv.accepted_at).toLocaleDateString('de-DE')}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })()}
       </div>
       <BottomNav isAdmin />
     </div>

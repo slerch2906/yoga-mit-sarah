@@ -372,11 +372,7 @@ export default function ProfilPage() {
             {/* 1) Nachricht für Yogis (Sprechblase auf Wochenseite) */}
             <p className="section-label">Nachricht für Yogis</p>
             <div className="card mb-4">
-              <p className="text-xs text-yoga-text/55 mb-3 leading-relaxed">
-                Erscheint als Sprechblase auf der Wochenseite — z.B. „Ich wünsche euch eine
-                wunderschöne Woche!" oder ein Yoga-Zitat. Wird nur angezeigt, wenn der Schalter
-                unten an ist UND ein Text drinsteht.
-              </p>
+              <p className="text-xs text-yoga-text/55 mb-3">Dein Sprechblasen-Text auf der Wochenseite.</p>
               <textarea className="field-input mb-3" rows={3} value={annText}
                 onChange={e => setAnnText(e.target.value)}
                 placeholder="z.B. Ich wünsche euch eine wunderschöne Woche! 💛" />
@@ -403,10 +399,7 @@ export default function ProfilPage() {
             {/* 2) Bulk-Mail an alle Yogis */}
             <p className="section-label">E-Mail an alle Yogis</p>
             <div className="card mb-4">
-              <p className="text-xs text-yoga-text/55 mb-3 leading-relaxed">
-                Schickt eine einmalige E-Mail an alle aktiven Yogis (nicht an Dummies, nicht an dich selbst).
-                Beispiel: Sommerpause-Info, Studio-Umzug, Sonderaktion.
-              </p>
+              <p className="text-xs text-yoga-text/55 mb-3">Versende eine E-Mail an alle Yogis gleichzeitig.</p>
               <div className="space-y-3">
                 <div>
                   <label className="field-label">Betreff</label>
@@ -445,13 +438,8 @@ export default function ProfilPage() {
             {/* 3) AGB-Verwaltung */}
             <p className="section-label">AGB-Verwaltung</p>
             <div className="card mb-4">
-              <p className="text-sm mb-1">
-                Aktuelle AGB-Version: <strong>{currentAgb?.label || 'Dezember 2025'}</strong>
-              </p>
-              <p className="text-xs text-yoga-text/55 mb-3 leading-relaxed">
-                Wenn du die AGB auf yogamitsarah.me/agb geändert hast: trag hier die neue Versions-Bezeichnung
-                und in einem Satz ein, was sich geändert hat. Beim Pushen müssen alle Yogis beim nächsten
-                Login die neue AGB neu bestätigen (mit deinem Changelog).
+              <p className="text-sm mb-3">
+                Aktuelle Version: <strong>{currentAgb?.label || 'Dezember 2025'}</strong>
               </p>
               {!showAgbForm ? (
                 <button onClick={() => { setShowAgbForm(true); setAgbLabel(''); setAgbChangelog('') }}

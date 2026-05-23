@@ -376,7 +376,9 @@ export default function ProfilPage() {
             <p className="section-label">Nachricht für Yogis</p>
             <div className="card mb-4">
               <p className="text-xs text-yoga-text/55 mb-3">Dein Sprechblasen-Text auf der Wochenseite.</p>
-              <textarea className="field-input mb-3" rows={3} value={annText}
+              <textarea
+                className="w-full bg-white border border-yoga-border2 rounded-yoga px-3 py-2 mb-3 text-sm text-yoga-text outline-none focus:border-yoga-text/40 transition-colors"
+                rows={3} value={annText}
                 onChange={e => setAnnText(e.target.value)}
                 placeholder="z.B. Ich wünsche euch eine wunderschöne Woche! 💛" />
               <label className="flex items-center justify-between mb-3 cursor-pointer">
@@ -406,18 +408,20 @@ export default function ProfilPage() {
               <div className="space-y-3">
                 <div>
                   <label className="field-label">Betreff</label>
-                  <input className="field-input" value={bulkSubject}
+                  <input
+                    className="w-full bg-white border border-yoga-border2 rounded-yoga px-3 py-2 text-sm text-yoga-text outline-none focus:border-yoga-text/40 transition-colors"
+                    value={bulkSubject}
                     onChange={e => setBulkSubject(e.target.value)}
                     placeholder="z.B. Sommerpause vom 1.-15. August" />
                 </div>
                 <div>
                   <label className="field-label">Text</label>
-                  <p className="text-[11px] text-yoga-text/45 mb-1">
-                    Die Anrede „Hallo [Vorname]," wird automatisch davorgesetzt — also direkt mit deinem Text loslegen.
-                  </p>
-                  <textarea className="field-input" rows={5} value={bulkBody}
+                  <p className="text-[11px] text-yoga-text/45 mb-1">Hallo [Vorname],</p>
+                  <textarea
+                    className="w-full bg-white border border-yoga-border2 rounded-yoga px-3 py-2 text-sm text-yoga-text outline-none focus:border-yoga-text/40 transition-colors"
+                    rows={5} value={bulkBody}
                     onChange={e => setBulkBody(e.target.value)}
-                    placeholder="z.B. ich wollte euch nur kurz erinnern, dass die Sommerpause vom 1.-15. August stattfindet…" />
+                    placeholder="z.B. ich wollte euch kurz erinnern, dass die Sommerpause vom 1.-15. August stattfindet…" />
                 </div>
                 <button disabled={sendingBulk || !bulkSubject.trim() || !bulkBody.trim()}
                   onClick={async () => {

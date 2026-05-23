@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Email } from '@/lib/email'
-import { isActive, isStarted, countActiveFutureUnits } from '@/lib/session-status'
+import { isActive, isStarted, countActiveFutureUnits, isExcluded } from '@/lib/session-status'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -502,9 +502,31 @@ export default function AdminYogiDetailPage() {
           </p>
           {(yogi.emergency_name || yogi.emergency_phone) && (
             <div className="mt-2 p-2 bg-yoga-amber-bg/40 rounded-yoga border border-yoga-amber-text/20">
-              <div className="text-xs text-yoga-text/50 mb-1"> Notfallkontakt</div>
+              <div className="text-xs text-yoga-text/50 mb-1">Notfallkontakt</div>
               {yogi.emergency_name && <div className="text-sm font-semibold">{yogi.emergency_name}</div>}
-              {yogi.emergency_phone && <div className="text-sm text-yoga-text/70">{yogi.emergency_phone}</div>}
+              {yogi.emergency_phone && (() => {
+                // Sarah-Wunsch 2026-05-23: tel: und WhatsApp-Link für direkten Kontakt.
+                // Telefon normalisieren auf +49xxx Format für WhatsApp wa.me.
+                const raw = (yogi.emergency_phone as string).replace(/\s|-|\(|\)|\//g, '')
+                let waNumber = raw.startsWith('+') ? raw.replace('+', '') :
+                  raw.startsWith('00') ? raw.slice(2) :
+                  raw.startsWith('0') ? '49' + raw.slice(1) : raw
+                return (
+                  <>
+                    <div className="text-sm text-yoga-text/70 mb-1.5">{yogi.emergency_phone}</div>
+                    <div className="flex gap-1.5">
+                      <a href={`tel:${raw}`}
+                        className="flex-1 inline-flex items-center justify-center gap-1 text-xs bg-yoga-text text-yoga-bg rounded-full px-2.5 py-1 font-semibold no-underline">
+                        <i className="ti ti-phone" />Anrufen
+                      </a>
+                      <a href={`https://wa.me/${waNumber}`} target="_blank" rel="noopener noreferrer"
+                        className="flex-1 inline-flex items-center justify-center gap-1 text-xs bg-[#25D366] text-white rounded-full px-2.5 py-1 font-semibold no-underline">
+                        <i className="ti ti-brand-whatsapp" />WhatsApp
+                      </a>
+                    </div>
+                  </>
+                )
+              })()}
             </div>
           )}
           <div className="mt-2 flex items-center gap-2">
@@ -680,7 +702,9 @@ export default function AdminYogiDetailPage() {
                     Status pro Session (Teilgenommen/Abgemeldet/Abgesagt/Eingebucht).
                     Klick auf Session öffnet /admin/sessions/[id]. */}
                 {(() => {
-                  const courseSessions = (e.course?.sessions || []) as any[]
+                  // Sarah-Wunsch 2026-05-23: ausgeschlossene Stunden (Setup-Excluded)
+                  // werden hier NICHT angezeigt — die existieren ja effektiv nie als Termine.
+                  const courseSessions = ((e.course?.sessions || []) as any[]).filter((s: any) => !isExcluded(s))
                   if (courseSessions.length === 0) return null
                   const nowMs = Date.now()
                   const bookingsBySession = new Map<string, any>()

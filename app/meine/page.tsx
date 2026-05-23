@@ -7,6 +7,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { isActive, isExcluded, isCancelled, isStarted } from '@/lib/session-status'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
+import { CURRENT_AGB_VERSION } from '@/lib/agb-version'
 
 export default function MeinePage() {
   const [profile, setProfile] = useState<any>(null)
@@ -47,7 +48,9 @@ export default function MeinePage() {
           .gt('expires_at', new Date().toISOString()),
       ])
 
-      if (prof && !prof.legal_accepted_at) { router.push('/rechtliches'); return }
+      if (prof && (!prof.legal_accepted_at || (prof.agb_version ?? 0) < CURRENT_AGB_VERSION)) {
+        router.push('/rechtliches'); return
+      }
       setProfile(prof)
       // Beendete Kurse (date_end < heute) für Yogi ausblenden – Credits bleiben sichtbar via expires_at
       const today = new Date().toISOString().split('T')[0]

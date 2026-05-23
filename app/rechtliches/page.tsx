@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/auth'
 import { Email } from '@/lib/email'
+import { CURRENT_AGB_VERSION, AGB_CHANGELOG } from '@/lib/agb-version'
 
 // Einfaches PDF als Base64 via HTML-Canvas-Trick mit jsPDF-ähnlichem Ansatz
 // Wir bauen das PDF manuell als minimales PDF-Binary
@@ -43,6 +44,11 @@ export default function RechtlichesPage() {
   const [checked3, setChecked3] = useState(false)
   const [loading, setLoading] = useState(false)
   const [ready, setReady] = useState(false)
+  // Sarah-Wunsch 2026-05-23: Re-Acceptance-Modus wenn AGB-Version aktualisiert wurde.
+  // Yogi hat AGB schon mal akzeptiert, aber alte Version → zeige kompakte Re-Bestätigung
+  // mit Changelog statt komplettem Onboarding.
+  const [isReAcceptance, setIsReAcceptance] = useState(false)
+  const [previousVersion, setPreviousVersion] = useState<number>(1)
   const router = useRouter()
   const supabase = createClient()
 
@@ -51,8 +57,8 @@ export default function RechtlichesPage() {
       const user = await getCurrentUser()
       if (!user) { window.location.href = '/login'; return }
       const { data: prof } = await supabase
-        .from('profiles').select('legal_accepted_at, is_admin, first_name').eq('id', user.id).single()
-      
+        .from('profiles').select('legal_accepted_at, is_admin, first_name, agb_version').eq('id', user.id).single()
+
       // Anonymisiertes Profil (DSGVO-gelöscht) → sofort ausloggen
       if (!prof || prof.first_name === 'Gelöschter') {
         await supabase.auth.signOut({ scope: 'global' })
@@ -61,11 +67,21 @@ export default function RechtlichesPage() {
         window.location.replace('/login')
         return
       }
-      
-      if (prof?.legal_accepted_at) {
+
+      const userVersion = (prof as any).agb_version ?? 0
+      const isAgbAktuell = prof?.legal_accepted_at && userVersion >= CURRENT_AGB_VERSION
+
+      if (isAgbAktuell) {
         if (prof.is_admin) router.replace('/admin/dashboard')
         else router.push('/kurse')
         return
+      }
+
+      // Re-Acceptance-Pfad: Yogi hat schon mal akzeptiert (legal_accepted_at != null)
+      // aber alte Version (agb_version < CURRENT)
+      if (prof?.legal_accepted_at && userVersion < CURRENT_AGB_VERSION) {
+        setIsReAcceptance(true)
+        setPreviousVersion(userVersion)
       }
       setReady(true)
     }
@@ -110,17 +126,18 @@ export default function RechtlichesPage() {
     }
     const acceptedAt = new Date().toISOString()
 
-    // 1) In Supabase speichern – getrennt damit ein Fehler in legal_acceptances den Upload nicht blockiert
+    // 1) In Supabase speichern – inkl. AGB-Versions-Update (Sarah-Wunsch 2026-05-23)
     const { error: profileError } = await supabase.from('profiles').update({
       legal_accepted_at: acceptedAt,
-      legal_version: '2025-12'
+      legal_version: '2025-12',
+      agb_version: CURRENT_AGB_VERSION,
     }).eq('id', user.id)
     console.log('Profile update:', profileError ? 'ERROR: ' + profileError.message : 'OK')
 
     const { error: legalError } = await supabase.from('legal_acceptances').insert({
       user_id: user.id,
-      version: '2025-12',
-      agb_version: '2025-12',
+      version: String(CURRENT_AGB_VERSION),
+      agb_version: String(CURRENT_AGB_VERSION),
       full_name: fullName,
       accepted_at: acceptedAt,
       user_agent: navigator.userAgent,
@@ -159,9 +176,28 @@ export default function RechtlichesPage() {
             alt="Logo" className="w-10 h-10 object-contain" />
           <div>
             <p className="text-base font-bold">Yoga mit Sarah</p>
-            <p className="text-xs text-yoga-text/50">Einmalige Bestätigung erforderlich</p>
+            <p className="text-xs text-yoga-text/50">
+              {isReAcceptance ? 'AGB wurden aktualisiert' : 'Einmalige Bestätigung erforderlich'}
+            </p>
           </div>
         </div>
+        {/* Re-Acceptance-Banner: Yogi hat schon V1 akzeptiert, neue Version vorhanden */}
+        {isReAcceptance && (
+          <div className="bg-yoga-amber-bg/60 border border-yoga-amber-text/30 rounded-yoga p-3 mb-3">
+            <p className="text-xs font-semibold text-yoga-amber-text mb-1">
+              Neue AGB-Version {CURRENT_AGB_VERSION} — bitte erneut bestätigen
+            </p>
+            <p className="text-xs text-yoga-text/70 mb-1">Was hat sich seit Version {previousVersion} geändert:</p>
+            <ul className="text-xs text-yoga-text/70 list-disc list-inside space-y-0.5">
+              {Array.from({ length: CURRENT_AGB_VERSION - previousVersion }).flatMap((_, i) => {
+                const v = previousVersion + 1 + i
+                const entry = AGB_CHANGELOG[v]
+                if (!entry) return [<li key={v}>Version {v}</li>]
+                return entry.changes.map((c, idx) => <li key={`${v}-${idx}`}><strong>v{v}:</strong> {c}</li>)
+              })}
+            </ul>
+          </div>
+        )}
         <div className="flex gap-2">
           <div className={`h-2 flex-1 rounded-full transition-colors ${step >= 1 ? 'bg-yoga-text' : 'bg-yoga-border2'}`} />
           <div className={`h-2 flex-1 rounded-full transition-colors ${step >= 2 ? 'bg-yoga-text' : 'bg-yoga-border2'}`} />

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/auth'
 import { fullLogout } from '@/lib/logout'
+import { CURRENT_AGB_VERSION } from '@/lib/agb-version'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -189,7 +190,9 @@ export default function ProfilPage() {
           .gt('expires_at', new Date().toISOString()),
       ])
       if (prof) prof.email = user.email || prof.email
-      if (prof && !prof.legal_accepted_at) { router.push('/rechtliches'); return }
+      if (prof && (!prof.legal_accepted_at || (prof.agb_version ?? 0) < CURRENT_AGB_VERSION)) {
+        router.push('/rechtliches'); return
+      }
       setProfile(prof)
       setCredits(crds || [])
     } catch (e) {

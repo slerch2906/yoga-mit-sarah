@@ -657,20 +657,22 @@ export default function ProfilPage() {
         <div className="card mb-4">
           <p className="text-xs text-yoga-text/50 mb-3">Optional – für Notfälle während des Kurses</p>
           {!editingEmergency ? (
-            <div>
-              {profile?.emergency_name || profile?.emergency_phone ? (
-                <div className="mb-3 space-y-1">
-                  {profile.emergency_name && <p className="text-sm font-semibold">{profile.emergency_name}</p>}
-                  {profile.emergency_phone && <p className="text-sm text-yoga-text/60">{profile.emergency_phone}</p>}
-                </div>
-              ) : (
-                <p className="text-sm text-yoga-text/40 mb-3">Noch kein Notfallkontakt hinterlegt</p>
-              )}
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                {profile?.emergency_name || profile?.emergency_phone ? (
+                  <div className="space-y-0.5">
+                    {profile.emergency_name && <p className="text-sm font-semibold truncate">{profile.emergency_name}</p>}
+                    {profile.emergency_phone && <p className="text-sm text-yoga-text/60 truncate">{profile.emergency_phone}</p>}
+                  </div>
+                ) : (
+                  <p className="text-sm text-yoga-text/40">Noch nicht hinterlegt</p>
+                )}
+              </div>
               <button onClick={() => {
                 setEmergencyForm({ name: profile?.emergency_name || '', phone: profile?.emergency_phone || '' })
                 setEditingEmergency(true)
-              }} className="btn-secondary text-sm">
-                <i className="ti ti-pencil mr-1" />{profile?.emergency_name ? 'Bearbeiten' : 'Hinzufügen'}
+              }} className="text-xs border border-yoga-border2 rounded-full px-3 py-1 text-yoga-text/60 flex-shrink-0">
+                {profile?.emergency_name ? 'Ändern' : 'Hinzufügen'}
               </button>
             </div>
           ) : (

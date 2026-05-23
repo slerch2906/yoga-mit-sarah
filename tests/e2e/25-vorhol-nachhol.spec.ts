@@ -126,7 +126,8 @@ test.describe('Vorhol-/Nachhol-Logik', () => {
     expect(pick.ok).toBe(false)
     if (!pick.ok) {
       expect(pick.reason).toBe('window_blocked')
-      expect(pick.message).toMatch(/10 Tage vor dem Termin/i)
+      // Sarah-Regel 2026-05-23: neue Formulierung — "maximal 10 Tage vor deiner abgesagten Stunde"
+      expect(pick.message).toMatch(/10 Tage vor/i)
     }
   })
 

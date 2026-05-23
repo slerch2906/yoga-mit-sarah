@@ -726,22 +726,27 @@ export default function ProfilPage() {
           </label>
         </div>
 
-        {/* Stunden-Erinnerung */}
+        {/* Stunden-Erinnerung — kompaktes Inline-Layout wie die anderen Card-Felder */}
         <div className="card mb-2">
-          <div className="text-sm font-semibold mb-1">Erinnerung vor Yogastunden</div>
-          <div className="text-xs text-yoga-text/50 mb-3">Email-Erinnerung an deine angemeldeten Stunden</div>
-          <select className="field-input"
-            value={profile?.notify_session_reminder_hours ?? ''}
-            onChange={async e => {
-              const v = e.target.value === '' ? null : parseInt(e.target.value)
-              setProfile((p: any) => ({ ...p, notify_session_reminder_hours: v }))
-              await supabase.from('profiles').update({ notify_session_reminder_hours: v }).eq('id', profile.id)
-            }}>
-            <option value="">Aus</option>
-            <option value="4">4 Stunden vorher</option>
-            <option value="12">12 Stunden vorher</option>
-            <option value="24">24 Stunden vorher</option>
-          </select>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold">Erinnerung vor Yogastunden</div>
+              <div className="text-xs text-yoga-text/50 mt-0.5">Email-Erinnerung an angemeldete Stunden</div>
+            </div>
+            <select
+              className="text-xs border border-yoga-border2 rounded-full px-3 py-1.5 text-yoga-text/70 bg-white outline-none focus:border-yoga-text/40 flex-shrink-0"
+              value={profile?.notify_session_reminder_hours ?? ''}
+              onChange={async e => {
+                const v = e.target.value === '' ? null : parseInt(e.target.value)
+                setProfile((p: any) => ({ ...p, notify_session_reminder_hours: v }))
+                await supabase.from('profiles').update({ notify_session_reminder_hours: v }).eq('id', profile.id)
+              }}>
+              <option value="">Aus</option>
+              <option value="4">4 Std vorher</option>
+              <option value="12">12 Std vorher</option>
+              <option value="24">24 Std vorher</option>
+            </select>
+          </div>
         </div>
 
         <div className="bg-yoga-gray rounded-yoga p-3 mb-4 text-xs text-yoga-text/60 leading-relaxed">

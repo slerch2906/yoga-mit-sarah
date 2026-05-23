@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'yoga-sarah-v7'
+const CACHE_VERSION = 'yoga-sarah-v8'
 const STATIC_ASSETS = ['/manifest.json']
 
 self.addEventListener('install', event => {

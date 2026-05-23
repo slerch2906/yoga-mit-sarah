@@ -1145,7 +1145,7 @@ export default function AdminKursePage() {
               </div>
               <label className="flex items-center gap-3 card cursor-pointer" onClick={() => setForm({...form, is_single: !form.is_single})}>
                 <input type="checkbox" checked={form.is_single} readOnly className="w-5 h-5" />
-                <span className="text-sm">Einzelne Ersatzstunde</span>
+                <span className="text-sm">Einzelne Stunde</span>
               </label>
               {!form.is_single && (
                 <div>

@@ -12,7 +12,10 @@ const navItems = [
   { href: '/admin/einladen',    label: 'Einladen',     icon: 'ti-user-plus' },
   { href: '/admin/protokoll',   label: 'Protokoll',    icon: 'ti-list-details' },
   { href: '/admin/nachweise',   label: 'AGB-Nachweise', icon: 'ti-shield-check' },
-  { href: '/profil',            label: 'Mein Profil',  icon: 'ti-user' },
+  // Sarah-Wunsch 2026-05-23: "Mein Profil" raus aus Sidebar — der Link führte
+  // nach /profil (außerhalb /admin/), wodurch die Sidebar verschwand.
+  // Admin braucht Profil-Daten auch nicht auf Laptop — auf Mobile gibt's das
+  // Mehr-Menü unter /profil über BottomNav.
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

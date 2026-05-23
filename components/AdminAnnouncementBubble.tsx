@@ -34,7 +34,7 @@ export default function AdminAnnouncementBubble() {
   if (!message) return null
 
   return (
-    <div className="px-4 pt-3 bubble-breathe">
+    <div className="px-4 pt-3">
       <div className="flex items-center gap-3">
         {/* Avatar (größer + leichter Schatten) */}
         <img

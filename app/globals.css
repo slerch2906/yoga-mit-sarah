@@ -42,38 +42,24 @@ body {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-@keyframes softPulse {
-  0%, 100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(68,60,60,0.0); }
-  50%      { transform: scale(1.06); box-shadow: 0 0 0 8px rgba(68,60,60,0.05); }
-}
+/* softPulse-Keyframe entfernt — Sprechblasen-Atmen wurde rausgenommen
+   (Sarah-Wunsch 2026-05-23 v4: komplett weg). */
 
 /* Globaler Body-Fade-In beim Page-Load (sehr subtil) */
 body {
   animation: fadeInUp 240ms ease-out;
 }
 
-/* "Atmender" Effekt für die Sarah-Sprechblase — DAUERHAFT atmend.
-   Sarah-Wunsch 2026-05-23 (v3): vorher kaum sichtbar (1.5% → 3.5%, nur 3x).
-   Jetzt: 6% scale + glow + INFINITE, damit es deutlich erkennbar ist solange
-   die Sprechblase angezeigt wird. 3s pro Atemzug (langsam, ruhig). */
-.bubble-breathe {
-  animation: softPulse 3000ms ease-in-out infinite;
-  transform-origin: center;
-}
+/* .bubble-breathe entfernt (Sarah-Wunsch v4) — Effekt war nicht spürbar
+   und passte nicht zum ruhigen Yoga-Mood. */
 
 /* ──────────────────────────────────────────────────────────────────────
    Sarah-Wunsch 2026-05-23 (v3): Page-Übergang Fade, Modal-Slide-Up,
    Bottom-Nav-Pop. Alle drei dezent — Yoga-Mood: weich, nicht hektisch.
    ────────────────────────────────────────────────────────────────────── */
 
-/* Page-Fade beim Tab/Route-Wechsel (via app/template.tsx remount) */
-@keyframes pageFadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.page-fade {
-  animation: pageFadeIn 220ms ease-out;
-}
+/* Page-Fade entfernt (Sarah-Wunsch v4) — sah nicht schön aus beim Tab-Wechsel.
+   app/template.tsx wurde gelöscht. */
 
 /* Modal-Backdrop fadet rein, Modal-Card slidet von unten hoch.
    Auf jedes Modal anwenden: Backdrop = .modal-backdrop, Card = .modal-card. */

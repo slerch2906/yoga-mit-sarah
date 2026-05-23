@@ -202,12 +202,16 @@ export default function ProfilPage() {
       // Admin-Mehr-Menü: Nachricht + erweiterter System-Health laden
       if (prof?.is_admin) {
         const [annRes, healthRes] = await Promise.all([
-          supabase.from('admin_announcement').select('message, is_active').eq('id', 1).maybeSingle(),
+          supabase.from('admin_announcement').select('message, is_active, update_banner_version').eq('id', 1).maybeSingle(),
           supabase.rpc('get_system_health'),
         ])
         if (annRes.data) {
           setAnnText(annRes.data.message || '')
           setAnnActive(!!annRes.data.is_active)
+          // Update-Banner: aktiv wenn version gesetzt UND == aktuellem BUILD_SHA
+          // (sonst zeigt sich ein "alter" Banner für eine Version die nicht mehr aktuell ist)
+          const currentSha = process.env.NEXT_PUBLIC_BUILD_SHA || 'local'
+          setUpdateBannerActive((annRes.data as any).update_banner_version === currentSha)
         }
         if (healthRes.data) {
           const h = healthRes.data as any
@@ -259,6 +263,9 @@ export default function ProfilPage() {
   const [annText, setAnnText] = useState('')
   const [annActive, setAnnActive] = useState(false)
   const [savingAnn, setSavingAnn] = useState(false)
+  // Update-Banner (Option C: manueller Trigger)
+  const [updateBannerActive, setUpdateBannerActive] = useState(false)
+  const [savingUpdateBanner, setSavingUpdateBanner] = useState(false)
   const [bulkSubject, setBulkSubject] = useState('')
   const [bulkBody, setBulkBody] = useState('')
   const [sendingBulk, setSendingBulk] = useState(false)
@@ -587,6 +594,36 @@ export default function ProfilPage() {
                     return `vor ${Math.round(ago/1440)} Tagen`
                   })()}
                 </span>
+              </div>
+
+              {/* Update-Banner Toggle (Sarah-Wunsch Option C, 2026-05-23) */}
+              <div className="pt-2 border-t border-yoga-border">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div className="min-w-0 flex-1 pr-2">
+                    <div className="text-xs font-semibold text-yoga-text/70">„Update verfügbar"-Banner zeigen</div>
+                    <div className="text-[10px] text-yoga-text/45 mt-0.5 leading-snug">
+                      Erst nach wichtigen Updates anschalten — sonst nervt es.
+                    </div>
+                  </div>
+                  <input type="checkbox" className="w-5 h-5 cursor-pointer flex-shrink-0"
+                    style={{ accentColor: '#3d3a39' }}
+                    checked={updateBannerActive}
+                    disabled={savingUpdateBanner}
+                    onChange={async e => {
+                      const v = e.target.checked
+                      setUpdateBannerActive(v)
+                      setSavingUpdateBanner(true)
+                      const newVersion = v ? (process.env.NEXT_PUBLIC_BUILD_SHA || 'local') : null
+                      const { error } = await supabase.from('admin_announcement')
+                        .update({ update_banner_version: newVersion, updated_at: new Date().toISOString() })
+                        .eq('id', 1)
+                      setSavingUpdateBanner(false)
+                      if (error) {
+                        alert('Fehler: ' + error.message)
+                        setUpdateBannerActive(!v) // rollback
+                      }
+                    }} />
+                </label>
               </div>
             </div>
 

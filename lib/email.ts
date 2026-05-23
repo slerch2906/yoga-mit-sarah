@@ -36,6 +36,11 @@ export const Email = {
   waitlistPromoted: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string }) =>
     sendEmail('waitlist_promoted', data),
 
+  // Sarah-Wunsch 2026-05-23: 90-Min-Cutoff → alle Waitlist-Yogis kriegen gleichzeitig
+  // diese Mail mit magic-Link. Wer zuerst klickt, kriegt den Platz.
+  waitlistOfferLate: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; offerToken: string }) =>
+    sendEmail('waitlist_offer_late', data),
+
   sessionCancelled: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; reason?: string; replacementDate?: string; replacementTime?: string }) =>
     sendEmail('session_cancelled', data),
 

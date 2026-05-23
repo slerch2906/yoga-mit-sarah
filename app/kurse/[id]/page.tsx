@@ -8,6 +8,7 @@ import { Email } from '@/lib/email'
 import { getCurrentUser } from '@/lib/auth'
 import { isExcluded, isCancelled } from '@/lib/session-status'
 import { selectCreditForBooking } from '@/lib/credit-selector'
+import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -265,8 +266,17 @@ export default function SessionDetailPage() {
       }
     } catch (e) { console.error('Cancel email error:', e) }
 
-    // Wartelisten-Nachrücken + Notify-Versand server-side via SECURITY DEFINER RPC
-    // (verhindert dass Yogi fremde profile.email direkt liest – DSGVO)
+    // Sarah-Wunsch 2026-05-23: bei ≤90 Min vor Stundenbeginn KEIN Auto-Promote,
+    // sondern alle Waitlist-Yogis kriegen Auswahl-Mail (waitlist_offer_late).
+    const sessStartMs = session?.date && session?.time_start
+      ? new Date(`${session.date}T${session.time_start}`).getTime() : 0
+    const minsUntilStart = (sessStartMs - Date.now()) / 60000
+    if (sessStartMs > 0 && minsUntilStart <= 90) {
+      try { await promoteWaitlistOrOfferLate(supabase, id as string) } catch (e) { console.error('late-offer:', e) }
+      router.push('/meine'); return
+    }
+
+    // > 90 Min: Standard-Pfad via RPC + Email-Versand client-side
     try {
       const { data: result } = await supabase.rpc('process_cancellation_with_waitlist', { p_session_id: id })
 

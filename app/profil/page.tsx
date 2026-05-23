@@ -198,6 +198,21 @@ export default function ProfilPage() {
       setCurrentAgb(agb)
       setProfile(prof)
       setCredits(crds || [])
+
+      // Admin-Mehr-Menü: Nachricht + System-Status laden
+      if (prof?.is_admin) {
+        const [annRes, reminderRes] = await Promise.all([
+          supabase.from('admin_announcement').select('message, is_active').eq('id', 1).maybeSingle(),
+          supabase.from('notification_log').select('sent_at')
+            .eq('type', 'session_reminder')
+            .order('sent_at', { ascending: false }).limit(1).maybeSingle(),
+        ])
+        if (annRes.data) {
+          setAnnText(annRes.data.message || '')
+          setAnnActive(!!annRes.data.is_active)
+        }
+        if (reminderRes.data?.sent_at) setLastReminderAt(reminderRes.data.sent_at)
+      }
     } catch (e) {
       console.error(e)
     }
@@ -231,6 +246,18 @@ export default function ProfilPage() {
   const [agbLabel, setAgbLabel] = useState('')
   const [agbChangelog, setAgbChangelog] = useState('')
   const [pushingAgb, setPushingAgb] = useState(false)
+
+  // Sarah-Wunsch 2026-05-23: Mehr-Menü für Admin (Nachricht, Bulk-Mail, Status, Protokoll)
+  const [annText, setAnnText] = useState('')
+  const [annActive, setAnnActive] = useState(false)
+  const [savingAnn, setSavingAnn] = useState(false)
+  const [bulkSubject, setBulkSubject] = useState('')
+  const [bulkBody, setBulkBody] = useState('')
+  const [sendingBulk, setSendingBulk] = useState(false)
+  const [lastReminderAt, setLastReminderAt] = useState<string | null>(null)
+  const [showProtocol, setShowProtocol] = useState(false)
+  const [protocolItems, setProtocolItems] = useState<any[]>([])
+  const [loadingProtocol, setLoadingProtocol] = useState(false)
 
   async function handleDeleteAccount() {
     if (!deleteConfirmed) return
@@ -314,16 +341,260 @@ export default function ProfilPage() {
     { label: 'AGB',                  url: 'https://www.yogamitsarah.me/agb' },
   ]
 
+  const isAdmin = !!profile?.is_admin
+
   return (
     <div className="max-w-md mx-auto min-h-screen">
-      <AppHeader title="Mein Profil" isAdmin={profile?.is_admin} />
+      <AppHeader title={isAdmin ? 'Mehr' : 'Mein Profil'} isAdmin={isAdmin} />
       <div className="px-4 py-4">
-        {profile?.is_admin && (
+        {isAdmin && (
           <button onClick={() => router.push('/admin/dashboard')}
             className="flex items-center gap-1 text-sm text-yoga-text/60 mb-4 hover:opacity-80 md:flex hidden">
             <i className="ti ti-arrow-left" /> Zurück zum Dashboard
           </button>
         )}
+
+        {isAdmin ? (
+          // ────────────────────────────────────────────────────────────────
+          // ADMIN-Mehr-Menü (Sarah-Wunsch 2026-05-23)
+          // Reihenfolge: Nachricht (über AGB), AGB, Passwort, System-Status,
+          // Bulk-Mail, Protokoll (ausklappbar) am Ende.
+          // ────────────────────────────────────────────────────────────────
+          <>
+            {/* 1) Nachricht für Yogis (Sprechblase auf Wochenseite) */}
+            <p className="section-label">Nachricht für Yogis</p>
+            <div className="card mb-4">
+              <p className="text-xs text-yoga-text/55 mb-3 leading-relaxed">
+                Erscheint als Sprechblase auf der Wochenseite — z.B. „Ich wünsche euch eine
+                wunderschöne Woche!" oder ein Yoga-Zitat. Wird nur angezeigt, wenn der Schalter
+                unten an ist UND ein Text drinsteht.
+              </p>
+              <textarea className="field-input mb-3" rows={3} value={annText}
+                onChange={e => setAnnText(e.target.value)}
+                placeholder="z.B. Ich wünsche euch eine wunderschöne Woche! 💛" />
+              <label className="flex items-center justify-between mb-3 cursor-pointer">
+                <span className="text-sm font-semibold">Nachricht aktiv anzeigen</span>
+                <input type="checkbox" className="w-5 h-5 cursor-pointer" style={{ accentColor: '#3d3a39' }}
+                  checked={annActive}
+                  onChange={e => setAnnActive(e.target.checked)} />
+              </label>
+              <button disabled={savingAnn}
+                onClick={async () => {
+                  setSavingAnn(true)
+                  const { error } = await supabase.from('admin_announcement')
+                    .update({ message: annText, is_active: annActive, updated_at: new Date().toISOString() })
+                    .eq('id', 1)
+                  setSavingAnn(false)
+                  if (error) alert('Fehler beim Speichern: ' + error.message)
+                  else alert('Nachricht gespeichert.')
+                }} className="w-full btn-primary text-sm disabled:opacity-50">
+                {savingAnn ? 'Speichere…' : 'Speichern'}
+              </button>
+            </div>
+
+            {/* 2) AGB-Verwaltung */}
+            <p className="section-label">AGB-Verwaltung</p>
+            <div className="card mb-4">
+              <p className="text-sm mb-1">
+                Aktuelle AGB-Version: <strong>{currentAgb?.label || 'Dezember 2025'}</strong>
+              </p>
+              <p className="text-xs text-yoga-text/55 mb-3 leading-relaxed">
+                Wenn du die AGB auf yogamitsarah.me/agb geändert hast: trag hier die neue Versions-Bezeichnung
+                und in einem Satz ein, was sich geändert hat. Beim Pushen müssen alle Yogis beim nächsten
+                Login die neue AGB neu bestätigen (mit deinem Changelog).
+              </p>
+              {!showAgbForm ? (
+                <button onClick={() => { setShowAgbForm(true); setAgbLabel(''); setAgbChangelog('') }}
+                  className="btn-secondary text-sm">
+                  <i className="ti ti-edit mr-1" />Neue AGB-Version pushen
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="field-label">Versions-Bezeichnung (wie auf der Webseite)</label>
+                    <input className="field-input" value={agbLabel}
+                      onChange={e => setAgbLabel(e.target.value)}
+                      placeholder="z.B. Januar 2026" />
+                  </div>
+                  <div>
+                    <label className="field-label">Was hat sich geändert? (1-3 Stichpunkte)</label>
+                    <textarea className="field-input" rows={4} value={agbChangelog}
+                      onChange={e => setAgbChangelog(e.target.value)}
+                      placeholder={'z.B.\nStornofrist von 4h auf 3h verkürzt\nVorholfenster auf 10 Tage'} />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowAgbForm(false)}
+                      className="flex-1 btn-secondary text-sm">Abbrechen</button>
+                    <button disabled={pushingAgb || !agbLabel.trim() || !agbChangelog.trim()}
+                      onClick={async () => {
+                        if (!confirm(`Neue AGB-Version "${agbLabel}" pushen?\n\nAlle Yogis werden beim nächsten Login zur Re-Bestätigung umgeleitet und sehen deinen Changelog.`)) return
+                        setPushingAgb(true)
+                        const newOrder = (currentAgb?.sort_order ?? 0) + 1
+                        const { data: inserted, error: insErr } = await supabase.from('agb_versions').insert({
+                          label: agbLabel.trim(), changelog: agbChangelog.trim(), sort_order: newOrder,
+                        }).select('*').single()
+                        if (insErr || !inserted) {
+                          alert('Fehler beim Speichern: ' + (insErr?.message || ''))
+                          setPushingAgb(false); return
+                        }
+                        const oldOrder = currentAgb?.sort_order ?? 1
+                        const { count } = await supabase.from('profiles')
+                          .update({ agb_version: oldOrder })
+                          .gte('agb_version', oldOrder)
+                          .select('id', { count: 'exact', head: true })
+                        alert(`AGB-Version "${agbLabel}" gepusht. ${count ?? 0} Yogis müssen beim nächsten Login neu bestätigen.`)
+                        setCurrentAgb(inserted as AgbVersion)
+                        setShowAgbForm(false); setPushingAgb(false)
+                      }}
+                      className="flex-1 btn-primary text-sm disabled:opacity-50">
+                      {pushingAgb ? 'Pushe…' : 'Pushen & Yogis benachrichtigen'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 3) Passwort */}
+            <p className="section-label">Passwort</p>
+            <div className="card mb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold">Passwort ändern</div>
+                  <div className="text-xs text-yoga-text/50 mt-0.5">••••••••</div>
+                </div>
+                <button onClick={() => router.push('/profil/passwort')}
+                  className="text-xs border border-yoga-border2 rounded-full px-3 py-1 text-yoga-text/60">
+                  Ändern
+                </button>
+              </div>
+            </div>
+
+            {/* 4) System-Status / App-Info */}
+            <p className="section-label">System-Status</p>
+            <div className="card mb-4 text-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-yoga-text/60">App-Version</span>
+                <span className="font-mono text-xs">
+                  {process.env.NEXT_PUBLIC_BUILD_SHA || 'local'} · {process.env.NEXT_PUBLIC_BUILD_DATE || '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-yoga-text/60">Letzte Reminder-Mail</span>
+                {(() => {
+                  if (!lastReminderAt) return <span className="text-yoga-text/40 text-xs">noch nie</span>
+                  const ago = Math.round((Date.now() - new Date(lastReminderAt).getTime()) / 60000)
+                  const text = ago < 60 ? `vor ${ago} Min` : ago < 1440 ? `vor ${Math.round(ago/60)} Std` : `vor ${Math.round(ago/1440)} Tagen`
+                  // Wenn länger als 30 min her → warnen (Cron läuft alle 15 min)
+                  const stale = ago > 30
+                  return <span className={`text-xs ${stale ? 'text-yoga-red-text' : 'text-yoga-text/70'}`}>{text}</span>
+                })()}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-yoga-text/60">Reminder-Cron</span>
+                {(() => {
+                  if (!lastReminderAt) return <span className="text-xs text-yoga-text/40">⚪ unbekannt</span>
+                  const ago = (Date.now() - new Date(lastReminderAt).getTime()) / 60000
+                  return ago < 60
+                    ? <span className="text-xs text-green-700">✅ aktiv</span>
+                    : <span className="text-xs text-yoga-red-text">❌ seit über 1h still</span>
+                })()}
+              </div>
+            </div>
+
+            {/* 5) Bulk-Mail an alle Yogis */}
+            <p className="section-label">Nachricht per E-Mail an alle Yogis</p>
+            <div className="card mb-4">
+              <p className="text-xs text-yoga-text/55 mb-3 leading-relaxed">
+                Schickt eine einmalige E-Mail an alle aktiven Yogis (nicht an Dummies, nicht an dich selbst).
+                Beispiel: Sommerpause-Info, Studio-Umzug, Sonderaktion.
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="field-label">Betreff</label>
+                  <input className="field-input" value={bulkSubject}
+                    onChange={e => setBulkSubject(e.target.value)}
+                    placeholder="z.B. Sommerpause vom 1.-15. August" />
+                </div>
+                <div>
+                  <label className="field-label">Text</label>
+                  <textarea className="field-input" rows={5} value={bulkBody}
+                    onChange={e => setBulkBody(e.target.value)}
+                    placeholder="Liebe Yogis, ..." />
+                </div>
+                <button disabled={sendingBulk || !bulkSubject.trim() || !bulkBody.trim()}
+                  onClick={async () => {
+                    if (!confirm(`E-Mail an ALLE aktiven Yogis senden?\n\nBetreff: ${bulkSubject}\n\nDiese Aktion lässt sich nicht rückgängig machen.`)) return
+                    setSendingBulk(true)
+                    const { data: { session } } = await supabase.auth.getSession()
+                    const res = await fetch('/api/admin/bulk-mail', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || ''}` },
+                      body: JSON.stringify({ subject: bulkSubject, body: bulkBody }),
+                    })
+                    const json = await res.json().catch(() => ({}))
+                    setSendingBulk(false)
+                    if (!res.ok) { alert('Fehler: ' + (json?.error || res.status)); return }
+                    alert(`✅ ${json.sent}/${json.total} Mails versendet${json.failed ? ` (${json.failed} fehlgeschlagen)` : ''}.`)
+                    setBulkSubject(''); setBulkBody('')
+                  }}
+                  className="w-full btn-primary text-sm disabled:opacity-50">
+                  {sendingBulk ? 'Sende…' : 'An alle Yogis senden'}
+                </button>
+              </div>
+            </div>
+
+            {/* 6) Protokoll (ausklappbar) */}
+            <button onClick={async () => {
+              const next = !showProtocol
+              setShowProtocol(next)
+              if (next && protocolItems.length === 0) {
+                setLoadingProtocol(true)
+                const { data } = await supabase.from('audit_log')
+                  .select('id, action, details, created_at, user_id')
+                  .order('created_at', { ascending: false }).limit(50)
+                setProtocolItems(data || [])
+                setLoadingProtocol(false)
+              }
+            }} className="w-full flex items-center justify-between section-label mb-2 cursor-pointer hover:opacity-80">
+              <span>Protokoll (Audit-Log)</span>
+              <i className={`ti ti-chevron-down text-base transition-transform ${showProtocol ? 'rotate-180' : ''}`} />
+            </button>
+            {showProtocol && (
+              <div className="card mb-4 p-0 overflow-hidden">
+                {loadingProtocol ? (
+                  <div className="px-4 py-6 text-center text-yoga-text/40 text-sm">Lade…</div>
+                ) : protocolItems.length === 0 ? (
+                  <div className="px-4 py-6 text-center text-yoga-text/40 text-sm">Keine Einträge</div>
+                ) : protocolItems.map((it, i) => (
+                  <div key={it.id} className={`px-3 py-2 ${i < protocolItems.length - 1 ? 'border-b border-yoga-border' : ''}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-mono text-yoga-text/70">{it.action}</span>
+                      <span className="text-[10px] text-yoga-text/40">
+                        {new Date(it.created_at).toLocaleString('de-DE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    {it.details && (
+                      <pre className="text-[10px] text-yoga-text/50 mt-1 truncate" title={JSON.stringify(it.details, null, 2)}>
+                        {typeof it.details === 'object' ? JSON.stringify(it.details).slice(0, 100) : String(it.details).slice(0,100)}
+                      </pre>
+                    )}
+                  </div>
+                ))}
+                {protocolItems.length >= 50 && (
+                  <div className="px-3 py-2 text-center">
+                    <a href="/admin/protokoll" className="text-xs text-yoga-text/60 hover:underline">
+                      Alle Einträge ansehen →
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          // ────────────────────────────────────────────────────────────────
+          // YOGI-Profil (unverändert)
+          // ────────────────────────────────────────────────────────────────
+          <>
         <p className="section-label">Meine Daten</p>
         <div className="card mb-4 p-0 overflow-hidden">
           {fields.map((f, i) => (
@@ -478,78 +749,9 @@ export default function ProfilPage() {
           ))}
         </div>
 
-        {/* AGB-Verwaltung (nur für Admin) — Sarah-Wunsch 2026-05-23, Variante A */}
-        {profile?.is_admin && (
-          <>
-            <p className="section-label">AGB-Verwaltung (Admin)</p>
-            <div className="card mb-4">
-              <p className="text-sm mb-1">
-                Aktuelle AGB-Version: <strong>{currentAgb?.label || 'Dezember 2025'}</strong>
-              </p>
-              <p className="text-xs text-yoga-text/55 mb-3 leading-relaxed">
-                Wenn du die AGB auf yogamitsarah.me/agb geändert hast: trag hier die neue Versions-Bezeichnung
-                und in einem Satz ein, was sich geändert hat. Beim Pushen müssen alle Yogis beim nächsten
-                Login die neue AGB neu bestätigen (mit deinem Changelog).
-              </p>
-
-              {!showAgbForm ? (
-                <button onClick={() => {
-                  setShowAgbForm(true); setAgbLabel(''); setAgbChangelog('')
-                }} className="btn-secondary text-sm">
-                  <i className="ti ti-edit mr-1" />Neue AGB-Version pushen
-                </button>
-              ) : (
-                <div className="space-y-3">
-                  <div>
-                    <label className="field-label">Versions-Bezeichnung (wie auf der Webseite)</label>
-                    <input className="field-input" value={agbLabel}
-                      onChange={e => setAgbLabel(e.target.value)}
-                      placeholder="z.B. Januar 2026" />
-                  </div>
-                  <div>
-                    <label className="field-label">Was hat sich geändert? (1-3 Stichpunkte)</label>
-                    <textarea className="field-input" rows={4} value={agbChangelog}
-                      onChange={e => setAgbChangelog(e.target.value)}
-                      placeholder={'z.B.\nStornofrist von 4h auf 3h verkürzt\nVorholfenster auf 10 Tage'} />
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => setShowAgbForm(false)}
-                      className="flex-1 btn-secondary text-sm">Abbrechen</button>
-                    <button disabled={pushingAgb || !agbLabel.trim() || !agbChangelog.trim()}
-                      onClick={async () => {
-                        if (!confirm(`Neue AGB-Version "${agbLabel}" pushen?\n\nAlle Yogis werden beim nächsten Login zur Re-Bestätigung umgeleitet und sehen deinen Changelog.`)) return
-                        setPushingAgb(true)
-                        // Nächste sort_order = max + 1
-                        const newOrder = (currentAgb?.sort_order ?? 0) + 1
-                        const { data: inserted, error: insErr } = await supabase.from('agb_versions').insert({
-                          label: agbLabel.trim(),
-                          changelog: agbChangelog.trim(),
-                          sort_order: newOrder,
-                        }).select('*').single()
-                        if (insErr || !inserted) {
-                          alert('Fehler beim Speichern: ' + (insErr?.message || ''))
-                          setPushingAgb(false); return
-                        }
-                        // Alle Yogis mit agb_version >= alter-current auf alter-current zurücksetzen
-                        // (= sie hatten die alte Version akzeptiert, sollen jetzt die neue bestätigen)
-                        const oldOrder = currentAgb?.sort_order ?? 1
-                        const { count } = await supabase.from('profiles')
-                          .update({ agb_version: oldOrder })
-                          .gte('agb_version', oldOrder)
-                          .select('id', { count: 'exact', head: true })
-                        alert(`AGB-Version "${agbLabel}" gepusht. ${count ?? 0} Yogis müssen beim nächsten Login neu bestätigen.`)
-                        setCurrentAgb(inserted as AgbVersion)
-                        setShowAgbForm(false); setPushingAgb(false)
-                      }}
-                      className="flex-1 btn-primary text-sm disabled:opacity-50">
-                      {pushingAgb ? 'Pushe…' : 'Pushen & Yogis benachrichtigen'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
           </>
         )}
+        {/* Ende Yogi-vs-Admin Conditional. AGB-Verwaltung ist jetzt im Admin-Block oben. */}
 
         {/* App installieren Button */}
         <InstallButton />

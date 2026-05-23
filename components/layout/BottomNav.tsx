@@ -22,7 +22,10 @@ const adminNav: NavItem[] = [
   { href: '/admin/kurse',       label: 'Kurse',        icon: 'ti-calendar' },
   // Sarah-Wunsch 2026-05-23: Einladungen-Liste in /admin/einladen integriert
   { href: '/admin/einladen',    label: 'Einladen',     icon: 'ti-user-plus' },
-  { href: '/profil',            label: 'Profil',       icon: 'ti-user' },
+  // Sarah-Wunsch 2026-05-23: Admin-Profil heißt "Mehr" mit Hamburger-Icon
+  // (statt klassisches Profil-Männchen). Inhalt ist admin-spezifisch:
+  // Nachricht, AGB, Passwort, App-Info, Cron-Status, Bulk-Mail, Protokoll, Logout.
+  { href: '/profil',            label: 'Mehr',         icon: 'ti-menu-2' },
 ]
 
 interface BottomNavProps {

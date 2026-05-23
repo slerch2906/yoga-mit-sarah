@@ -736,24 +736,11 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        {/* Schnellzugriff */}
-        <div className="grid grid-cols-2 gap-2 mb-5">
-          {[
-            { label: 'Yogis', icon: 'ti-users', href: '/admin/yogis' },
-            { label: 'Einladen', icon: 'ti-user-plus', href: '/admin/einladen' },
-            { label: 'Kurse', icon: 'ti-calendar', href: '/admin/kurse' },
-            { label: 'Protokoll', icon: 'ti-list-details', href: '/admin/protokoll' },
-          ].map(item => (
-            <button key={item.href} onClick={() => router.push(item.href)}
-              className="card flex flex-col items-center py-4 gap-2 cursor-pointer hover:border-yoga-border2">
-              <i className={`ti ${item.icon} text-2xl text-yoga-text/60`} />
-              <span className="text-sm font-semibold">{item.label}</span>
-            </button>
-          ))}
-        </div>
+        {/* Sarah-Wunsch 2026-05-23: Schnellzugriff-Kacheln entfernt.
+            Yogis/Einladen/Kurse sind in der Bottom-Nav, Protokoll im "Mehr"-Menü. */}
 
-        {/* Kursstunden diese Woche */}
-        <p className="section-label">Stunden {weekLabel.toLowerCase()}</p>
+        {/* Kursstunden — Überschrift entfernt (Sarah 2026-05-23):
+            Wochen-Label oben ist schon klar genug, doppelte Beschriftung spart Platz. */}
         {sessions.length === 0 ? (
           <p className="text-sm text-yoga-text/40 text-center py-4">Keine Stunden diese Woche</p>
         ) : sessions.map(s => {

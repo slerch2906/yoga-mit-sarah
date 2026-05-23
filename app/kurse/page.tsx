@@ -9,6 +9,7 @@ import { getCurrentAgbVersion } from '@/lib/agb-version'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import WeekPickerPopover from '@/components/WeekPickerPopover'
+import AdminAnnouncementBubble from '@/components/AdminAnnouncementBubble'
 
 const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTHS = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']
@@ -165,6 +166,9 @@ export default function KursePage() {
   return (
     <div className="max-w-md mx-auto min-h-screen" {...swipeHandlers}>
       <AppHeader title="Yoga mit Sarah" isAdmin={profile?.is_admin} />
+
+      {/* Sarah-Nachricht (nur sichtbar wenn Admin sie aktiviert hat) */}
+      <AdminAnnouncementBubble />
 
       <div className="flex items-center justify-between px-4 pt-3 pb-1">
         <button onClick={() => goWeek(-1)}

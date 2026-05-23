@@ -16,6 +16,11 @@
 
 html {
   font-size: 16px;
+  /* Verhindert dass mobile Browser (vor allem iOS Safari) Texte beim Drehen
+     oder beim Zoomen automatisch hochskalieren. Sarah-Wunsch 2026-05-23:
+     auf manchen Handys wirkten Buttons + Cards überproportional groß. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -24,6 +29,7 @@ body {
   color: var(--yoga-text);
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 ::-webkit-scrollbar { width: 4px; }

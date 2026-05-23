@@ -172,8 +172,8 @@ export default function KursePage() {
 
       <div className="flex items-center justify-between px-4 pt-3 pb-1">
         <button onClick={() => goWeek(-1)}
-          className="flex items-center gap-1 text-sm font-semibold px-3 py-2 border-2 border-yoga-text/30 rounded-full text-yoga-text">
-          <i className="ti ti-chevron-left" /> Vorherige
+          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 border border-yoga-text/30 rounded-full text-yoga-text">
+          <i className="ti ti-chevron-left text-sm" /> Vorherige
         </button>
         <WeekPickerPopover
           currentWeekStart={weekStart}
@@ -188,8 +188,8 @@ export default function KursePage() {
           {weekLabel}
         </WeekPickerPopover>
         <button onClick={() => goWeek(+1)}
-          className="flex items-center gap-1 text-sm font-semibold px-3 py-2 border-2 border-yoga-text/30 rounded-full text-yoga-text">
-          Nächste <i className="ti ti-chevron-right" />
+          className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 border border-yoga-text/30 rounded-full text-yoga-text">
+          Nächste <i className="ti ti-chevron-right text-sm" />
         </button>
       </div>
 

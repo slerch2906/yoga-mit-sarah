@@ -12,10 +12,10 @@ const navItems = [
   { href: '/admin/einladen',    label: 'Einladen',     icon: 'ti-user-plus' },
   { href: '/admin/protokoll',   label: 'Protokoll',    icon: 'ti-list-details' },
   { href: '/admin/nachweise',   label: 'AGB-Nachweise', icon: 'ti-shield-check' },
-  // Sarah-Wunsch 2026-05-23: "Mein Profil" raus aus Sidebar — der Link führte
-  // nach /profil (außerhalb /admin/), wodurch die Sidebar verschwand.
-  // Admin braucht Profil-Daten auch nicht auf Laptop — auf Mobile gibt's das
-  // Mehr-Menü unter /profil über BottomNav.
+  // Sarah-Wunsch 2026-05-23 v5: "Mehr" innerhalb /admin/ damit Sidebar bleibt.
+  // Re-Export von /profil — selber Mehr-Block (Nachricht, Bulk-Mail, AGB,
+  // System-Status, Passwort, Logout, Protokoll-Toggle).
+  { href: '/admin/mehr',        label: 'Mehr',         icon: 'ti-menu-2' },
 ]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

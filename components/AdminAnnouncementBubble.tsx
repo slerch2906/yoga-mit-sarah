@@ -46,11 +46,12 @@ export default function AdminAnnouncementBubble() {
         {/* Sprechblase — bg-white + yoga-border, Text mittig zentriert */}
         <div className="relative flex-1 min-w-0">
           {/* Pfeil-Technik: zwei CSS-Triangles übereinander (Outline + Fill).
-              Outline (yoga-border) liegt 1px weiter links und wird vom weißen
-              Inner-Triangle überdeckt — so geht der Pfeil nahtlos in die Bubble
-              über, ohne sichtbare Border-Linie an der Übergangsstelle. */}
+              Outline-Farbe IDENTISCH zu Bubble-Border (rgba(68,60,60,0.15)
+              = Tailwind border-yoga-border). Inner-Triangle weiß deckt die
+              rechte Outline-Hälfte ab — so geht der Pfeil nahtlos in die
+              Bubble über, gleicher Rand wie die Bubble selbst. */}
           <div className="absolute -left-[7px] top-1/2 -translate-y-1/2 w-0 h-0"
-            style={{ borderTop: '7px solid transparent', borderBottom: '7px solid transparent', borderRight: '7px solid var(--yoga-border, #e5e1de)' }} />
+            style={{ borderTop: '7px solid transparent', borderBottom: '7px solid transparent', borderRight: '7px solid rgba(68,60,60,0.15)' }} />
           <div className="absolute -left-[6px] top-1/2 -translate-y-1/2 w-0 h-0"
             style={{ borderTop: '6px solid transparent', borderBottom: '6px solid transparent', borderRight: '6px solid #ffffff' }} />
           <div className="relative bg-white border border-yoga-border rounded-yoga px-4 py-3 text-center">

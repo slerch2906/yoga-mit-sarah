@@ -43,11 +43,11 @@ export default function AdminAnnouncementBubble() {
           onError={() => setAvatarSrc(FALLBACK_AVATAR)}
           className="w-11 h-11 rounded-full object-cover flex-shrink-0 border-2 border-yoga-bg shadow-sm"
         />
-        {/* Sprechblase */}
+        {/* Sprechblase — gleicher Stil wie normale Stunden-Karten (bg-white + yoga-border) */}
         <div className="relative flex-1 min-w-0">
-          {/* Pfeilchen links unten zur Avatar-Seite */}
-          <div className="absolute -left-1.5 bottom-2 w-3 h-3 rotate-45 bg-yoga-amber-bg border-l border-b border-yoga-amber-text/20" />
-          <div className="relative bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-2xl rounded-bl-sm px-4 py-2.5 shadow-sm">
+          {/* Pfeilchen links unten zur Avatar-Seite (weiß mit gleichem Border) */}
+          <div className="absolute -left-1.5 bottom-3 w-2.5 h-2.5 rotate-45 bg-white border-l border-b border-yoga-border" />
+          <div className="relative bg-white border border-yoga-border rounded-yoga px-4 py-2.5">
             <p className="text-sm text-yoga-text/85 leading-snug">
               {message}
             </p>

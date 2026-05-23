@@ -414,3 +414,54 @@ test.describe('[E2E] Mehr-Menü Eingabefelder kompakter', () => {
     expect(matches.length).toBeGreaterThanOrEqual(3)
   })
 })
+
+// ────────────────────────────────────────────────────────────────────────
+// 17) Sarah-Wunsch v5: Yogi-Reaktivierung + 30-Tage-Backup raus,
+//     zurück zum alten DSGVO-Flow (sofort anonymisieren + Auth löschen)
+// ────────────────────────────────────────────────────────────────────────
+test.describe('[E2E] Yogi-Reaktivierung komplett entfernt (v5 rollback)', () => {
+  test('Recovery-Backup-Logik NICHT mehr im Admin-Yogi-Detail (nur Kommentare erlaubt)', () => {
+    // Strip Block- und Inline-Kommentare bevor wir checken, damit der eigene
+    // Erklär-Kommentar (warum die Funktion zurückgebaut wurde) nicht triggert.
+    const src = read('app/admin/yogis/[id]/page.tsx')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '')
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    expect(src).not.toMatch(/recovery_backup/)
+    expect(src).not.toMatch(/recovery_expires_at/)
+    expect(src).not.toMatch(/yogi_reactivated/)
+    // Reaktivieren als UI-Label darf nicht mehr da sein
+    expect(src).not.toMatch(/>.*Reaktivieren.*</)
+  })
+
+  test('handleDeleteYogi nutzt sofortigen /api/delete-account Aufruf', () => {
+    const src = read('app/admin/yogis/[id]/page.tsx')
+    expect(src).toMatch(/handleDeleteYogi/)
+    // Anonymisierung passiert weiterhin
+    expect(src).toMatch(/first_name: 'Gelöschter'/)
+    expect(src).toMatch(/last_name: 'Nutzer'/)
+    // Auth-User wird SOFORT gelöscht (alter Flow)
+    expect(src).toMatch(/\/api\/delete-account/)
+    // legal_acceptances anonymisiert
+    expect(src).toMatch(/full_name: 'Gelöschter Nutzer'/)
+    // Waitlist-Eintrag weg
+    expect(src).toMatch(/from\('waitlist'\)\.delete\(\)/)
+    // Audit-Log mit anonymem Vorgang
+    expect(src).toMatch(/yogi_anonymized_dsgvo/)
+  })
+
+  test('Nur EIN Anonymisieren-Button (keine 3-Button-Lifecycle-UI mehr)', () => {
+    const src = read('app/admin/yogis/[id]/page.tsx')
+    // Genau ein onClick={handleDeleteYogi}
+    const matches = src.match(/onClick=\{handleDeleteYogi\}/g) || []
+    expect(matches.length).toBe(1)
+    // Kein "Endgültig löschen" Button mehr (war Teil der 3-Button-UI)
+    expect(src).not.toMatch(/Endgültig löschen/)
+  })
+
+  test('Zwei Bestätigungs-Dialoge (wie vorher) — DSGVO + Sicherheit', () => {
+    const src = read('app/admin/yogis/[id]/page.tsx')
+    expect(src).toMatch(/DSGVO-konform anonymisieren\? Buchungshistorie bleibt anonym erhalten/)
+    expect(src).toMatch(/Bist du sicher\? Diese Aktion kann nicht rückgängig gemacht werden/)
+  })
+})

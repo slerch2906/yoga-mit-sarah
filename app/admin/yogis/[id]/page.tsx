@@ -98,32 +98,15 @@ export default function AdminYogiDetailPage() {
   }
 
   async function handleDeleteYogi() {
-    if (!confirm(
-      `Account von ${yogi?.first_name} ${yogi?.last_name} anonymisieren?\n\n` +
-      `Buchungshistorie bleibt anonym erhalten.\n` +
-      `30-Tage-Backup: du kannst den Yogi innerhalb dieser Frist wieder reaktivieren.\n` +
-      `Nach 30 Tagen wird das Backup endgültig gelöscht.`
-    )) return
+    // Sarah-Wunsch 2026-05-23 v5: Recovery-Backup/Reaktivierungs-Funktion komplett
+    // raus — zurück zum alten "sofort anonymisieren + Auth-User löschen" Flow.
+    if (!confirm(`Account von ${yogi?.first_name} ${yogi?.last_name} DSGVO-konform anonymisieren? Buchungshistorie bleibt anonym erhalten.`)) return
+    if (!confirm('Bist du sicher? Diese Aktion kann nicht rückgängig gemacht werden!')) return
 
     const fullName = `${yogi?.first_name || ''} ${yogi?.last_name || ''}`.trim()
     const email = yogi?.email || ''
 
-    // Sarah-Wunsch 2026-05-23: 30-Tage-Backup vor Anonymisierung anlegen.
-    const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + 30)
-    const backup = {
-      first_name: yogi?.first_name,
-      last_name: yogi?.last_name,
-      email,
-      emergency_name: yogi?.emergency_name,
-      emergency_phone: yogi?.emergency_phone,
-      legal_accepted_at: yogi?.legal_accepted_at,
-      legal_version: yogi?.legal_version,
-      agb_version: yogi?.agb_version,
-      anonymized_at: new Date().toISOString(),
-    }
-
-    // DSGVO: Anonymisieren statt hart löschen — mit Recovery-Backup
+    // DSGVO: Anonymisieren statt hart löschen
     await supabase.from('profiles').update({
       first_name: 'Gelöschter',
       last_name: 'Nutzer',
@@ -131,8 +114,6 @@ export default function AdminYogiDetailPage() {
       emergency_name: null,
       emergency_phone: null,
       legal_accepted_at: null,
-      recovery_backup: backup,
-      recovery_expires_at: expiresAt.toISOString(),
     }).eq('id', id)
 
     await supabase.from('legal_acceptances').update({
@@ -147,11 +128,22 @@ export default function AdminYogiDetailPage() {
     await supabase.from('waitlist').delete().eq('user_id', id)
 
     // DSGVO: audit_log Einträge anonymisieren (PII aus details JSONB entfernen)
-    await supabase.rpc('anonymize_user_audit_logs', { target_user_id: id }).catch(() => {})
+    try { await supabase.rpc('anonymize_user_audit_logs' as any, { target_user_id: id }) } catch {}
 
-    // Sarah-Wunsch 2026-05-23: Auth-User NICHT mehr löschen — bleibt 30 Tage erhalten
-    // damit Reaktivierung möglich ist. Login-Check sperrt anonymisierte Profile
-    // sowieso (prof.first_name === 'Gelöschter'). Cron räumt nach 30 Tagen final auf.
+    // Auth User löschen + Sessions invalidieren
+    try {
+      const deleteRes = await fetch('/api/delete-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: id })
+      })
+      if (!deleteRes.ok) {
+        const err = await deleteRes.json().catch(() => ({}))
+        console.error('Delete account failed (non-critical):', err)
+      }
+    } catch (e) {
+      console.error('Delete account error:', e)
+    }
 
     // DSGVO: kein Klartext-Name/Email im audit_log – nur abstrakter Vorgang
     await supabase.from('audit_log').insert({
@@ -933,78 +925,15 @@ export default function AdminYogiDetailPage() {
           )
         })()}
 
-        {/* Yogi-Lifecycle: Reaktivieren/Endgültig löschen/Anonymisieren */}
-        <div className="mt-6 pt-4 border-t border-yoga-border space-y-2">
-          {yogi.first_name === 'Gelöschter' && yogi.recovery_backup ? (
-            // Anonymisierter Yogi mit aktivem Backup → Reaktivieren oder endgültig löschen
-            <>
-              <div className="bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga p-3 mb-2">
-                <p className="text-sm font-bold text-yoga-amber-text mb-1">
-                  <i className="ti ti-clock mr-1" /> Anonymisiert — Reaktivierung möglich
-                </p>
-                <p className="text-xs text-yoga-text/70 leading-snug">
-                  Original-Daten: <strong>{(yogi.recovery_backup as any)?.first_name} {(yogi.recovery_backup as any)?.last_name}</strong> ({(yogi.recovery_backup as any)?.email})
-                  {yogi.recovery_expires_at && (() => {
-                    const days = Math.max(0, Math.round((new Date(yogi.recovery_expires_at).getTime() - Date.now()) / 86400000))
-                    return ` · Backup läuft in ${days} Tag${days === 1 ? '' : 'en'} ab`
-                  })()}
-                </p>
-              </div>
-              <button onClick={async () => {
-                if (!confirm('Yogi reaktivieren? Original-Daten werden zurückgespielt.')) return
-                const b = yogi.recovery_backup as any
-                const { error } = await supabase.from('profiles').update({
-                  first_name: b.first_name,
-                  last_name: b.last_name,
-                  email: b.email,
-                  emergency_name: b.emergency_name,
-                  emergency_phone: b.emergency_phone,
-                  legal_accepted_at: b.legal_accepted_at,
-                  legal_version: b.legal_version,
-                  agb_version: b.agb_version,
-                  recovery_backup: null,
-                  recovery_expires_at: null,
-                }).eq('id', id)
-                if (error) { alert('Fehler: ' + error.message); return }
-                await supabase.from('audit_log').insert({
-                  action: 'yogi_reactivated', details: { reactivated_user_id: id }
-                })
-                alert('Yogi wurde reaktiviert.')
-                router.refresh()
-                window.location.reload()
-              }} className="w-full btn-primary text-sm bg-yoga-green-text">
-                <i className="ti ti-restore mr-1" /> Yogi reaktivieren
-              </button>
-              <button onClick={async () => {
-                if (!confirm(
-                  'Yogi endgültig löschen?\n\n' +
-                  'Auth-Account + Backup werden gelöscht. Reaktivierung danach NICHT mehr möglich.\n' +
-                  'Diese Aktion ist endgültig.'
-                )) return
-                // Backup löschen + Auth-User entfernen
-                await supabase.from('profiles').update({
-                  recovery_backup: null, recovery_expires_at: null,
-                }).eq('id', id)
-                try {
-                  await fetch('/api/delete-account', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: id })
-                  })
-                } catch (e) {}
-                alert('Yogi endgültig gelöscht.')
-                router.push('/admin/yogis')
-              }} className="w-full text-sm text-yoga-red-text py-3 border border-yoga-red-bg rounded-yoga cursor-pointer hover:opacity-80 font-semibold">
-                <i className="ti ti-trash mr-1" /> Endgültig löschen (Auth + Backup)
-              </button>
-            </>
-          ) : (
-            // Aktiver Yogi → Anonymisieren-Button
-            <button onClick={handleDeleteYogi}
-              className="w-full text-sm text-yoga-red-text py-3 border border-yoga-red-bg rounded-yoga cursor-pointer hover:opacity-80 font-semibold">
-              <i className="ti ti-trash mr-1" /> Yogi-Account anonymisieren (30-Tage-Recovery)
-            </button>
-          )}
+        {/* Yogi-Account anonymisieren (DSGVO-konform). Sarah-Wunsch 2026-05-23 v5:
+            Reaktivierungs-Funktion mit 30-Tage-Backup wurde rückgängig gemacht —
+            zurück zum alten einfachen Flow: Profil anonymisieren + Auth-User
+            sofort löschen. Endgültig, kein Rückweg. */}
+        <div className="mt-6 pt-4 border-t border-yoga-border">
+          <button onClick={handleDeleteYogi}
+            className="w-full text-sm text-yoga-red-text py-3 border border-yoga-red-bg rounded-yoga cursor-pointer hover:opacity-80 font-semibold">
+            <i className="ti ti-trash mr-1" /> Yogi-Account DSGVO-konform anonymisieren
+          </button>
         </div>
 
         {/* Buchungshistorie */}

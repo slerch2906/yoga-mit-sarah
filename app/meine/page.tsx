@@ -7,7 +7,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { isActive, isExcluded, isCancelled, isStarted } from '@/lib/session-status'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
-import { CURRENT_AGB_VERSION } from '@/lib/agb-version'
+import { getCurrentAgbVersion } from '@/lib/agb-version'
 
 export default function MeinePage() {
   const [profile, setProfile] = useState<any>(null)
@@ -48,7 +48,9 @@ export default function MeinePage() {
           .gt('expires_at', new Date().toISOString()),
       ])
 
-      if (prof && (!prof.legal_accepted_at || (prof.agb_version ?? 0) < CURRENT_AGB_VERSION)) {
+      const agb = await getCurrentAgbVersion(supabase)
+      const currentOrder = agb?.sort_order ?? 1
+      if (prof && (!prof.legal_accepted_at || (prof.agb_version ?? 0) < currentOrder)) {
         router.push('/rechtliches'); return
       }
       setProfile(prof)

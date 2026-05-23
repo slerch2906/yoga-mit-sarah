@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/auth'
 import { Email } from '@/lib/email'
-import { CURRENT_AGB_VERSION, AGB_CHANGELOG } from '@/lib/agb-version'
+import { getCurrentAgbVersion, getAgbChangelogSince, type AgbVersion } from '@/lib/agb-version'
 
 // Einfaches PDF als Base64 via HTML-Canvas-Trick mit jsPDF-ähnlichem Ansatz
 // Wir bauen das PDF manuell als minimales PDF-Binary
@@ -48,7 +48,8 @@ export default function RechtlichesPage() {
   // Yogi hat AGB schon mal akzeptiert, aber alte Version → zeige kompakte Re-Bestätigung
   // mit Changelog statt komplettem Onboarding.
   const [isReAcceptance, setIsReAcceptance] = useState(false)
-  const [previousVersion, setPreviousVersion] = useState<number>(1)
+  const [currentAgb, setCurrentAgb] = useState<AgbVersion | null>(null)
+  const [changelogSince, setChangelogSince] = useState<AgbVersion[]>([])
   const router = useRouter()
   const supabase = createClient()
 
@@ -56,20 +57,21 @@ export default function RechtlichesPage() {
     async function check() {
       const user = await getCurrentUser()
       if (!user) { window.location.href = '/login'; return }
-      const { data: prof } = await supabase
-        .from('profiles').select('legal_accepted_at, is_admin, first_name, agb_version').eq('id', user.id).single()
+      const [{ data: prof }, agb] = await Promise.all([
+        supabase.from('profiles').select('legal_accepted_at, is_admin, first_name, agb_version').eq('id', user.id).single(),
+        getCurrentAgbVersion(supabase),
+      ])
 
-      // Anonymisiertes Profil (DSGVO-gelöscht) → sofort ausloggen
       if (!prof || prof.first_name === 'Gelöschter') {
         await supabase.auth.signOut({ scope: 'global' })
-        localStorage.clear()
-        sessionStorage.clear()
+        localStorage.clear(); sessionStorage.clear()
         window.location.replace('/login')
         return
       }
 
       const userVersion = (prof as any).agb_version ?? 0
-      const isAgbAktuell = prof?.legal_accepted_at && userVersion >= CURRENT_AGB_VERSION
+      const currentOrder = agb?.sort_order ?? 1
+      const isAgbAktuell = prof?.legal_accepted_at && userVersion >= currentOrder
 
       if (isAgbAktuell) {
         if (prof.is_admin) router.replace('/admin/dashboard')
@@ -77,11 +79,12 @@ export default function RechtlichesPage() {
         return
       }
 
-      // Re-Acceptance-Pfad: Yogi hat schon mal akzeptiert (legal_accepted_at != null)
-      // aber alte Version (agb_version < CURRENT)
-      if (prof?.legal_accepted_at && userVersion < CURRENT_AGB_VERSION) {
+      setCurrentAgb(agb)
+      // Re-Acceptance-Pfad: Yogi hat schon akzeptiert, aber alte Version
+      if (prof?.legal_accepted_at && userVersion < currentOrder) {
         setIsReAcceptance(true)
-        setPreviousVersion(userVersion)
+        const log = await getAgbChangelogSince(supabase, userVersion)
+        setChangelogSince(log)
       }
       setReady(true)
     }
@@ -126,18 +129,20 @@ export default function RechtlichesPage() {
     }
     const acceptedAt = new Date().toISOString()
 
-    // 1) In Supabase speichern – inkl. AGB-Versions-Update (Sarah-Wunsch 2026-05-23)
+    // 1) Profile-Update mit aktueller AGB-Version (Sarah-Wunsch 2026-05-23)
+    const targetOrder = currentAgb?.sort_order ?? 1
+    const targetLabel = currentAgb?.label ?? 'Dezember 2025'
     const { error: profileError } = await supabase.from('profiles').update({
       legal_accepted_at: acceptedAt,
-      legal_version: '2025-12',
-      agb_version: CURRENT_AGB_VERSION,
+      legal_version: targetLabel,
+      agb_version: targetOrder,
     }).eq('id', user.id)
     console.log('Profile update:', profileError ? 'ERROR: ' + profileError.message : 'OK')
 
     const { error: legalError } = await supabase.from('legal_acceptances').insert({
       user_id: user.id,
-      version: String(CURRENT_AGB_VERSION),
-      agb_version: String(CURRENT_AGB_VERSION),
+      version: targetLabel,
+      agb_version: targetLabel,
       full_name: fullName,
       accepted_at: acceptedAt,
       user_agent: navigator.userAgent,
@@ -181,21 +186,23 @@ export default function RechtlichesPage() {
             </p>
           </div>
         </div>
-        {/* Re-Acceptance-Banner: Yogi hat schon V1 akzeptiert, neue Version vorhanden */}
-        {isReAcceptance && (
+        {/* Re-Acceptance-Banner: Yogi hat schon alte Version akzeptiert, neue da */}
+        {isReAcceptance && currentAgb && (
           <div className="bg-yoga-amber-bg/60 border border-yoga-amber-text/30 rounded-yoga p-3 mb-3">
             <p className="text-xs font-semibold text-yoga-amber-text mb-1">
-              Neue AGB-Version {CURRENT_AGB_VERSION} — bitte erneut bestätigen
+              Neue AGB-Version „{currentAgb.label}" — bitte erneut bestätigen
             </p>
-            <p className="text-xs text-yoga-text/70 mb-1">Was hat sich seit Version {previousVersion} geändert:</p>
-            <ul className="text-xs text-yoga-text/70 list-disc list-inside space-y-0.5">
-              {Array.from({ length: CURRENT_AGB_VERSION - previousVersion }).flatMap((_, i) => {
-                const v = previousVersion + 1 + i
-                const entry = AGB_CHANGELOG[v]
-                if (!entry) return [<li key={v}>Version {v}</li>]
-                return entry.changes.map((c, idx) => <li key={`${v}-${idx}`}><strong>v{v}:</strong> {c}</li>)
-              })}
+            <p className="text-xs text-yoga-text/70 mb-1">Was hat sich geändert:</p>
+            <ul className="text-xs text-yoga-text/70 list-disc list-inside space-y-1">
+              {changelogSince.map(v => (
+                <li key={v.id}>
+                  <strong>{v.label}:</strong> {v.changelog.split('\n').filter(l => l.trim()).join(' · ')}
+                </li>
+              ))}
             </ul>
+            <p className="text-xs text-yoga-text/55 mt-2">
+              Vollständige AGB: <a href="https://www.yogamitsarah.me/agb" target="_blank" rel="noopener noreferrer" className="underline">yogamitsarah.me/agb</a>
+            </p>
           </div>
         )}
         <div className="flex gap-2">

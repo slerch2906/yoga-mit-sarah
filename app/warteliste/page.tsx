@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/auth'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
-import { CURRENT_AGB_VERSION } from '@/lib/agb-version'
+import { getCurrentAgbVersion } from '@/lib/agb-version'
 
 export default function WartelistePage() {
   const [profile, setProfile] = useState<any>(null)
@@ -26,7 +26,9 @@ export default function WartelistePage() {
           .select('*, session:sessions(*, course:courses(name))')
           .eq('user_id', user.id).order('created_at'),
       ])
-      if (prof && (!prof.legal_accepted_at || (prof.agb_version ?? 0) < CURRENT_AGB_VERSION)) {
+      const agb = await getCurrentAgbVersion(supabase)
+      const currentOrder = agb?.sort_order ?? 1
+      if (prof && (!prof.legal_accepted_at || (prof.agb_version ?? 0) < currentOrder)) {
         window.location.href = '/rechtliches'; return
       }
       setProfile(prof)

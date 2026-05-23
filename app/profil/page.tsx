@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/auth'
 import { fullLogout } from '@/lib/logout'
-import { CURRENT_AGB_VERSION } from '@/lib/agb-version'
+import { getCurrentAgbVersion, type AgbVersion } from '@/lib/agb-version'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -190,9 +190,12 @@ export default function ProfilPage() {
           .gt('expires_at', new Date().toISOString()),
       ])
       if (prof) prof.email = user.email || prof.email
-      if (prof && (!prof.legal_accepted_at || (prof.agb_version ?? 0) < CURRENT_AGB_VERSION)) {
+      const agb = await getCurrentAgbVersion(supabase)
+      const currentOrder = agb?.sort_order ?? 1
+      if (prof && (!prof.legal_accepted_at || (prof.agb_version ?? 0) < currentOrder)) {
         router.push('/rechtliches'); return
       }
+      setCurrentAgb(agb)
       setProfile(prof)
       setCredits(crds || [])
     } catch (e) {
@@ -222,6 +225,12 @@ export default function ProfilPage() {
   const [deleteConfirmed, setDeleteConfirmed] = useState(false)
   const [editingEmergency, setEditingEmergency] = useState(false)
   const [emergencyForm, setEmergencyForm] = useState({ name: '', phone: '' })
+  // Sarah-Wunsch 2026-05-23: Admin-AGB-Verwaltung
+  const [currentAgb, setCurrentAgb] = useState<AgbVersion | null>(null)
+  const [showAgbForm, setShowAgbForm] = useState(false)
+  const [agbLabel, setAgbLabel] = useState('')
+  const [agbChangelog, setAgbChangelog] = useState('')
+  const [pushingAgb, setPushingAgb] = useState(false)
 
   async function handleDeleteAccount() {
     if (!deleteConfirmed) return
@@ -469,37 +478,75 @@ export default function ProfilPage() {
           ))}
         </div>
 
-        {/* AGB-Push (nur für Admin) — Sarah-Wunsch 2026-05-23 */}
+        {/* AGB-Verwaltung (nur für Admin) — Sarah-Wunsch 2026-05-23, Variante A */}
         {profile?.is_admin && (
           <>
             <p className="section-label">AGB-Verwaltung (Admin)</p>
             <div className="card mb-4">
-              <p className="text-xs text-yoga-text/60 mb-2">
-                Aktuelle AGB-Version: <strong>{CURRENT_AGB_VERSION}</strong>
+              <p className="text-sm mb-1">
+                Aktuelle AGB-Version: <strong>{currentAgb?.label || 'lädt…'}</strong>
               </p>
               <p className="text-xs text-yoga-text/55 mb-3 leading-relaxed">
-                Wenn du die AGB auf der Webseite geändert hast: Push die neue Version hier.
-                Alle Yogis müssen die AGB beim nächsten Login mit Changelog neu bestätigen.
+                Wenn du die AGB auf yogamitsarah.me/agb geändert hast: trag hier die neue Versions-Bezeichnung
+                und in einem Satz ein, was sich geändert hat. Beim Pushen müssen alle Yogis beim nächsten
+                Login die neue AGB neu bestätigen (mit deinem Changelog).
               </p>
-              <p className="text-xs text-yoga-text/45 mb-3 bg-yoga-gray rounded-yoga p-2 leading-relaxed">
-                <i className="ti ti-info-circle mr-1" />
-                Technischer Hinweis: Version + Changelog werden im Code (<code>lib/agb-version.ts</code>) gepflegt — der Button unten löst nur die Re-Acceptance aus.
-                Wenn du die Version+Changelog selbst eintragen willst, sag Sarah bzw. Claude Bescheid — wir bauen ein vollständiges Admin-Formular dafür.
-              </p>
-              <button onClick={async () => {
-                if (!confirm(`Wirklich alle Yogis zwingen, AGB Version ${CURRENT_AGB_VERSION} neu zu bestätigen?\n\nDas setzt bei allen Yogis agb_version auf ${CURRENT_AGB_VERSION - 1} → beim nächsten Login werden sie zur /rechtliches-Seite umgeleitet.`)) return
-                const newVal = CURRENT_AGB_VERSION - 1
-                const { error, count } = await supabase.from('profiles')
-                  .update({ agb_version: newVal })
-                  .gte('agb_version', newVal + 1)
-                  .select('id', { count: 'exact', head: true })
-                if (error) { alert('Fehler: ' + error.message); return }
-                alert(`${count ?? 0} Yogis wurden zurückgesetzt — sie müssen beim nächsten Login die AGB neu bestätigen.`)
-              }}
-                className="btn-secondary text-sm">
-                <i className="ti ti-bell mr-1" />
-                Alle Yogis zur Re-Bestätigung zwingen
-              </button>
+
+              {!showAgbForm ? (
+                <button onClick={() => {
+                  setShowAgbForm(true); setAgbLabel(''); setAgbChangelog('')
+                }} className="btn-secondary text-sm">
+                  <i className="ti ti-edit mr-1" />Neue AGB-Version pushen
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="field-label">Versions-Bezeichnung (wie auf der Webseite)</label>
+                    <input className="field-input" value={agbLabel}
+                      onChange={e => setAgbLabel(e.target.value)}
+                      placeholder="z.B. Januar 2026" />
+                  </div>
+                  <div>
+                    <label className="field-label">Was hat sich geändert? (1-3 Stichpunkte)</label>
+                    <textarea className="field-input" rows={4} value={agbChangelog}
+                      onChange={e => setAgbChangelog(e.target.value)}
+                      placeholder={'z.B.\nStornofrist von 4h auf 3h verkürzt\nVorholfenster auf 10 Tage'} />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowAgbForm(false)}
+                      className="flex-1 btn-secondary text-sm">Abbrechen</button>
+                    <button disabled={pushingAgb || !agbLabel.trim() || !agbChangelog.trim()}
+                      onClick={async () => {
+                        if (!confirm(`Neue AGB-Version "${agbLabel}" pushen?\n\nAlle Yogis werden beim nächsten Login zur Re-Bestätigung umgeleitet und sehen deinen Changelog.`)) return
+                        setPushingAgb(true)
+                        // Nächste sort_order = max + 1
+                        const newOrder = (currentAgb?.sort_order ?? 0) + 1
+                        const { data: inserted, error: insErr } = await supabase.from('agb_versions').insert({
+                          label: agbLabel.trim(),
+                          changelog: agbChangelog.trim(),
+                          sort_order: newOrder,
+                        }).select('*').single()
+                        if (insErr || !inserted) {
+                          alert('Fehler beim Speichern: ' + (insErr?.message || ''))
+                          setPushingAgb(false); return
+                        }
+                        // Alle Yogis mit agb_version >= alter-current auf alter-current zurücksetzen
+                        // (= sie hatten die alte Version akzeptiert, sollen jetzt die neue bestätigen)
+                        const oldOrder = currentAgb?.sort_order ?? 1
+                        const { count } = await supabase.from('profiles')
+                          .update({ agb_version: oldOrder })
+                          .gte('agb_version', oldOrder)
+                          .select('id', { count: 'exact', head: true })
+                        alert(`AGB-Version "${agbLabel}" gepusht. ${count ?? 0} Yogis müssen beim nächsten Login neu bestätigen.`)
+                        setCurrentAgb(inserted as AgbVersion)
+                        setShowAgbForm(false); setPushingAgb(false)
+                      }}
+                      className="flex-1 btn-primary text-sm disabled:opacity-50">
+                      {pushingAgb ? 'Pushe…' : 'Pushen & Yogis benachrichtigen'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}

@@ -165,7 +165,7 @@ export default function AdminSessionPage() {
         .eq('session_id', id).eq('type', 'waitlist').order('created_at', { ascending: true }),
     ])
 
-    // Replacement-Session separat laden
+    // Replacement-Session separat laden (= die Ersatzstunde wenn DIESE abgesagt ist)
     let replacement: any = null
     if ((sess as any)?.replacement_session_id) {
       const { data: rep } = await supabase.from('sessions')
@@ -173,7 +173,17 @@ export default function AdminSessionPage() {
         .eq('id', (sess as any).replacement_session_id).maybeSingle()
       replacement = rep
     }
-    setSession(sess ? { ...sess, replacement } : sess)
+    // Sarah-Wunsch 2026-05-23: wenn DIESE Stunde selbst eine Ersatzstunde IST
+    // (also eine andere abgesagte Session zeigt mit replacement_session_id auf hier),
+    // dann zeige "Ersatzstunde für [Datum/Uhrzeit der abgesagten Original-Stunde]".
+    let replacementOf: any = null
+    const { data: origin } = await supabase.from('sessions')
+      .select('id, date, time_start')
+      .eq('replacement_session_id', id)
+      .maybeSingle()
+    if (origin) replacementOf = origin
+
+    setSession(sess ? { ...sess, replacement, replacementOf } : sess)
     setBookings(bkgs || [])
     setWaitlist(wl || [])
     setLoading(false)
@@ -431,6 +441,15 @@ export default function AdminSessionPage() {
           {session?.is_cancelled && (
             <div className={`mt-2 text-sm font-semibold ${isExcluded(session) ? 'text-yoga-text/50' : 'text-yoga-red-text'}`}>
               {isExcluded(session) ? 'Diese Stunde ist ausgeschlossen (zählt nicht als Einheit)' : 'Diese Stunde ist bereits abgesagt'}
+            </div>
+          )}
+          {/* Sarah-Wunsch 2026-05-23: wenn DIESE Stunde eine Ersatzstunde IST,
+              zeige für welche Original-Stunde sie der Ersatz ist. */}
+          {session?.replacementOf && (
+            <div className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-yoga-amber-text bg-yoga-amber-bg/70 rounded-full px-2.5 py-1">
+              <i className="ti ti-refresh text-sm" />
+              Ersatzstunde für {new Date(session.replacementOf.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+              {session.replacementOf.time_start && ` · ${session.replacementOf.time_start.slice(0,5)} Uhr`}
             </div>
           )}
         </div>

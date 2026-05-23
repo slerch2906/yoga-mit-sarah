@@ -1,27 +1,40 @@
 /**
- * AGB-Versionierung — Sarah-Wunsch 2026-05-23.
+ * AGB-Versionierung — Sarah-Wunsch 2026-05-23 (Variante A).
  *
- * Wenn die AGB geändert werden:
- * 1. CURRENT_AGB_VERSION hier erhöhen (z.B. 1 → 2)
- * 2. AGB_CHANGELOG-Eintrag für die neue Version ergänzen (User-sichtbar)
- * 3. AGB-Text in app/rechtliches/page.tsx aktualisieren
- *
- * Effekt: alle Yogis mit profile.agb_version < CURRENT_AGB_VERSION werden
- * beim nächsten Seitenaufruf zu /rechtliches umgeleitet — sehen den
- * Changelog und müssen neu bestätigen. Beim Bestätigen wird agb_version
- * auf CURRENT_AGB_VERSION gesetzt.
+ * Versionen + Changelogs werden in der DB-Tabelle `agb_versions` gepflegt.
+ * Admin kann neue Version via Profil-Formular einspielen.
+ * Yogis bekommen beim Login automatisch eine Re-Acceptance angezeigt
+ * wenn ihre profiles.agb_version < aktuelle Version-sort_order ist.
  */
 
-export const CURRENT_AGB_VERSION = 1
+import type { SupabaseClient } from '@supabase/supabase-js'
 
-/**
- * Pro Version: was hat sich geändert. Wird auf /rechtliches angezeigt
- * für Yogis die re-bestätigen müssen.
- */
-export const AGB_CHANGELOG: Record<number, { date: string; changes: string[] }> = {
-  1: {
-    date: '2025-09-01',
-    changes: ['Erste Version der AGB.'],
-  },
-  // 2: { date: '2026-XX-XX', changes: ['Neue Regel: ...', 'Klarstellung zu ...'] },
+export type AgbVersion = {
+  id: string
+  label: string         // z.B. "Dezember 2025"
+  changelog: string     // z.B. "Stornofrist von 4h auf 3h verkürzt..."
+  sort_order: number    // aufsteigend; höchster = aktuell
+  created_at: string
+}
+
+/** Lädt die aktuell gültige Version (höchste sort_order). */
+export async function getCurrentAgbVersion(supabase: SupabaseClient): Promise<AgbVersion | null> {
+  const { data } = await supabase.from('agb_versions')
+    .select('*').order('sort_order', { ascending: false }).limit(1).maybeSingle()
+  return (data as AgbVersion) || null
+}
+
+/** Lädt die Version mit gegebener sort_order. Für Anzeige "Was hat sich seit Version X geändert" */
+export async function getAgbVersionByOrder(supabase: SupabaseClient, sortOrder: number): Promise<AgbVersion | null> {
+  const { data } = await supabase.from('agb_versions')
+    .select('*').eq('sort_order', sortOrder).maybeSingle()
+  return (data as AgbVersion) || null
+}
+
+/** Lädt alle Versionen ZWISCHEN previousOrder (exklusiv) und currentOrder (inklusiv).
+ *  Für die Re-Acceptance-Anzeige: "Was hat sich seit deiner letzten Bestätigung geändert" */
+export async function getAgbChangelogSince(supabase: SupabaseClient, sinceOrder: number): Promise<AgbVersion[]> {
+  const { data } = await supabase.from('agb_versions')
+    .select('*').gt('sort_order', sinceOrder).order('sort_order', { ascending: true })
+  return (data || []) as AgbVersion[]
 }

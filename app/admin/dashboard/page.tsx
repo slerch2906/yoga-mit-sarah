@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Email } from '@/lib/email'
+import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import { useSwipe } from '@/lib/useSwipe'
 import { selectCreditForBooking } from '@/lib/credit-selector'
 import AppHeader from '@/components/layout/AppHeader'
@@ -139,62 +140,11 @@ export default function AdminDashboard() {
       details: { booking_id: bookingId, session_id: sessionId }
     })
 
-    // Session-Infos für Emails laden
-    const { data: sess } = await supabase
-      .from('sessions').select('date, time_start, course:courses(name)')
-      .eq('id', sessionId).single()
-
-    // Warteliste: ersten nachrücken lassen + Email senden
-    const { data: waitlistFirst } = await supabase.from('waitlist')
-      .select('*, profile:profiles(email, first_name)')
-      .eq('session_id', sessionId).eq('type', 'waitlist')
-      .order('position').limit(1).single()
-
-    if (waitlistFirst) {
-      const { data: allWaitCredits } = await supabase.from('credits')
-        .select('*').eq('user_id', waitlistFirst.user_id)
-        .gt('expires_at', new Date().toISOString())
-      const availableCredits = (allWaitCredits || []).filter((c: any) => c.total > c.used)
-      const credit = availableCredits.sort((a: any, b: any) => 
-        new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime())[0] || null
-      if (credit && (credit.total - credit.used) > 0) {
-        await supabase.from('bookings').insert({
-          user_id: waitlistFirst.user_id, session_id: sessionId, type: 'single', status: 'active',
-          credit_id: credit.id
-        })
-        // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
-      }
-      if (waitlistFirst.profile && !waitlistFirst.profile.is_dummy) {
-        await Email.waitlistPromoted({
-          email: waitlistFirst.profile.email,
-          firstName: waitlistFirst.profile.first_name || 'Yogi',
-          courseName: sess?.course?.name || '',
-          date: sess?.date || '',
-          timeStart: sess?.time_start || '',
-        })
-      }
-      await supabase.from('waitlist').delete().eq('id', waitlistFirst.id)
-    }
-
-    // Notify-User informieren
-    const { data: notifyUsers } = await supabase.from('waitlist')
-      .select('*, profile:profiles(email, first_name)')
-      .eq('session_id', sessionId).eq('type', 'notify')
-    if (notifyUsers && notifyUsers.length > 0) {
-      for (const nu of notifyUsers) {
-        if (nu.profile) {
-          await Email.notifyPlaceFree({
-            email: nu.profile.email,
-            firstName: nu.profile.first_name || 'Yogi',
-            courseName: sess?.course?.name || '',
-            date: sess?.date || '',
-            timeStart: sess?.time_start || '',
-            sessionId,
-          })
-        }
-      }
-      await supabase.from('waitlist').delete().eq('session_id', sessionId).eq('type', 'notify')
-    }
+    // Sarah-Regel 2026-05-23: zentraler Helper mit 90-Min-Cutoff.
+    // > 90 Min: erster Waitlist-Yogi wird auto-promoted (alte Logic).
+    // ≤ 90 Min: alle Waitlist-Yogis kriegen Auswahl-Mail mit Token.
+    // Notify-Subscribers werden in beiden Fällen informiert.
+    try { await promoteWaitlistOrOfferLate(supabase, sessionId) } catch(e) { console.error('promote:', e) }
 
     // Reload session detail
     if (selectedSession) loadSessionDetail(selectedSession)

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/auth'
 import { useSwipe } from '@/lib/useSwipe'
-import { CURRENT_AGB_VERSION } from '@/lib/agb-version'
+import { getCurrentAgbVersion } from '@/lib/agb-version'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -64,9 +64,12 @@ export default function KursePage() {
       try {
         const user = await getCurrentUser()
         if (!user) { window.location.href = '/login'; return }
-        const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-        // Sarah-Wunsch 2026-05-23: AGB-Versionierung — re-acceptance bei neuer Version
-        if (prof && (!prof.legal_accepted_at || (prof.agb_version ?? 0) < CURRENT_AGB_VERSION)) {
+        const [{ data: prof }, agb] = await Promise.all([
+          supabase.from('profiles').select('*').eq('id', user.id).single(),
+          getCurrentAgbVersion(supabase),
+        ])
+        const currentOrder = agb?.sort_order ?? 1
+        if (prof && (!prof.legal_accepted_at || (prof.agb_version ?? 0) < currentOrder)) {
           window.location.href = '/rechtliches'; return
         }
         setProfile(prof)

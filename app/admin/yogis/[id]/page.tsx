@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Email } from '@/lib/email'
 import { isActive, isStarted, countActiveFutureUnits, isExcluded } from '@/lib/session-status'
+import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -392,38 +393,12 @@ export default function AdminYogiDetailPage() {
         status: 'cancelled', cancelled_at: new Date().toISOString()
       }).eq('user_id', id).in('session_id', sessionIds).eq('status', 'active')
 
-      // Für jede Session: Warteliste + Notify prüfen
+      // Sarah-Regel 2026-05-23: zentraler Helper mit 90-Min-Cutoff.
+      // > 90 Min: erster Waitlist-Yogi wird auto-promoted (alte Logic).
+      // ≤ 90 Min: alle Waitlist-Yogis kriegen Auswahl-Mail mit Token.
+      // Notify-Subscribers werden in beiden Fällen informiert.
       for (const sid of sessionIds) {
-        try {
-          const { data: sess } = await supabase.from('sessions')
-            .select('date, time_start, course:courses(name)').eq('id', sid).single()
-
-          const { data: wFirst } = await supabase.from('waitlist')
-            .select('*, profile:profiles(email, first_name)')
-            .eq('session_id', sid).eq('type', 'waitlist')
-            .order('position').limit(1).single()
-          if (wFirst?.profile) {
-            await Email.waitlistPromoted({
-              email: wFirst.profile.email, firstName: wFirst.profile.first_name || 'Yogi',
-              courseName: sess?.course?.name || '', date: sess?.date || '', timeStart: sess?.time_start || '',
-            })
-            await supabase.from('waitlist').delete().eq('id', wFirst.id)
-          }
-
-          const { data: notifyUsers } = await supabase.from('waitlist')
-            .select('*, profile:profiles(email, first_name)')
-            .eq('session_id', sid).eq('type', 'notify')
-          if (notifyUsers?.length) {
-            for (const nu of notifyUsers) {
-              if (nu.profile) await Email.notifyPlaceFree({
-                email: nu.profile.email, firstName: nu.profile.first_name || 'Yogi',
-                courseName: sess?.course?.name || '', date: sess?.date || '',
-                timeStart: sess?.time_start || '', sessionId: sid,
-              })
-            }
-            await supabase.from('waitlist').delete().eq('session_id', sid).eq('type', 'notify')
-          }
-        } catch(e) {}
+        try { await promoteWaitlistOrOfferLate(supabase, sid) } catch(e) { console.error('promote:', e) }
       }
     }
 

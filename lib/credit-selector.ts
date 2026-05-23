@@ -160,7 +160,12 @@ async function tryCourseCredit(
   // - Buchungen ZWISCHEN Origin und Kursende sind problemlos erlaubt (kein extra Check)
   //   Beispiel: Origin am 28.5., heute 22.5., neue Buchung am 1.6. → erlaubt, weil 1.6.
   //   im Window [18.5., Kursende+8d] liegt.
-  let nextValidDt: number | null = null  // frühest-möglicher Zeitpunkt (für Error-Hinweis)
+  // Frühest-mögliche STUNDE (windowStart) + zugehöriges Origin-Datum für die User-Message.
+  // Wichtig: das ist NICHT "ab wann darf der Yogi BUCHEN" sondern "welche Stunde
+  // darf frühestens gebucht werden". Buchen kann er jederzeit — nur die zu buchende
+  // Stunde darf nicht weiter als 10 Tage vor seiner abgesagten Stunde liegen.
+  let nextValidDt: number | null = null
+  let nextValidOriginDt: number | null = null
   const now = Date.now()
   for (const cb of cancelledSorted) {
     if (claimedIds.has(cb.session.id)) continue
@@ -174,9 +179,11 @@ async function tryCourseCredit(
       : Number.POSITIVE_INFINITY
 
     if (sessionDt < windowStart) {
-      // Zu früh — Vorholfenster für diese Origin noch nicht offen.
-      // Merke windowStart für eine konkrete User-Message (frühestens dann)
-      if (nextValidDt === null || windowStart < nextValidDt) nextValidDt = windowStart
+      // Zu früh — Stunde liegt VOR dem 10d-Fenster dieser Origin.
+      if (nextValidDt === null || windowStart < nextValidDt) {
+        nextValidDt = windowStart
+        nextValidOriginDt = originDt
+      }
       continue
     }
     if (sessionDt > windowEnd) {
@@ -190,15 +197,25 @@ async function tryCourseCredit(
   // Kein verfügbarer Anspruch passt → window_blocked Message
   // Aber nur wenn nextValidDt wirklich in der ZUKUNFT liegt (sonst irreführend).
   if (nextValidDt !== null && nextValidDt > now) {
-    const dStr = new Date(nextValidDt).toLocaleString('de-DE', {
-      weekday: 'short', day: 'numeric', month: 'long', year: 'numeric',
+    const fmtFull = (ms: number) => new Date(ms).toLocaleString('de-DE', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
       timeZone: 'Europe/Berlin'
     })
+    const fmtDay = (ms: number) => new Date(ms).toLocaleString('de-DE', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+      timeZone: 'Europe/Berlin'
+    })
+    const originStr = nextValidOriginDt ? fmtFull(nextValidOriginDt) : '(unbekannt)'
+    const earliestStr = fmtDay(nextValidDt)
     return {
       ok: false,
       reason: 'window_blocked',
-      message: `Vorholen einer abgesagten Stunde ist frühestens 10 Tage vor dem Termin möglich. Du kannst diese Buchung ab ${dStr} mit deinem Kurs-Credit machen.`,
+      message:
+        `Du kannst eine Stunde aus deinem Kurs vorziehen, aber sie darf maximal 10 Tage ` +
+        `vor deiner abgesagten Stunde liegen.\n\n` +
+        `Deine nächste abgesagte Stunde: ${originStr}\n` +
+        `Frühestens buchbar sind Stunden ab: ${earliestStr}`,
     }
   }
   // Es gab Origins, aber keine passte (z.B. alle bereits verbraucht oder Nachhol-Fenster vorbei)

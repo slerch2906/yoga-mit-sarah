@@ -15,6 +15,8 @@ export default function AdminSessionPage() {
   const supabase = createClient()
   const [session, setSession] = useState<any>(null)
   const [bookings, setBookings] = useState<any[]>([])
+  const [waitlist, setWaitlist] = useState<any[]>([])
+  const [promotingWaitlist, setPromotingWaitlist] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [cancelling, setCancelling] = useState(false)
   const [reason, setReason] = useState('')
@@ -196,12 +198,17 @@ export default function AdminSessionPage() {
   }
 
   async function loadData() {
-    const [{ data: sess }, { data: bkgs }] = await Promise.all([
+    const [{ data: sess }, { data: bkgs }, { data: wl }] = await Promise.all([
       // KEIN self-referenzierender Subquery (PostgREST → 400). Replacement separat unten.
       supabase.from('sessions').select('*, course:courses(name, id)').eq('id', id).single(),
       supabase.from('bookings')
         .select('*, profile:profiles(email, first_name, last_name)')
         .eq('session_id', id).eq('status', 'active'),
+      // Warteliste-Yogis ('waitlist' type) — chronologisch ältester zuerst (FIFO).
+      // Notify-Type sind nur "informier mich"-Einträge, NICHT auf der echten Warteliste.
+      supabase.from('waitlist')
+        .select('*, profile:profiles(email, first_name, last_name)')
+        .eq('session_id', id).eq('type', 'waitlist').order('created_at', { ascending: true }),
     ])
 
     // Replacement-Session separat laden
@@ -214,7 +221,54 @@ export default function AdminSessionPage() {
     }
     setSession(sess ? { ...sess, replacement } : sess)
     setBookings(bkgs || [])
+    setWaitlist(wl || [])
     setLoading(false)
+  }
+
+  /** Warteliste-Yogi manuell zur Stunde hinzufügen (Sarah-Wunsch 2026-05-23).
+   *  Überbuchung erlaubt: kein max_spots-Check (enforce_session_max_spots-Trigger
+   *  bypasst Admin sowieso). Sucht passenden Credit via selectCreditForBooking.
+   *  Bei keinem Credit → Quick-Credit-Modal über quickCreditYogi-State. */
+  async function addWaitlistYogi(wlEntry: any) {
+    if (!session?.date || !session?.time_start) return
+    setPromotingWaitlist(wlEntry.id)
+    const pick = await selectCreditForBooking(supabase, wlEntry.user_id, id as string, session.date, session.time_start)
+    if (!pick.ok) {
+      const proceed = confirm(`${pick.message}\n\nSoll trotzdem ein Quick-Credit (1 Einzelstunde) angelegt werden?`)
+      if (!proceed) { setPromotingWaitlist(null); return }
+      // Quick-Credit-Pfad: legt single-Credit an und bucht (analog handleQuickCredit für normale Yogis)
+      const expiry = new Date(); expiry.setFullYear(expiry.getFullYear() + 1)
+      const { data: newCredit } = await supabase.from('credits').insert({
+        user_id: wlEntry.user_id, total: 1, used: 1,
+        expires_at: expiry.toISOString(), model: 'single', course_id: null,
+      }).select('id').single()
+      if (!newCredit) { setPromotingWaitlist(null); return }
+      await supabase.from('bookings').upsert({
+        user_id: wlEntry.user_id, session_id: id,
+        credit_id: newCredit.id, type: 'single', status: 'active',
+        cancelled_at: null, cancel_late: false,
+      }, { onConflict: 'user_id,session_id' })
+    } else {
+      // Yogi enrolled im Session-Kurs? → type=course (gehört in Kurs-Block in /meine)
+      const { data: enrolledHere } = await supabase.from('enrollments')
+        .select('id').eq('user_id', wlEntry.user_id).eq('course_id', (session as any).course?.id).maybeSingle()
+      const bookingType = (enrolledHere || pick.usedModel === 'course') ? 'course' : 'single'
+      await supabase.from('bookings').upsert({
+        user_id: wlEntry.user_id, session_id: id,
+        credit_id: pick.creditId, type: bookingType, status: 'active',
+        origin_session_id: pick.originSessionId,
+        cancelled_at: null, cancel_late: false,
+      }, { onConflict: 'user_id,session_id' })
+    }
+    // Warteliste-Eintrag entfernen
+    await supabase.from('waitlist').delete().eq('id', wlEntry.id)
+    // Audit-Log
+    await supabase.from('audit_log').insert({
+      action: 'admin_promoted_waitlist_yogi',
+      details: { user_id: wlEntry.user_id, session_id: id, was_overbooking: bookings.length >= ((session as any).course?.max_spots ?? Infinity) }
+    })
+    setPromotingWaitlist(null)
+    loadData()
   }
 
   async function handleAddLateReplacement() {
@@ -451,6 +505,34 @@ export default function AdminSessionPage() {
               </div>
             ))}
           </div>
+        )}
+
+        {/* Warteliste — Sarah-Wunsch 2026-05-23: Admin kann jeden Warteliste-Yogi
+            manuell zur Stunde hinzufügen (auch bei voller Stunde = Überbuchung).
+            Bei vollen Stunden ist das die einzige Möglichkeit für den Admin,
+            jemand "noch reinzunehmen". */}
+        {!session?.is_cancelled && waitlist.length > 0 && (
+          <>
+            <p className="section-label">Warteliste ({waitlist.length})</p>
+            <div className="card mb-4 p-0 overflow-hidden">
+              {waitlist.map((w, i) => (
+                <div key={w.id}
+                  className={`px-4 py-3 flex items-center justify-between gap-2 ${i < waitlist.length - 1 ? 'border-b border-yoga-border' : ''}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold flex items-center gap-2">
+                      <span className="text-xs text-yoga-text/50 font-normal">#{i + 1}</span>
+                      <span className="truncate">{w.profile?.first_name} {w.profile?.last_name}</span>
+                    </div>
+                    <div className="text-xs text-yoga-text/50 truncate">{w.profile?.email}</div>
+                  </div>
+                  <button onClick={() => addWaitlistYogi(w)} disabled={!!promotingWaitlist}
+                    className="text-xs bg-yoga-text text-yoga-bg border-0 rounded-full px-3 py-1.5 cursor-pointer font-semibold flex-shrink-0 disabled:opacity-50">
+                    {promotingWaitlist === w.id ? '...' : 'Zur Stunde hinzufügen'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
         {/* Yogi hinzufügen */}

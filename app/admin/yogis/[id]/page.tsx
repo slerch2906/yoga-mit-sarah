@@ -55,7 +55,7 @@ export default function AdminYogiDetailPage() {
         .select('*, session:sessions!bookings_session_id_fkey(id, date, time_start, duration_min, is_cancelled, replacement_session_id, course_id, course:courses(name, is_active, is_cancelled))')
         .eq('user_id', id).order('created_at', { ascending: false }),
       supabase.from('credits').select('*, course:courses(name)').eq('user_id', id).order('created_at', { ascending: false }),
-      supabase.from('enrollments').select('*, course:courses(*)').eq('user_id', id),
+      supabase.from('enrollments').select('*, course:courses(*, sessions(id, date, time_start, is_cancelled, replacement_session_id, course_id))').eq('user_id', id),
       supabase.from('courses').select('*, sessions(date, is_cancelled, cancel_reason), enrollments(id)').eq('is_active', true).order('name'),
     ])
     setYogi(y); setBookings(b || []); setCredits(c || [])
@@ -675,6 +675,63 @@ export default function AdminYogiDetailPage() {
                 )}
                 {!isMidCourse && !dateLabel && <div className="mb-3" />}
                 {!isMidCourse && dateLabel && <div className="mb-3" />}
+
+                {/* Sarah-Wunsch 2026-05-23: Stunden-Aufstellung des Kurses mit
+                    Status pro Session (Teilgenommen/Abgemeldet/Abgesagt/Eingebucht).
+                    Klick auf Session öffnet /admin/sessions/[id]. */}
+                {(() => {
+                  const courseSessions = (e.course?.sessions || []) as any[]
+                  if (courseSessions.length === 0) return null
+                  const nowMs = Date.now()
+                  const bookingsBySession = new Map<string, any>()
+                  for (const b of bookings) {
+                    if (b.session?.course_id === e.course_id && b.session?.id) {
+                      bookingsBySession.set(b.session.id, b)
+                    }
+                  }
+                  const sorted = [...courseSessions].sort((a, b) =>
+                    (a.date + (a.time_start||'')).localeCompare(b.date + (b.time_start||''))
+                  )
+                  return (
+                    <div className="mb-3 mt-1">
+                      <p className="text-xs font-semibold text-yoga-text/55 mb-1.5 px-0.5">Stunden des Kurses</p>
+                      <div className="space-y-1">
+                        {sorted.map((s: any) => {
+                          const sessDt = new Date(`${s.date}T${s.time_start||'00:00'}`).getTime()
+                          const isPast = sessDt < nowMs
+                          const myBooking = bookingsBySession.get(s.id)
+                          let badge: { label: string; bg: string; fg: string } | null = null
+                          if (s.is_cancelled) {
+                            badge = { label: 'Abgesagt', bg: 'var(--yoga-red-bg)', fg: 'var(--yoga-red-text)' }
+                          } else if (myBooking?.status === 'active') {
+                            badge = isPast
+                              ? { label: 'Teilgenommen', bg: '#e8ede6', fg: '#3a5a30' }
+                              : { label: 'Eingebucht', bg: '#e8ede6', fg: '#3a5a30' }
+                          } else if (myBooking?.status === 'cancelled') {
+                            badge = { label: 'Abgemeldet', bg: '#f0eded', fg: '#7a6a6a' }
+                          } else {
+                            // Kein Booking — Yogi war für diese Session nicht eingebucht (mid-course Einstieg)
+                            badge = { label: '—', bg: '#f5f2f0', fg: '#999' }
+                          }
+                          return (
+                            <button key={s.id} onClick={() => router.push(`/admin/sessions/${s.id}`)}
+                              className="w-full text-left flex items-center justify-between gap-2 py-1.5 px-2 rounded-yoga bg-yoga-gray hover:bg-yoga-border2 transition-colors border-0 cursor-pointer text-xs">
+                              <span className="font-medium text-yoga-text/85 truncate">
+                                {new Date(s.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })}
+                                {s.time_start && ` · ${s.time_start.slice(0,5)} Uhr`}
+                              </span>
+                              <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap"
+                                style={{ background: badge.bg, color: badge.fg }}>
+                                {badge.label}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
+
                 {removing === e.course_id ? (
                   <div className="bg-yoga-red-bg rounded-yoga p-3 border border-yoga-red-text/20">
                     <p className="text-sm font-bold text-yoga-red-text mb-2">Wirklich austragen?</p>

@@ -301,8 +301,17 @@ export default function MeinePage() {
             immer im Kurs-Block oben (auch nach Ab- und Wiederanmeldung). */}
         {(() => {
           const enrolledCourseIds = new Set(enrollments.map((e: any) => e.course_id))
+          const nowMs = Date.now()
           const singles = singleBookings
             .filter((b: any) => !b.session?.course_id || !enrolledCourseIds.has(b.session.course_id))
+            // Sarah-Bug-Fix 2026-05-23 (Eva-Dressbach-Befund): vergangene Einzelstunden
+            // ausblenden — Yogi sieht in /meine nur ZUKÜNFTIGE Stunden in der Liste.
+            // Past-Stunden bleiben im DB-Audit, sind nur nicht mehr im aktiven Feed.
+            .filter((b: any) => {
+              if (!b.session?.date || !b.session?.time_start) return false
+              const sessDt = new Date(`${b.session.date}T${b.session.time_start}`).getTime()
+              return sessDt >= nowMs
+            })
             .sort((a: any, b: any) => {
               const ad = new Date(`${a.session?.date}T${a.session?.time_start}`).getTime()
               const bd = new Date(`${b.session?.date}T${b.session?.time_start}`).getTime()

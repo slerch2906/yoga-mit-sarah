@@ -96,7 +96,10 @@ export async function POST(
         courseName,
         choice,
         refundCredits: totalRefundCredits,
-        guthabenCredits: newCreditsCount,
+        // newPaidCredits = "neu bezahlte Anteile" (provisional credit) — wird vom
+        // Edge-Function-Template gebraucht um den verrechneten Altguthaben-Anteil
+        // auszurechnen: verrechnet = refundCredits − newPaidCredits.
+        newPaidCredits: newCreditsCount,
       })
     } catch (emailErr) {
       console.error('Yogi-Bestätigung Kursabbruch-Wahl:', emailErr)

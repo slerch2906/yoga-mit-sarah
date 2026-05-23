@@ -58,6 +58,32 @@ export default function AdminDashboard() {
 
   useEffect(() => { loadData() }, [weekOffset])
 
+  // Sarah 2026-05-23: Stunden-Detail ist ein Modal über dem Dashboard.
+  // Browser-Back (z.B. Wisch-zurück auf dem Handy) soll NUR das Modal schließen,
+  // nicht zur vorherigen Page navigieren. Pattern: pushState beim Öffnen,
+  // popstate-Listener schließt Modal. Cleanup macht back() falls Modal anders
+  // geschlossen wurde, damit kein „Geist-Eintrag" in der History bleibt.
+  useEffect(() => {
+    if (!selectedSession) return
+    window.history.pushState({ sessionModal: true }, '')
+    const handlePopState = () => {
+      setSelectedSession(null)
+      setShowAddReplacement(false)
+      setLateReplacementDate('')
+      setLateReplacementTime('')
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+      // Wenn das Modal programmatisch geschlossen wurde (X-Button, action complete),
+      // ist der pushed history-Eintrag noch da → entfernen, damit der nächste
+      // Browser-Back nicht ins Leere geht.
+      if (window.history.state?.sessionModal) {
+        window.history.back()
+      }
+    }
+  }, [selectedSession])
+
   async function loadData() {
     // KEIN setLoading(true) hier — sonst zeigt Wochenwechsel via Swipe einen leeren
     // Spinner. Alte Daten bleiben bis neue da sind, dann sanfter Re-Render.

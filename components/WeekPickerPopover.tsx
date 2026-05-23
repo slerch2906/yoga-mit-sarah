@@ -26,6 +26,15 @@ interface Props {
 const MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
 const WEEKDAYS = ['Mo','Di','Mi','Do','Fr','Sa','So']
 
+/** ISO-Kalenderwoche (DIN 1355 / ISO 8601). */
+function getISOWeek(d: Date): number {
+  const date = new Date(d.getTime())
+  date.setHours(0, 0, 0, 0)
+  date.setDate(date.getDate() + 4 - (date.getDay() || 7))
+  const yearStart = new Date(date.getFullYear(), 0, 1)
+  return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+}
+
 function startOfDay(d: Date): Date {
   const x = new Date(d); x.setHours(0,0,0,0); return x
 }
@@ -101,15 +110,15 @@ export default function WeekPickerPopover({ currentWeekStart, onSelectWeek, chil
   return (
     <span className="relative inline-block">
       <button ref={triggerRef} type="button" onClick={() => setOpen(o => !o)}
-        className="text-sm font-bold inline-flex items-center gap-1 px-2 py-1 -mx-2 -my-1 rounded-md hover:bg-yoga-gray/40 transition-colors">
+        className="text-sm font-bold inline-flex items-center gap-1.5 px-2 py-1 -mx-2 -my-1 rounded-md hover:bg-yoga-gray/40 transition-colors">
         {children}
-        <i className="ti ti-chevron-down text-xs text-yoga-text/40" />
+        <i className={`ti ti-chevron-down text-base text-yoga-text/70 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
         <div ref={popoverRef}
           className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-40 bg-yoga-bg border border-yoga-border rounded-yoga shadow-lg p-3"
-          style={{ width: '280px' }}>
+          style={{ width: '300px' }}>
 
           {/* Monat-Navigation */}
           <div className="flex items-center justify-between mb-2">
@@ -127,25 +136,32 @@ export default function WeekPickerPopover({ currentWeekStart, onSelectWeek, chil
             </button>
           </div>
 
-          {/* Wochentag-Header */}
-          <div className="grid grid-cols-7 gap-0.5 mb-1">
+          {/* Header-Zeile: KW + 7 Wochentage */}
+          <div className="grid gap-0.5 mb-1" style={{ gridTemplateColumns: '28px repeat(7, 1fr)' }}>
+            <div className="text-[10px] text-yoga-text/40 text-center font-semibold py-0.5">KW</div>
             {WEEKDAYS.map(d => (
               <div key={d} className="text-[10px] text-yoga-text/40 text-center font-semibold py-0.5">{d}</div>
             ))}
           </div>
 
-          {/* Wochen-Raster: pro Zeile = 1 Woche (klickbar) */}
+          {/* Wochen-Raster: pro Zeile = KW-Zahl + 7 Tage (alles klickbar) */}
           <div className="space-y-0.5">
             {grid.map((week, wi) => {
               const isCurrent = sameWeek(week[0], currentWeekStart)
+              const isoWeek = getISOWeek(week[0])
               return (
                 <button key={wi} type="button"
                   onClick={() => { onSelectWeek(week[0]); setOpen(false) }}
-                  className={`w-full grid grid-cols-7 gap-0.5 py-0.5 rounded-md transition-colors text-center ${
+                  className={`w-full grid gap-0.5 py-0.5 rounded-md transition-colors text-center ${
                     isCurrent
                       ? 'bg-yoga-text/10 ring-1 ring-yoga-text/40'
                       : 'hover:bg-yoga-gray/50'
-                  }`}>
+                  }`}
+                  style={{ gridTemplateColumns: '28px repeat(7, 1fr)' }}>
+                  {/* KW-Spalte */}
+                  <div className="text-[11px] py-1 text-yoga-text/45 font-semibold border-r border-yoga-border/40">
+                    {isoWeek}
+                  </div>
                   {week.map((day, di) => {
                     const isToday = sameDay(day, today)
                     const isOtherMonth = day.getMonth() !== viewMonth.getMonth()

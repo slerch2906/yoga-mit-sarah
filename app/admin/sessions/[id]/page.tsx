@@ -640,7 +640,7 @@ export default function AdminSessionPage() {
       </div>
       {/* Yogi hinzufügen Modal */}
       {showAddYogi && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setShowAddYogi(false)}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay" onClick={() => setShowAddYogi(false)}>
           <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10 max-h-[85vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
@@ -690,7 +690,7 @@ export default function AdminSessionPage() {
 
       {/* Quick Credit Modal */}
       {quickCreditYogi && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay">
           <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10">
             {getGuthabenCredits(quickCreditYogi) > 0 ? (
               <>

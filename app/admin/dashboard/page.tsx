@@ -465,7 +465,7 @@ export default function AdminDashboard() {
 
         {/* Session Detail Modal */}
         {selectedSession && !showCancelForm && (
-          <div className="fixed inset-0 bg-black/40 z-50 flex items-end">
+          <div className="fixed inset-0 bg-black/40 z-50 flex items-end modal-overlay">
             <div className="bg-yoga-bg w-full max-w-md mx-auto rounded-t-2xl p-5 max-h-[85vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <div>
@@ -623,7 +623,7 @@ export default function AdminDashboard() {
 
         {/* Cancel Form Modal */}
         {showCancelForm && selectedSession && (
-          <div className="fixed inset-0 bg-black/40 z-50 flex items-end">
+          <div className="fixed inset-0 bg-black/40 z-50 flex items-end modal-overlay">
             <div className="bg-yoga-bg w-full max-w-md mx-auto rounded-t-2xl p-5">
               <h3 className="text-base font-bold mb-1">Stunde absagen</h3>
               <p className="text-sm text-yoga-text/55 mb-4">

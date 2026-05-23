@@ -73,7 +73,7 @@ function InstallButton() {
 
       {/* iOS Anleitung Modal */}
       {showGuide && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setShowGuide(false)}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay" onClick={() => setShowGuide(false)}>
           <div className="bg-yoga-card w-full rounded-t-2xl p-6 pb-10" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-bold">App installieren</h3>

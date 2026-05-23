@@ -634,7 +634,7 @@ export default function SessionDetailPage() {
 
         {/* WARTELISTEN-KONFLIKT MODAL */}
         {showWaitlistConflict && conflictingWaitlists.length > 0 && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => { setShowWaitlistConflict(false); setConflictingWaitlists([]) }}>
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay" onClick={() => { setShowWaitlistConflict(false); setConflictingWaitlists([]) }}>
             <div className="bg-yoga-card w-full max-w-md mx-auto rounded-t-2xl p-5 pb-10" onClick={e => e.stopPropagation()}>
               <h3 className="text-base font-bold mb-2 text-yoga-amber-text">
                 <i className="ti ti-alert-triangle mr-1" />Wartelisten-Konflikt

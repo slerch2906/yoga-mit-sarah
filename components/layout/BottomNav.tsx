@@ -52,7 +52,11 @@ export default function BottomNav({ isAdmin }: BottomNavProps) {
           return (
             <Link key={item.href} href={item.href}
               className={`nav-item ${active ? 'active' : ''}`}>
-              <i className={`ti ${item.icon} text-2xl`} aria-hidden="true" />
+              {/* key={pathname} auf das Icon erzwingt React-Remount sobald sich
+                  der Pfad ändert → CSS-Animation .nav-item.active i triggert
+                  jedes Mal neu (sonst läuft sie nur einmal beim ersten Mount). */}
+              <i key={active ? pathname : undefined}
+                 className={`ti ${item.icon} text-2xl`} aria-hidden="true" />
               <span>{item.label}</span>
             </Link>
           )

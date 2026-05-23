@@ -1323,7 +1323,7 @@ export default function AdminKursePage() {
       </div>
       {/* Kursabbruch Modal */}
       {cancellingCourse && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setCancellingCourse(null)}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay" onClick={() => setCancellingCourse(null)}>
           <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-bold text-yoga-red-text"> Kurs abbrechen</h3>
@@ -1365,7 +1365,7 @@ export default function AdminKursePage() {
 
       {/* Folgekurs anlegen Modal */}
       {folgekursCourse && folgekursForm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setFolgekursCourse(null)}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay" onClick={() => setFolgekursCourse(null)}>
           <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-bold">Folgekurs anlegen</h3>
@@ -1485,7 +1485,7 @@ export default function AdminKursePage() {
 
       {/* Teilnehmer Modal */}
       {participantsCourse && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end" onClick={() => setParticipantsCourse(null)}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay" onClick={() => setParticipantsCourse(null)}>
           <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-base font-bold">Teilnehmer</h3>
@@ -1538,7 +1538,7 @@ export default function AdminKursePage() {
 
       {/* Yogi zu Kurs hinzufügen Modal */}
       {showAddYogiModal && participantsCourse && (
-        <div className="fixed inset-0 bg-black/50 z-[60] flex items-end" onClick={() => setShowAddYogiModal(false)}>
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-end modal-overlay" onClick={() => setShowAddYogiModal(false)}>
           <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-bold">Yogi zu {participantsCourse.name} hinzufügen</h3>

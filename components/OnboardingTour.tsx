@@ -65,8 +65,8 @@ export default function OnboardingTour({ onComplete }: Props) {
   const slide = slides[step]
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-yoga-bg w-full max-w-sm rounded-2xl shadow-xl overflow-hidden">
+    <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4 modal-backdrop">
+      <div className="bg-yoga-bg w-full max-w-sm rounded-2xl shadow-xl overflow-hidden modal-card">
         {/* Header mit Step-Indikator */}
         <div className="bg-yoga-card px-5 pt-5 pb-3">
           <div className="flex items-center justify-between mb-3">

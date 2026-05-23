@@ -301,21 +301,24 @@ test.describe('[E2E] System-Health-RPC', () => {
 test.describe('[E2E] Mehr-Menü Inhalt + Reihenfolge', () => {
   test('Reihenfolge: Nachricht → Bulk-Mail → AGB → System-Status → Passwort → Logout → Protokoll', () => {
     const src = read('app/profil/page.tsx')
-    const order = [
-      'Nachricht für Yogis',
-      'E-Mail an alle Yogis',
-      'AGB-Verwaltung',
-      'System-Status',
-      'Passwort',
-      'Ausloggen',
-      'Protokoll',
+    // Suche nach den Section-Label-Marken (nicht reine Strings, die auch in
+    // Kommentaren vorkommen können). Logout/Protokoll haben kein section-label
+    // → eindeutige Marker im Admin-Block.
+    const order: Array<[string, string | RegExp]> = [
+      ['Nachricht',    /section-label">Nachricht für Yogis</],
+      ['Bulk-Mail',    /section-label">E-Mail an alle Yogis</],
+      ['AGB',          /section-label">AGB-Verwaltung</],
+      ['System-Status',/section-label">System-Status</],
+      ['Passwort',     /section-label">Passwort</],
+      ['Ausloggen',    />Ausloggen</],
+      ['Protokoll',    /Protokoll \(Audit-Log\)/],
     ]
     let lastIdx = -1
-    for (const label of order) {
-      const idx = src.indexOf(label)
-      expect(idx, `Section "${label}" muss im Mehr-Block existieren`).toBeGreaterThan(-1)
-      expect(idx, `Section "${label}" muss NACH der vorherigen kommen`).toBeGreaterThan(lastIdx)
-      lastIdx = idx
+    for (const [name, pattern] of order) {
+      const match = typeof pattern === 'string' ? src.indexOf(pattern) : src.search(pattern)
+      expect(match, `Section "${name}" muss im Mehr-Block existieren`).toBeGreaterThan(-1)
+      expect(match, `Section "${name}" muss NACH der vorherigen kommen`).toBeGreaterThan(lastIdx)
+      lastIdx = match
     }
   })
 
@@ -355,7 +358,15 @@ test.describe('[E2E] Notfallkontakt-Button konsistent mit Daten-Felder', () => {
 test.describe('[E2E] Reminder-Dropdown im Yogi-Profil ist kompakt', () => {
   test('Dropdown nutzt rounded-full + text-xs (statt großem field-input)', () => {
     const src = read('app/profil/page.tsx')
-    expect(src).toMatch(/notify_session_reminder_hours[\s\S]{0,500}rounded-full[\s\S]{0,200}text-xs/)
+    // className steht VOR dem value-Attribut → suche im 500-Zeichen-Fenster
+    // VOR notify_session_reminder_hours nach beiden Marken.
+    const idx = src.indexOf('notify_session_reminder_hours')
+    expect(idx).toBeGreaterThan(-1)
+    const window = src.slice(Math.max(0, idx - 500), idx)
+    expect(window).toMatch(/rounded-full/)
+    expect(window).toMatch(/text-xs/)
+    // Negativ-Assert: kein field-input mehr (zu groß für eine Card-Zeile)
+    expect(window).not.toMatch(/field-input/)
   })
 
   test('Optionen kürzer: "4 Std vorher" statt "4 Stunden vorher"', () => {

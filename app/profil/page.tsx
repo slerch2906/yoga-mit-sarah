@@ -412,9 +412,12 @@ export default function ProfilPage() {
                 </div>
                 <div>
                   <label className="field-label">Text</label>
+                  <p className="text-[11px] text-yoga-text/45 mb-1">
+                    Die Anrede „Hallo [Vorname]," wird automatisch davorgesetzt — also direkt mit deinem Text loslegen.
+                  </p>
                   <textarea className="field-input" rows={5} value={bulkBody}
                     onChange={e => setBulkBody(e.target.value)}
-                    placeholder="Liebe Yogis, ..." />
+                    placeholder="z.B. ich wollte euch nur kurz erinnern, dass die Sommerpause vom 1.-15. August stattfindet…" />
                 </div>
                 <button disabled={sendingBulk || !bulkSubject.trim() || !bulkBody.trim()}
                   onClick={async () => {

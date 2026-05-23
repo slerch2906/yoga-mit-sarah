@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import UpdateBanner from '@/components/UpdateBanner'
 
 export const metadata: Metadata = {
   title: 'Yoga mit Sarah',
@@ -113,6 +114,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="bg-yoga-bg text-yoga-text font-sans min-h-screen">
         {children}
+        <UpdateBanner />
       </body>
     </html>
   )

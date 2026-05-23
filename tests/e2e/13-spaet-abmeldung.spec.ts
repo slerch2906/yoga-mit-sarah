@@ -87,6 +87,11 @@ test.describe('Spät-Abmeldung: Innerhalb 3h vor Stundenbeginn', () => {
     const sessionPage = new SessionDetailPage(page)
     await sessionPage.goto(sessionId)
 
+    // Sarah-Wunsch 2026-05-23: Neuer 3h-Frist-Confirm via window.confirm.
+    // In Playwright muss der native dialog akzeptiert werden bevor er
+    // den Code-Flow blockt.
+    page.on('dialog', d => d.accept())
+
     // Abmelden klicken (Button heißt "Von dieser Stunde abmelden")
     await page.getByRole('button', { name: /von dieser stunde abmelden/i }).click()
 

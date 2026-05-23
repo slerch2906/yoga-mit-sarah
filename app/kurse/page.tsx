@@ -10,6 +10,7 @@ import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import WeekPickerPopover from '@/components/WeekPickerPopover'
 import AdminAnnouncementBubble from '@/components/AdminAnnouncementBubble'
+import OnboardingTour from '@/components/OnboardingTour'
 
 const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTHS = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']
@@ -58,6 +59,7 @@ export default function KursePage() {
   const [profile, setProfile] = useState<any>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [isNewYogi, setIsNewYogi] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const supabase = createClient()
@@ -77,6 +79,11 @@ export default function KursePage() {
         }
         setProfile(prof)
         setUserId(user.id)
+
+        // Onboarding-Tour zeigen wenn noch nicht durchlaufen
+        if (!prof?.is_admin && prof?.onboarding_completed === false) {
+          setShowOnboarding(true)
+        }
 
         // Sarah-Wunsch 2026-05-23: Neu-Yogi-Hinweis. Wenn Yogi noch NIE eine Buchung
         // hatte (auch keine stornierte) → Banner "Sarah trägt dich nach der
@@ -175,6 +182,9 @@ export default function KursePage() {
   return (
     <div className="max-w-md mx-auto min-h-screen" {...swipeHandlers}>
       <AppHeader title="Yoga mit Sarah" isAdmin={profile?.is_admin} />
+
+      {/* Onboarding-Tour für neue Yogis (einmalig nach AGB-Akzeptanz) */}
+      {showOnboarding && <OnboardingTour onComplete={() => setShowOnboarding(false)} />}
 
       {/* Sarah-Nachricht (nur sichtbar wenn Admin sie aktiviert hat) */}
       <AdminAnnouncementBubble />

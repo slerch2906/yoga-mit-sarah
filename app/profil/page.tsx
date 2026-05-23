@@ -202,16 +202,16 @@ export default function ProfilPage() {
       // Admin-Mehr-Menü: Nachricht + erweiterter System-Health laden
       if (prof?.is_admin) {
         const [annRes, healthRes] = await Promise.all([
-          supabase.from('admin_announcement').select('message, is_active, update_banner_version').eq('id', 1).maybeSingle(),
+          supabase.from('admin_announcement')
+            .select('message, is_active, update_banner_version, update_banner_set_at')
+            .eq('id', 1).maybeSingle(),
           supabase.rpc('get_system_health'),
         ])
         if (annRes.data) {
           setAnnText(annRes.data.message || '')
           setAnnActive(!!annRes.data.is_active)
-          // Update-Banner: aktiv wenn version gesetzt UND == aktuellem BUILD_SHA
-          // (sonst zeigt sich ein "alter" Banner für eine Version die nicht mehr aktuell ist)
-          const currentSha = process.env.NEXT_PUBLIC_BUILD_SHA || 'local'
-          setUpdateBannerActive((annRes.data as any).update_banner_version === currentSha)
+          setBannerVersion((annRes.data as any).update_banner_version || null)
+          setBannerSetAt((annRes.data as any).update_banner_set_at || null)
         }
         if (healthRes.data) {
           const h = healthRes.data as any
@@ -263,8 +263,9 @@ export default function ProfilPage() {
   const [annText, setAnnText] = useState('')
   const [annActive, setAnnActive] = useState(false)
   const [savingAnn, setSavingAnn] = useState(false)
-  // Update-Banner (Option C: manueller Trigger)
-  const [updateBannerActive, setUpdateBannerActive] = useState(false)
+  // Update-Banner (Option C: manueller Trigger mit klarem Status)
+  const [bannerVersion, setBannerVersion] = useState<string | null>(null)
+  const [bannerSetAt, setBannerSetAt] = useState<string | null>(null)
   const [savingUpdateBanner, setSavingUpdateBanner] = useState(false)
   const [bulkSubject, setBulkSubject] = useState('')
   const [bulkBody, setBulkBody] = useState('')
@@ -596,34 +597,89 @@ export default function ProfilPage() {
                 </span>
               </div>
 
-              {/* Update-Banner Toggle (Sarah-Wunsch Option C, 2026-05-23) */}
-              <div className="pt-2 border-t border-yoga-border">
-                <label className="flex items-center justify-between cursor-pointer">
-                  <div className="min-w-0 flex-1 pr-2">
-                    <div className="text-xs font-semibold text-yoga-text/70">„Update verfügbar"-Banner zeigen</div>
-                    <div className="text-[10px] text-yoga-text/45 mt-0.5 leading-snug">
-                      Erst nach wichtigen Updates anschalten — sonst nervt es.
-                    </div>
-                  </div>
-                  <input type="checkbox" className="w-5 h-5 cursor-pointer flex-shrink-0"
-                    style={{ accentColor: '#3d3a39' }}
-                    checked={updateBannerActive}
-                    disabled={savingUpdateBanner}
-                    onChange={async e => {
-                      const v = e.target.checked
-                      setUpdateBannerActive(v)
-                      setSavingUpdateBanner(true)
-                      const newVersion = v ? (process.env.NEXT_PUBLIC_BUILD_SHA || 'local') : null
-                      const { error } = await supabase.from('admin_announcement')
-                        .update({ update_banner_version: newVersion, updated_at: new Date().toISOString() })
-                        .eq('id', 1)
-                      setSavingUpdateBanner(false)
-                      if (error) {
-                        alert('Fehler: ' + error.message)
-                        setUpdateBannerActive(!v) // rollback
-                      }
-                    }} />
-                </label>
+              {/* Update-Banner Status + Aktionen (Sarah-Wunsch 2026-05-23, klar statt Toggle) */}
+              <div className="pt-3 mt-1 border-t border-yoga-border">
+                <div className="text-xs font-semibold text-yoga-text/70 mb-2">Update-Banner für Yogis</div>
+                {(() => {
+                  const currentSha = process.env.NEXT_PUBLIC_BUILD_SHA || 'local'
+                  const bannerAgo = bannerSetAt
+                    ? Math.round((Date.now() - new Date(bannerSetAt).getTime()) / 86400000)
+                    : null
+
+                  // 3 Zustände: KEIN Banner / Banner zur AKTUELLEN Version / Banner zur ALTEN Version
+                  const state =
+                    !bannerVersion ? 'off' :
+                    bannerVersion === currentSha ? 'current' : 'outdated'
+
+                  const pushBanner = async () => {
+                    setSavingUpdateBanner(true)
+                    const now = new Date().toISOString()
+                    const { error } = await supabase.from('admin_announcement')
+                      .update({ update_banner_version: currentSha, update_banner_set_at: now, updated_at: now })
+                      .eq('id', 1)
+                    setSavingUpdateBanner(false)
+                    if (error) { alert('Fehler: ' + error.message); return }
+                    setBannerVersion(currentSha); setBannerSetAt(now)
+                  }
+                  const turnOff = async () => {
+                    if (!confirm('Banner ausschalten? Yogis sehen ihn dann nicht mehr.')) return
+                    setSavingUpdateBanner(true)
+                    const { error } = await supabase.from('admin_announcement')
+                      .update({ update_banner_version: null, updated_at: new Date().toISOString() })
+                      .eq('id', 1)
+                    setSavingUpdateBanner(false)
+                    if (error) { alert('Fehler: ' + error.message); return }
+                    setBannerVersion(null)
+                  }
+
+                  if (state === 'off') return (
+                    <>
+                      <p className="text-[11px] text-yoga-text/55 mb-2 leading-snug">
+                        Aktuell ist kein Banner aktiv. Yogis sehen neue Versionen automatisch beim
+                        nächsten Reload. Wenn du sie aktiv informieren willst (z.B. nach wichtigem
+                        Feature) — Banner pushen.
+                      </p>
+                      <button onClick={pushBanner} disabled={savingUpdateBanner}
+                        className="w-full btn-secondary text-xs py-2 disabled:opacity-50">
+                        Banner an Yogis pushen
+                      </button>
+                    </>
+                  )
+
+                  if (state === 'current') return (
+                    <>
+                      <p className="text-[11px] text-green-700 mb-2 leading-snug">
+                        ✅ Banner ist auf aktueller Version — Yogis bekommen den Reload-Hinweis.
+                        {bannerAgo !== null && ` Gesetzt vor ${bannerAgo === 0 ? 'wenigen Stunden' : `${bannerAgo} Tag(en)`}.`}
+                      </p>
+                      <button onClick={turnOff} disabled={savingUpdateBanner}
+                        className="w-full btn-secondary text-xs py-2 disabled:opacity-50">
+                        Banner ausschalten
+                      </button>
+                    </>
+                  )
+
+                  // state === 'outdated'
+                  return (
+                    <>
+                      <p className="text-[11px] text-yoga-amber-text mb-2 leading-snug">
+                        ⚠️ Du hast seit dem letzten Banner-Push neue Versionen deployt
+                        {bannerAgo !== null && ` (Banner ist ${bannerAgo === 0 ? 'von heute' : `${bannerAgo} Tag(e) alt`})`}.
+                        Banner zeigt Yogis noch die alte Version <code className="font-mono text-[10px]">{bannerVersion}</code>.
+                      </p>
+                      <div className="flex gap-2">
+                        <button onClick={pushBanner} disabled={savingUpdateBanner}
+                          className="flex-1 btn-primary text-xs py-2 disabled:opacity-50">
+                          Auf aktuelle Version aktualisieren
+                        </button>
+                        <button onClick={turnOff} disabled={savingUpdateBanner}
+                          className="btn-secondary text-xs py-2 px-3 disabled:opacity-50">
+                          Aus
+                        </button>
+                      </div>
+                    </>
+                  )
+                })()}
               </div>
             </div>
 

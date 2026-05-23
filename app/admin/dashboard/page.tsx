@@ -10,6 +10,7 @@ import { selectCreditForBooking } from '@/lib/credit-selector'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import WeekPickerPopover from '@/components/WeekPickerPopover'
+import AdminAnnouncementBubble from '@/components/AdminAnnouncementBubble'
 
 const WEEKDAYS = ['So','Mo','Di','Mi','Do','Fr','Sa']
 const MONTHS = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']
@@ -458,6 +459,8 @@ export default function AdminDashboard() {
   return (
     <div className="max-w-md mx-auto min-h-screen" {...swipeHandlers}>
       <AppHeader title="Admin Dashboard" isAdmin />
+      {/* Sprechblase auch für Admin sichtbar — Erinnerung dass die Nachricht aktiv ist */}
+      <AdminAnnouncementBubble />
       <div className="px-4 py-4">
 
         {/* Session Detail Modal */}

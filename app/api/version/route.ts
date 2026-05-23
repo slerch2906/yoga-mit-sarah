@@ -14,14 +14,16 @@ export const revalidate = 0
 export async function GET() {
   // Update-Banner-Version aus DB lesen (Sarah-Wunsch Option C: manueller Trigger)
   let updateBannerVersion: string | null = null
+  let updateBannerSetAt: string | null = null
   try {
     const sb = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     )
     const { data } = await sb.from('admin_announcement')
-      .select('update_banner_version').eq('id', 1).maybeSingle()
+      .select('update_banner_version, update_banner_set_at').eq('id', 1).maybeSingle()
     updateBannerVersion = (data as any)?.update_banner_version || null
+    updateBannerSetAt = (data as any)?.update_banner_set_at || null
   } catch {}
 
   return NextResponse.json(
@@ -29,6 +31,7 @@ export async function GET() {
       sha: process.env.NEXT_PUBLIC_BUILD_SHA || 'local',
       date: process.env.NEXT_PUBLIC_BUILD_DATE || null,
       update_banner_version: updateBannerVersion,
+      update_banner_set_at: updateBannerSetAt,
     },
     {
       headers: {

@@ -201,17 +201,24 @@ export default function ProfilPage() {
 
       // Admin-Mehr-Menü: Nachricht + System-Status laden
       if (prof?.is_admin) {
-        const [annRes, reminderRes] = await Promise.all([
+        const [annRes, reminderRes, cronRes] = await Promise.all([
           supabase.from('admin_announcement').select('message, is_active').eq('id', 1).maybeSingle(),
           supabase.from('notification_log').select('sent_at')
             .eq('type', 'session_reminder')
             .order('sent_at', { ascending: false }).limit(1).maybeSingle(),
+          supabase.rpc('get_cron_health', { p_jobname: 'send-session-reminders' }),
         ])
         if (annRes.data) {
           setAnnText(annRes.data.message || '')
           setAnnActive(!!annRes.data.is_active)
         }
         if (reminderRes.data?.sent_at) setLastReminderAt(reminderRes.data.sent_at)
+        const cronRow = (cronRes.data as any)?.[0]
+        if (cronRow) setCronHealth({
+          active: !!cronRow.active,
+          last_status: cronRow.last_status || 'unbekannt',
+          minutes_ago: cronRow.minutes_ago ?? 9999,
+        })
       }
     } catch (e) {
       console.error(e)
@@ -255,6 +262,7 @@ export default function ProfilPage() {
   const [bulkBody, setBulkBody] = useState('')
   const [sendingBulk, setSendingBulk] = useState(false)
   const [lastReminderAt, setLastReminderAt] = useState<string | null>(null)
+  const [cronHealth, setCronHealth] = useState<{ active: boolean; last_status: string; minutes_ago: number } | null>(null)
   const [showProtocol, setShowProtocol] = useState(false)
   const [protocolItems, setProtocolItems] = useState<any[]>([])
   const [loadingProtocol, setLoadingProtocol] = useState(false)
@@ -392,7 +400,49 @@ export default function ProfilPage() {
               </button>
             </div>
 
-            {/* 2) AGB-Verwaltung */}
+            {/* 2) Bulk-Mail an alle Yogis */}
+            <p className="section-label">E-Mail an alle Yogis</p>
+            <div className="card mb-4">
+              <p className="text-xs text-yoga-text/55 mb-3 leading-relaxed">
+                Schickt eine einmalige E-Mail an alle aktiven Yogis (nicht an Dummies, nicht an dich selbst).
+                Beispiel: Sommerpause-Info, Studio-Umzug, Sonderaktion.
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="field-label">Betreff</label>
+                  <input className="field-input" value={bulkSubject}
+                    onChange={e => setBulkSubject(e.target.value)}
+                    placeholder="z.B. Sommerpause vom 1.-15. August" />
+                </div>
+                <div>
+                  <label className="field-label">Text</label>
+                  <textarea className="field-input" rows={5} value={bulkBody}
+                    onChange={e => setBulkBody(e.target.value)}
+                    placeholder="Liebe Yogis, ..." />
+                </div>
+                <button disabled={sendingBulk || !bulkSubject.trim() || !bulkBody.trim()}
+                  onClick={async () => {
+                    if (!confirm(`E-Mail an ALLE aktiven Yogis senden?\n\nBetreff: ${bulkSubject}\n\nDiese Aktion lässt sich nicht rückgängig machen.`)) return
+                    setSendingBulk(true)
+                    const { data: { session } } = await supabase.auth.getSession()
+                    const res = await fetch('/api/admin/bulk-mail', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || ''}` },
+                      body: JSON.stringify({ subject: bulkSubject, body: bulkBody }),
+                    })
+                    const json = await res.json().catch(() => ({}))
+                    setSendingBulk(false)
+                    if (!res.ok) { alert('Fehler: ' + (json?.error || res.status)); return }
+                    alert(`✅ ${json.sent}/${json.total} Mails versendet${json.failed ? ` (${json.failed} fehlgeschlagen)` : ''}.`)
+                    setBulkSubject(''); setBulkBody('')
+                  }}
+                  className="w-full btn-primary text-sm disabled:opacity-50">
+                  {sendingBulk ? 'Sende…' : 'An alle Yogis senden'}
+                </button>
+              </div>
+            </div>
+
+            {/* 3) AGB-Verwaltung */}
             <p className="section-label">AGB-Verwaltung</p>
             <div className="card mb-4">
               <p className="text-sm mb-1">
@@ -454,7 +504,49 @@ export default function ProfilPage() {
               )}
             </div>
 
-            {/* 3) Passwort */}
+            {/* 4) System-Status / App-Info */}
+            <p className="section-label">System-Status</p>
+            <div className="card mb-4 text-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-yoga-text/60">App-Version</span>
+                <span className="font-mono text-xs">
+                  {process.env.NEXT_PUBLIC_BUILD_SHA || 'local'} · {process.env.NEXT_PUBLIC_BUILD_DATE || '—'}
+                </span>
+              </div>
+              {/* Reminder-Cron-Status (echter Wert aus cron.job_run_details) */}
+              <div className="flex items-center justify-between">
+                <span className="text-yoga-text/60">Reminder-Cron</span>
+                {(() => {
+                  if (!cronHealth) return <span className="text-xs text-yoga-text/40">⚪ lädt…</span>
+                  if (!cronHealth.active) return <span className="text-xs text-yoga-red-text">❌ deaktiviert</span>
+                  // Cron läuft alle 15 Min → wenn letzter Run > 20 Min her ist, ist was kaputt
+                  if (cronHealth.minutes_ago > 20)
+                    return <span className="text-xs text-yoga-red-text">❌ letzter Lauf vor {cronHealth.minutes_ago} Min</span>
+                  if (cronHealth.last_status !== 'succeeded')
+                    return <span className="text-xs text-yoga-red-text">❌ letzter Lauf: {cronHealth.last_status}</span>
+                  return <span className="text-xs text-green-700">✅ läuft (vor {cronHealth.minutes_ago} Min, OK)</span>
+                })()}
+              </div>
+              {/* Info-Zeile: wann ist die letzte echte Reminder-Mail rausgegangen */}
+              <div className="flex items-center justify-between">
+                <span className="text-yoga-text/60">Letzte Reminder-Mail</span>
+                <span className="text-xs text-yoga-text/70">
+                  {(() => {
+                    if (!lastReminderAt) return 'noch keine'
+                    const ago = Math.round((Date.now() - new Date(lastReminderAt).getTime()) / 60000)
+                    if (ago < 60) return `vor ${ago} Min`
+                    if (ago < 1440) return `vor ${Math.round(ago/60)} Std`
+                    return `vor ${Math.round(ago/1440)} Tagen`
+                  })()}
+                </span>
+              </div>
+              <p className="text-[11px] text-yoga-text/45 leading-relaxed pt-1">
+                Cron prüft alle 15 Min auf fällige Stunden-Erinnerungen. Wenn aktuell kein Yogi
+                im 4h/12h/24h-Fenster vor einer Stunde ist, gibt's nichts zu senden — das ist normal.
+              </p>
+            </div>
+
+            {/* 5) Passwort */}
             <p className="section-label">Passwort</p>
             <div className="card mb-4">
               <div className="flex items-center justify-between">
@@ -469,81 +561,10 @@ export default function ProfilPage() {
               </div>
             </div>
 
-            {/* 4) System-Status / App-Info */}
-            <p className="section-label">System-Status</p>
-            <div className="card mb-4 text-sm space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-yoga-text/60">App-Version</span>
-                <span className="font-mono text-xs">
-                  {process.env.NEXT_PUBLIC_BUILD_SHA || 'local'} · {process.env.NEXT_PUBLIC_BUILD_DATE || '—'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-yoga-text/60">Letzte Reminder-Mail</span>
-                {(() => {
-                  if (!lastReminderAt) return <span className="text-yoga-text/40 text-xs">noch nie</span>
-                  const ago = Math.round((Date.now() - new Date(lastReminderAt).getTime()) / 60000)
-                  const text = ago < 60 ? `vor ${ago} Min` : ago < 1440 ? `vor ${Math.round(ago/60)} Std` : `vor ${Math.round(ago/1440)} Tagen`
-                  // Wenn länger als 30 min her → warnen (Cron läuft alle 15 min)
-                  const stale = ago > 30
-                  return <span className={`text-xs ${stale ? 'text-yoga-red-text' : 'text-yoga-text/70'}`}>{text}</span>
-                })()}
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-yoga-text/60">Reminder-Cron</span>
-                {(() => {
-                  if (!lastReminderAt) return <span className="text-xs text-yoga-text/40">⚪ unbekannt</span>
-                  const ago = (Date.now() - new Date(lastReminderAt).getTime()) / 60000
-                  return ago < 60
-                    ? <span className="text-xs text-green-700">✅ aktiv</span>
-                    : <span className="text-xs text-yoga-red-text">❌ seit über 1h still</span>
-                })()}
-              </div>
-            </div>
+            {/* 6) Ausloggen (im Admin-Block VOR Protokoll, statt im shared Footer) */}
+            <button onClick={handleLogout} className="btn-secondary mb-3">Ausloggen</button>
 
-            {/* 5) Bulk-Mail an alle Yogis */}
-            <p className="section-label">Nachricht per E-Mail an alle Yogis</p>
-            <div className="card mb-4">
-              <p className="text-xs text-yoga-text/55 mb-3 leading-relaxed">
-                Schickt eine einmalige E-Mail an alle aktiven Yogis (nicht an Dummies, nicht an dich selbst).
-                Beispiel: Sommerpause-Info, Studio-Umzug, Sonderaktion.
-              </p>
-              <div className="space-y-3">
-                <div>
-                  <label className="field-label">Betreff</label>
-                  <input className="field-input" value={bulkSubject}
-                    onChange={e => setBulkSubject(e.target.value)}
-                    placeholder="z.B. Sommerpause vom 1.-15. August" />
-                </div>
-                <div>
-                  <label className="field-label">Text</label>
-                  <textarea className="field-input" rows={5} value={bulkBody}
-                    onChange={e => setBulkBody(e.target.value)}
-                    placeholder="Liebe Yogis, ..." />
-                </div>
-                <button disabled={sendingBulk || !bulkSubject.trim() || !bulkBody.trim()}
-                  onClick={async () => {
-                    if (!confirm(`E-Mail an ALLE aktiven Yogis senden?\n\nBetreff: ${bulkSubject}\n\nDiese Aktion lässt sich nicht rückgängig machen.`)) return
-                    setSendingBulk(true)
-                    const { data: { session } } = await supabase.auth.getSession()
-                    const res = await fetch('/api/admin/bulk-mail', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || ''}` },
-                      body: JSON.stringify({ subject: bulkSubject, body: bulkBody }),
-                    })
-                    const json = await res.json().catch(() => ({}))
-                    setSendingBulk(false)
-                    if (!res.ok) { alert('Fehler: ' + (json?.error || res.status)); return }
-                    alert(`✅ ${json.sent}/${json.total} Mails versendet${json.failed ? ` (${json.failed} fehlgeschlagen)` : ''}.`)
-                    setBulkSubject(''); setBulkBody('')
-                  }}
-                  className="w-full btn-primary text-sm disabled:opacity-50">
-                  {sendingBulk ? 'Sende…' : 'An alle Yogis senden'}
-                </button>
-              </div>
-            </div>
-
-            {/* 6) Protokoll (ausklappbar) */}
+            {/* 7) Protokoll (ausklappbar) */}
             <button onClick={async () => {
               const next = !showProtocol
               setShowProtocol(next)
@@ -753,10 +774,14 @@ export default function ProfilPage() {
         )}
         {/* Ende Yogi-vs-Admin Conditional. AGB-Verwaltung ist jetzt im Admin-Block oben. */}
 
-        {/* App installieren Button */}
-        <InstallButton />
-
-        <button onClick={handleLogout} className="btn-secondary mb-3">Ausloggen</button>
+        {/* App-Installieren + Logout für Yogi nur (Admin hat Logout im Mehr-Block oben).
+            Sarah-Wunsch 2026-05-23: Mehr-Menü-Reihenfolge sortiert Logout vor Protokoll. */}
+        {!isAdmin && (
+          <>
+            <InstallButton />
+            <button onClick={handleLogout} className="btn-secondary mb-3">Ausloggen</button>
+          </>
+        )}
 
         {/* Account löschen nur für normale User, nicht für Admin */}
         {!profile?.is_admin && (!showDeleteConfirm ? (

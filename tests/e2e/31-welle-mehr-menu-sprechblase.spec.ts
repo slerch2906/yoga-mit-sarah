@@ -434,23 +434,27 @@ test.describe('[E2E] Yogi-Reaktivierung komplett entfernt (v5 rollback)', () => 
     expect(src).not.toMatch(/>.*Reaktivieren.*</)
   })
 
-  test('handleDeleteYogi nutzt sofortigen /api/delete-account Aufruf', () => {
+  test('handleDeleteYogi gibt Plätze sofort frei (v6) + ruft /api/delete-account', () => {
     const src = read('app/admin/yogis/[id]/page.tsx')
     expect(src).toMatch(/handleDeleteYogi/)
-    // Anonymisierung passiert weiterhin
+    // Sarah-Wunsch v6: ALLE aktiven Plätze müssen sofort frei sein —
+    // explizite DELETEs auf bookings, enrollments, credits, waitlist, notification_log
+    expect(src).toMatch(/from\('bookings'\)\.delete\(\)\.eq\('user_id', id\)/)
+    expect(src).toMatch(/from\('enrollments'\)\.delete\(\)\.eq\('user_id', id\)/)
+    expect(src).toMatch(/from\('credits'\)\.delete\(\)\.eq\('user_id', id\)/)
+    expect(src).toMatch(/from\('waitlist'\)\.delete\(\)\.eq\('user_id', id\)/)
+    expect(src).toMatch(/from\('notification_log'\)\.delete\(\)\.eq\('user_id', id\)/)
+    // Anonymisierung als Safety-Net (falls Auth-Delete fehlschlägt)
     expect(src).toMatch(/first_name: 'Gelöschter'/)
     expect(src).toMatch(/last_name: 'Nutzer'/)
-    // Auth-User wird SOFORT gelöscht (alter Flow)
-    expect(src).toMatch(/\/api\/delete-account/)
-    // legal_acceptances anonymisiert
     expect(src).toMatch(/full_name: 'Gelöschter Nutzer'/)
-    // Waitlist-Eintrag weg
-    expect(src).toMatch(/from\('waitlist'\)\.delete\(\)/)
-    // Audit-Log mit anonymem Vorgang
+    // Auth-User-Delete (cascadet den Rest weg)
+    expect(src).toMatch(/\/api\/delete-account/)
+    // Audit-Eintrag für Compliance-Trail
     expect(src).toMatch(/yogi_anonymized_dsgvo/)
   })
 
-  test('Nur EIN Anonymisieren-Button (keine 3-Button-Lifecycle-UI mehr)', () => {
+  test('Nur EIN Lösch-Button (keine 3-Button-Lifecycle-UI mehr)', () => {
     const src = read('app/admin/yogis/[id]/page.tsx')
     // Genau ein onClick={handleDeleteYogi}
     const matches = src.match(/onClick=\{handleDeleteYogi\}/g) || []
@@ -459,9 +463,12 @@ test.describe('[E2E] Yogi-Reaktivierung komplett entfernt (v5 rollback)', () => 
     expect(src).not.toMatch(/Endgültig löschen/)
   })
 
-  test('Zwei Bestätigungs-Dialoge (wie vorher) — DSGVO + Sicherheit', () => {
+  test('Zwei Bestätigungs-Dialoge (DSGVO-Info + Sicherheits-Frage)', () => {
     const src = read('app/admin/yogis/[id]/page.tsx')
-    expect(src).toMatch(/DSGVO-konform anonymisieren\? Buchungshistorie bleibt anonym erhalten/)
+    // 1. Confirm: DSGVO-Info mit Hinweis auf Plätze-frei
+    expect(src).toMatch(/DSGVO-konform löschen\?/)
+    expect(src).toMatch(/Plätze.*sofort frei/)
+    // 2. Confirm: Sicherheits-Frage
     expect(src).toMatch(/Bist du sicher\? Diese Aktion kann nicht rückgängig gemacht werden/)
   })
 })

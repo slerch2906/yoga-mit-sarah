@@ -98,15 +98,37 @@ export default function AdminYogiDetailPage() {
   }
 
   async function handleDeleteYogi() {
-    // Sarah-Wunsch 2026-05-23 v5: Recovery-Backup/Reaktivierungs-Funktion komplett
-    // raus — zurück zum alten "sofort anonymisieren + Auth-User löschen" Flow.
-    if (!confirm(`Account von ${yogi?.first_name} ${yogi?.last_name} DSGVO-konform anonymisieren? Buchungshistorie bleibt anonym erhalten.`)) return
+    // Sarah-Wunsch 2026-05-23 v6: Yogi-Account DSGVO-konform löschen UND
+    // Plätze SOFORT freigeben. Reihenfolge:
+    //  1. Aktive Buchungen, Enrollments, Credits, Waitlist, Notification-Log
+    //     EXPLIZIT löschen (nicht auf FK-Cascade verlassen — falls Auth-Delete
+    //     später fehlschlägt, müssen die Plätze trotzdem sofort frei sein)
+    //  2. Profile + legal_acceptances anonymisieren (PII raus, "Gelöschter
+    //     Nutzer" als Platzhalter — falls Auth-Delete fehlschlägt, keine PII)
+    //  3. audit_log-PII anonymisieren
+    //  4. Auth-User löschen (cascadet alles Restliche; audit_log SET NULL)
+    //  5. Audit-Eintrag yogi_anonymized_dsgvo + Email an Sarah
+    if (!confirm(
+      `Account von ${yogi?.first_name} ${yogi?.last_name} DSGVO-konform löschen?\n\n` +
+      `• Plätze in allen Kursen + Stunden werden sofort frei\n` +
+      `• Aktive Buchungen + Guthaben werden gelöscht\n` +
+      `• Persönliche Daten werden anonymisiert\n` +
+      `• Buchungshistorie bleibt anonym im Protokoll`
+    )) return
     if (!confirm('Bist du sicher? Diese Aktion kann nicht rückgängig gemacht werden!')) return
 
     const fullName = `${yogi?.first_name || ''} ${yogi?.last_name || ''}`.trim()
     const email = yogi?.email || ''
 
-    // DSGVO: Anonymisieren statt hart löschen
+    // 1. PLÄTZE FREIGEBEN — alle Yogi-Ressourcen explizit löschen
+    //    (auch wenn Auth-Delete cascadet, hier robust falls API fehlschlägt)
+    await supabase.from('bookings').delete().eq('user_id', id)
+    await supabase.from('enrollments').delete().eq('user_id', id)
+    await supabase.from('credits').delete().eq('user_id', id)
+    await supabase.from('waitlist').delete().eq('user_id', id)
+    await supabase.from('notification_log').delete().eq('user_id', id)
+
+    // 2. PII anonymisieren — Profile + legal_acceptances
     await supabase.from('profiles').update({
       first_name: 'Gelöschter',
       last_name: 'Nutzer',
@@ -124,13 +146,11 @@ export default function AdminYogiDetailPage() {
       phone: null,
     }).eq('user_id', id)
 
-    // Warteliste entfernen
-    await supabase.from('waitlist').delete().eq('user_id', id)
-
-    // DSGVO: audit_log Einträge anonymisieren (PII aus details JSONB entfernen)
+    // 3. audit_log-PII anonymisieren (Name/Email in details JSONB entfernen)
     try { await supabase.rpc('anonymize_user_audit_logs' as any, { target_user_id: id }) } catch {}
 
-    // Auth User löschen + Sessions invalidieren
+    // 4. Auth-User löschen → Sessions invalidiert, profile cascadet weg
+    //    (audit_log user_id wird SET NULL — Compliance-Spur bleibt erhalten)
     try {
       const deleteRes = await fetch('/api/delete-account', {
         method: 'POST',
@@ -145,13 +165,13 @@ export default function AdminYogiDetailPage() {
       console.error('Delete account error:', e)
     }
 
-    // DSGVO: kein Klartext-Name/Email im audit_log – nur abstrakter Vorgang
+    // 5. Audit-Log: anonymer Lösch-Vorgang (für Compliance-Trail)
     await supabase.from('audit_log').insert({
       action: 'yogi_anonymized_dsgvo',
       details: { anonymized_user_id: id }
     })
 
-    // Email an dich: Drive-PDF löschen
+    // Email an Sarah: PDF im Drive manuell entfernen
     const { data: { session: sess } } = await supabase.auth.getSession()
     await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-email`, {
       method: 'POST',
@@ -925,14 +945,13 @@ export default function AdminYogiDetailPage() {
           )
         })()}
 
-        {/* Yogi-Account anonymisieren (DSGVO-konform). Sarah-Wunsch 2026-05-23 v5:
-            Reaktivierungs-Funktion mit 30-Tage-Backup wurde rückgängig gemacht —
-            zurück zum alten einfachen Flow: Profil anonymisieren + Auth-User
-            sofort löschen. Endgültig, kein Rückweg. */}
+        {/* Yogi-Account DSGVO-konform löschen. Sarah-Wunsch 2026-05-23 v6:
+            Alle Plätze (Bookings, Enrollments, Credits, Waitlist) sofort frei.
+            PII anonymisiert, Auth-User gelöscht, Compliance-Audit bleibt. */}
         <div className="mt-6 pt-4 border-t border-yoga-border">
           <button onClick={handleDeleteYogi}
             className="w-full text-sm text-yoga-red-text py-3 border border-yoga-red-bg rounded-yoga cursor-pointer hover:opacity-80 font-semibold">
-            <i className="ti ti-trash mr-1" /> Yogi-Account DSGVO-konform anonymisieren
+            <i className="ti ti-trash mr-1" /> Yogi-Account löschen (DSGVO-konform)
           </button>
         </div>
 

@@ -234,13 +234,23 @@ export default function ProfilPage() {
   async function handleSave(field: string) {
     const user = await getCurrentUser()
     if (!user) return
+    const value = editValue.trim()
+
+    // Sarah-Wunsch 2026-05-23: Form-Validierung pro Feld
+    if (!value) { alert('Das Feld darf nicht leer sein.'); return }
     if (field === 'email') {
-      await supabase.auth.updateUser({ email: editValue })
-      setUserEmail(editValue)
-    } else {
-      await supabase.from('profiles').update({ [field]: editValue }).eq('id', user.id)
+      const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)
+      if (!emailOk) { alert('Bitte gib eine gültige E-Mail-Adresse ein (z.B. name@beispiel.de).'); return }
     }
-    setProfile((prev: any) => ({ ...prev, [field]: editValue }))
+
+    if (field === 'email') {
+      const { error } = await supabase.auth.updateUser({ email: value })
+      if (error) { alert('Fehler: ' + error.message); return }
+      setUserEmail(value)
+    } else {
+      await supabase.from('profiles').update({ [field]: value }).eq('id', user.id)
+    }
+    setProfile((prev: any) => ({ ...prev, [field]: value }))
     setEditing(null)
   }
 
@@ -310,7 +320,7 @@ export default function ProfilPage() {
     await supabase.from('waitlist').delete().eq('user_id', user.id)
 
     // 3b) Audit-Log Einträge anonymisieren (DSGVO – PII aus details JSONB entfernen)
-    await supabase.rpc('anonymize_user_audit_logs', { target_user_id: user.id }).catch(() => {})
+    try { await supabase.rpc('anonymize_user_audit_logs' as any, { target_user_id: user.id }) } catch {}
 
     // 4) Admin informieren (inkl. Drive-Hinweis)
     await supabase.from('admin_notifications').insert({
@@ -328,7 +338,7 @@ export default function ProfilPage() {
 
     // 6) Auth User löschen + sofort ausloggen
     // Erst lokal ausloggen (Session löschen), dann Auth-User löschen
-    await supabase.auth.signOut({ scope: 'global' }).catch(() => {})
+    try { await supabase.auth.signOut({ scope: 'global' }) } catch {}
     localStorage.clear()
     sessionStorage.clear()
 

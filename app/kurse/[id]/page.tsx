@@ -230,13 +230,22 @@ export default function SessionDetailPage() {
   }
 
   async function handleCancel() {
-    setActionLoading(true)
     const user = await getCurrentUser()
     // Server-Zeit verwenden statt Browser-Zeit
     const serverNow = await getServerNow()
     const sessionStart = new Date(`${session.date}T${session.time_start}`)
     const deadline3h = new Date(sessionStart.getTime() - 3 * 60 * 60 * 1000)
     const late = serverNow > deadline3h
+
+    // Sarah-Wunsch 2026-05-23: Yogi muss bewusst bestätigen wenn er innerhalb
+    // der 3h-Frist abmeldet — dann verfällt der Credit ersatzlos.
+    if (late && !confirm(
+      'Du bist innerhalb der 3-Stunden-Frist.\n\n' +
+      'Wenn du dich jetzt abmeldest, verfällt dein Credit — du kannst diese Stunde nicht mehr nachholen.\n\n' +
+      'Trotzdem abmelden?'
+    )) return
+
+    setActionLoading(true)
 
     await supabase.from('bookings').update({
       status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: late

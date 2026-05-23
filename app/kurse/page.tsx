@@ -57,6 +57,7 @@ export default function KursePage() {
   const [sessions, setSessions] = useState<any[]>([])
   const [profile, setProfile] = useState<any>(null)
   const [userId, setUserId] = useState<string | null>(null)
+  const [isNewYogi, setIsNewYogi] = useState(false)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const supabase = createClient()
@@ -76,6 +77,14 @@ export default function KursePage() {
         }
         setProfile(prof)
         setUserId(user.id)
+
+        // Sarah-Wunsch 2026-05-23: Neu-Yogi-Hinweis. Wenn Yogi noch NIE eine Buchung
+        // hatte (auch keine stornierte) → Banner "Sarah trägt dich nach der
+        // Bezahlung in einen Kurs ein". Verschwindet sobald irgendeine Buchung
+        // existiert (auch wenn alle storniert sind = er war mal in einem Kurs).
+        const { count: bookingCount } = await supabase.from('bookings')
+          .select('id', { count: 'exact', head: true }).eq('user_id', user.id)
+        setIsNewYogi(!prof?.is_admin && (bookingCount ?? 0) === 0)
       } catch (e) {
         console.error('Init error:', e)
         setLoading(false)
@@ -170,6 +179,16 @@ export default function KursePage() {
       {/* Sarah-Nachricht (nur sichtbar wenn Admin sie aktiviert hat) */}
       <AdminAnnouncementBubble />
 
+      {/* Neu-Yogi-Hinweis: noch keine einzige Buchung in der Historie */}
+      {isNewYogi && (
+        <div className="mx-4 mt-3 bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga px-4 py-3 flex items-start gap-2">
+          <i className="ti ti-info-circle text-yoga-amber-text text-base mt-0.5 flex-shrink-0" />
+          <p className="text-sm text-yoga-text/80 leading-snug">
+            Sarah trägt dich nach der Bezahlung in deinen Kurs ein.
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center justify-between px-4 pt-3 pb-1">
         <button onClick={() => goWeek(-1)}
           className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 border border-yoga-text/30 rounded-full text-yoga-text">
@@ -234,9 +253,10 @@ export default function KursePage() {
             </p>
             {daySessions.map(s => (
               <button key={s.id}
-                onClick={() => router.push(`/kurse/${s.id}`)}
+                onClick={() => { if (!s.is_past) router.push(`/kurse/${s.id}`) }}
+                disabled={s.is_past}
                 className={`w-full flex items-center gap-3 mb-2 text-left transition-colors rounded-yoga border p-3
-                  ${s.is_past ? 'opacity-40 cursor-default' : 'hover:border-yoga-border2'}
+                  ${s.is_past ? 'opacity-40 cursor-default' : 'hover:border-yoga-border2 active:scale-[0.98]'}
                   ${s.my_booking && !s.is_past ? 'border-2 border-yoga-green-text bg-white' : 'border-yoga-border bg-white'}`}>
                 <div className="text-center flex-shrink-0 w-12">
                   <div className={`text-base font-bold ${s.is_past ? 'line-through' : ''}`}>

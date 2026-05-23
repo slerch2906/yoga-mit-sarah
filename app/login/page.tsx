@@ -132,10 +132,15 @@ export default function LoginPage() {
               ) : 'Anmelden'}
             </button>
             {!loading && (
-              <button type="button" onClick={() => setShowReset(true)}
-                className="w-full text-center text-sm text-yoga-text/50 mt-2 hover:opacity-80">
-                Passwort vergessen?
-              </button>
+              <>
+                <button type="button" onClick={() => setShowReset(true)}
+                  className="w-full text-center text-sm text-yoga-text/50 mt-2 hover:opacity-80">
+                  Passwort vergessen?
+                </button>
+                <p className="text-xs text-yoga-text/40 text-center mt-3 leading-snug">
+                  E-Mail-Adresse vergessen? Wende dich an Sarah.
+                </p>
+              </>
             )}
           </form>
         ) : (

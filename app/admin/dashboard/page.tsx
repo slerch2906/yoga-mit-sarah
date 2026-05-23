@@ -9,6 +9,7 @@ import { useSwipe } from '@/lib/useSwipe'
 import { selectCreditForBooking } from '@/lib/credit-selector'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
+import WeekPickerPopover from '@/components/WeekPickerPopover'
 
 const WEEKDAYS = ['So','Mo','Di','Mi','Do','Fr','Sa']
 const MONTHS = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']
@@ -702,7 +703,17 @@ export default function AdminDashboard() {
             className="flex items-center gap-1 text-sm font-semibold px-3 py-2 border-2 border-yoga-text/30 rounded-full text-yoga-text">
             <i className="ti ti-chevron-left" /> Zurück
           </button>
-          <span className="text-sm font-bold">{weekLabel}</span>
+          <WeekPickerPopover
+            currentWeekStart={weekStart}
+            onSelectWeek={(mon) => {
+              // Anzahl Wochen-Differenz zur aktuellen Heute-Woche berechnen
+              const today = new Date(); today.setHours(0,0,0,0)
+              const todayMon = getMonday(today)
+              const diffDays = Math.round((mon.getTime() - todayMon.getTime()) / 86400000)
+              setWeekOffset(Math.round(diffDays / 7))
+            }}>
+            {weekLabel}
+          </WeekPickerPopover>
           <button onClick={() => setWeekOffset(o => o + 1)}
             className="flex items-center gap-1 text-sm font-semibold px-3 py-2 border-2 border-yoga-text/30 rounded-full text-yoga-text">
             Vor <i className="ti ti-chevron-right" />

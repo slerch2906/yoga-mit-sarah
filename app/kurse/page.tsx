@@ -8,6 +8,7 @@ import { useSwipe } from '@/lib/useSwipe'
 import { getCurrentAgbVersion } from '@/lib/agb-version'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
+import WeekPickerPopover from '@/components/WeekPickerPopover'
 
 const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTHS = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']
@@ -170,7 +171,18 @@ export default function KursePage() {
           className="flex items-center gap-1 text-sm font-semibold px-3 py-2 border-2 border-yoga-text/30 rounded-full text-yoga-text">
           <i className="ti ti-chevron-left" /> Vorherige
         </button>
-        <span className="text-sm font-bold">{weekLabel}</span>
+        <WeekPickerPopover
+          currentWeekStart={weekStart}
+          onSelectWeek={(mon) => {
+            const today = new Date(); today.setHours(0,0,0,0)
+            const todayMon = getMonday(today)
+            const diffDays = Math.round((mon.getTime() - todayMon.getTime()) / 86400000)
+            const n = Math.round(diffDays / 7)
+            sessionStorage.setItem('kurse_week_offset', String(n))
+            setOffset(n)
+          }}>
+          {weekLabel}
+        </WeekPickerPopover>
         <button onClick={() => goWeek(+1)}
           className="flex items-center gap-1 text-sm font-semibold px-3 py-2 border-2 border-yoga-text/30 rounded-full text-yoga-text">
           Nächste <i className="ti ti-chevron-right" />

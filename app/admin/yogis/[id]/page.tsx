@@ -182,16 +182,17 @@ export default function AdminYogiDetailPage() {
       untilUnit = untilN
     }
 
-    // Prüfen ob Kurs bereits voll
+    // Sarah-Regel 2026-05-23: Admin darf überbuchen. Bei vollem Kurs nur Hinweis,
+    // kein Block. Counter im Dropdown zeigt sowieso „voll" — Admin entscheidet bewusst.
     const { count } = await supabase
       .from('enrollments')
       .select('id', { count: 'exact', head: true })
       .eq('course_id', selectedCourseId)
-    // Dummy-User dürfen auch in volle Kurse als Platzhalter
     if (course?.max_spots && (count ?? 0) >= course.max_spots && !yogi?.is_dummy) {
-      alert(`Kurs ist bereits voll (max. ${course.max_spots} Teilnehmer).`)
-      setEnrolling(false)
-      return
+      if (!confirm(`Kurs ist eigentlich voll (${count}/${course.max_spots}). Trotzdem überbuchen?`)) {
+        setEnrolling(false)
+        return
+      }
     }
 
     // Range-Mode: Guthaben-Pfad überspringen (Edge-Case, manuell handhaben)
@@ -553,9 +554,13 @@ export default function AdminYogiDetailPage() {
                 const rem = getRemainingUnits(c)
                 const enrollCount = c.enrollments?.length ?? 0
                 const isFull = c.max_spots && enrollCount >= c.max_spots
+                // Sarah-Regel 2026-05-23: Admin darf überbuchen → wählbar lassen,
+                // nur als „voll" markieren damit Admin es bewusst sieht.
                 return (
-                  <option key={c.id} value={c.id} disabled={!!isFull}>
-                    {isFull ? ` ${c.name} (voll – ${enrollCount}/${c.max_spots})` : `${c.name} → ${rem} Credits · ${enrollCount}/${c.max_spots ?? '∞'} Plätze`}
+                  <option key={c.id} value={c.id}>
+                    {isFull
+                      ? `${c.name} → ${rem} Credits · voll ${enrollCount}/${c.max_spots} (überbuchen?)`
+                      : `${c.name} → ${rem} Credits · ${enrollCount}/${c.max_spots ?? '∞'} Plätze`}
                   </option>
                 )
               })}

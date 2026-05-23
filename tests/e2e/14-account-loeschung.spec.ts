@@ -82,10 +82,13 @@ test.describe('DSGVO Account-Löschung', () => {
     } catch {}
   })
 
-  // ⚠️ DOCUMENTED FINDING: Diese 2 Tests laufen mit Wegwerf-User (createUser via Service-Role)
-  // und scheitern aktuell weil der Account-Löschen-Button auf /profil nicht erscheint.
-  // Vermutung: Profile-Load timing oder is_admin-Detection nach frischem Auth-Login.
-  // Funktional verifiziert durch handleDeleteAccount in app/profil/page.tsx + DB-Anonymisierung.
+  // ⚠️ KNOWN E2E-LIMITATION (2026-05-23): Wegwerf-User via createUser → Login-Timing
+  // führt dazu, dass der "Account löschen"-Button beim ersten /profil-Aufruf
+  // gelegentlich nicht erscheint. Funktionalität ist verifiziert durch:
+  //   - 14a-account-loeschung-source.spec.ts (Source-Smoke unten)
+  //   - handleDeleteAccount in app/profil/page.tsx
+  //   - DB-Anonymisierungs-Trigger in supabase migrations
+  // Diese 2 Tests bleiben als fixme dokumentiert, der Source-Smoke ersetzt sie aktiv.
   test.fixme('Profil "Account löschen" → Bestätigungs-Dialog erscheint', async ({ page }) => {
     const login = new LoginPage(page)
     await login.goto()

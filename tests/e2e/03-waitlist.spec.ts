@@ -100,21 +100,90 @@ test.describe('Warteliste Benachrichtigung (Yogi2)', () => {
 })
 
 // --- Wartelisten-Austrag via Email-Token (Sarah 2026-05-22) ---
-test.describe('Warteliste-Austrag via Email-Link', () => {
-  test.fixme('[E2E] Token-Link trägt aus + zeigt Bestätigung mit Kursname/Datum', async () => {
-    // 1) Yogi auf waitlist setzen via RPC join_waitlist
-    // 2) unsubscribe_token aus DB lesen
-    // 3) /warteliste/austragen?token=<token> (unangemeldet) öffnen
-    // 4) Erwartet: H2 "Von der Warteliste ausgetragen" + Kursname + Datum sichtbar
-    // 5) DB-Check: waitlist-Row gelöscht
+test.describe('[E2E] Warteliste-Austrag via Email-Link', () => {
+  // Page ist public — kein Login. Wir nutzen einen eigenen Yogi-Kontext (yogi2)
+  // nur zum Anlegen des waitlist-Eintrags via RPC, dann öffnen wir die Page ohne Session.
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  let austragSessionId: string
+  let austragCourseName: string
+  let austragDate: string
+  let austragTimeStart: string
+  let validToken: string
+
+  test.beforeAll(async () => {
+    // Eigene ausgebuchte Session für diesen Block — nicht den priority-Setup recyceln
+    const setup = await createFullCourse(yogi1Id, yogi2Id)
+    austragSessionId = setup.sessionIds[0]
+
+    const db = await getAdminClient()
+    const { data: sess } = await db.from('sessions')
+      .select('id, date, time_start, course:courses(name)')
+      .eq('id', austragSessionId).single()
+    austragCourseName = (sess as any)?.course?.name || ''
+    austragDate = (sess as any)?.date || ''
+    austragTimeStart = (sess as any)?.time_start || ''
+
+    // waitlist-Eintrag direkt via Service-Role anlegen.
+    // unsubscribe_token wird vom DB-Default `gen_random_uuid()` befüllt.
+    // (Andere Tests dieses Files können bereits einen yogi2-waitlist auf
+    //  dieser Session angelegt haben — ON CONFLICT-sicher löschen wir vorher.)
+    await db.from('waitlist').delete()
+      .eq('user_id', yogi2Id).eq('session_id', austragSessionId)
+    const { data: ins, error: insErr } = await db.from('waitlist').insert({
+      user_id: yogi2Id, session_id: austragSessionId, type: 'waitlist',
+    }).select('unsubscribe_token').single()
+    if (insErr || !ins?.unsubscribe_token) {
+      throw new Error(`waitlist-Insert für Token-Austrag fehlgeschlagen: ${insErr?.message}`)
+    }
+    validToken = ins.unsubscribe_token
   })
 
-  test.fixme('[E2E] Zweiter Klick auf denselben Link → "Bereits ausgetragen"', async () => {
-    // Idempotenz: nach erstem Klick zeigt Page "Bereits ausgetragen", kein Crash, kein 500.
+  test('Token-Link trägt aus + zeigt Bestätigung mit Kursname/Datum', async ({ page }) => {
+    await page.goto(`/warteliste/austragen?token=${encodeURIComponent(validToken)}`)
+    await page.waitForLoadState('networkidle')
+
+    // Erfolgs-State
+    await expect(page.getByRole('heading', { name: /von der warteliste ausgetragen/i }))
+      .toBeVisible({ timeout: 10_000 })
+
+    // Kursname sichtbar
+    await expect(page.getByText(austragCourseName)).toBeVisible()
+
+    // Datum-Anzeige enthält Jahr (formatGermanDate gibt z.B. "Donnerstag, 5. Juni 2026 um 18:30 Uhr")
+    const year = new Date(austragDate).getFullYear()
+    await expect(page.getByText(new RegExp(`${year}`))).toBeVisible()
+    // Uhrzeit-Anzeige (z.B. "18:30 Uhr")
+    const hhmm = austragTimeStart.slice(0, 5)
+    await expect(page.getByText(new RegExp(`${hhmm}`))).toBeVisible()
+
+    // DB-Check: waitlist-Eintrag gelöscht
+    const entry = await getWaitlistEntry(yogi2Id, austragSessionId)
+    expect(entry, 'waitlist-Eintrag muss nach Token-Austrag gelöscht sein').toBeNull()
   })
 
-  test.fixme('[E2E] Ungültiger / random Token → "Link ungültig"', async () => {
-    // /warteliste/austragen?token=<random-uuid> → invalid-State
+  test('Zweiter Klick auf denselben Link → "Bereits ausgetragen" (Idempotenz)', async ({ page }) => {
+    // 1. Klick: trägt aus (success)
+    await page.goto(`/warteliste/austragen?token=${encodeURIComponent(validToken)}`)
+    await page.waitForLoadState('networkidle')
+    // 2. Klick: zeigt already-removed-State
+    await page.goto(`/warteliste/austragen?token=${encodeURIComponent(validToken)}`)
+    await page.waitForLoadState('networkidle')
+
+    await expect(page.getByRole('heading', { name: /bereits ausgetragen/i }))
+      .toBeVisible({ timeout: 10_000 })
+    // Kein Error/Crash — Link-zur-App-Button sichtbar
+    await expect(page.getByRole('link', { name: /zur app/i })).toBeVisible()
+  })
+
+  test('Ungültiger / random Token → "Link ungültig"', async ({ page }) => {
+    const randomToken = `e2e-invalid-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    await page.goto(`/warteliste/austragen?token=${encodeURIComponent(randomToken)}`)
+    await page.waitForLoadState('networkidle')
+
+    await expect(page.getByRole('heading', { name: /link ungültig/i }))
+      .toBeVisible({ timeout: 10_000 })
+    await expect(page.getByRole('link', { name: /zur app/i })).toBeVisible()
   })
 })
 

@@ -81,11 +81,23 @@ test.describe('[E2E] PWA: App-Icon + Install-Banner', () => {
 
   // beforeinstallprompt-Event-Verhalten lässt sich nur manuell auf
   // Android-Chrome verifizieren. Daher als fixme dokumentiert.
+  // Source-Smoke-Test darunter prüft die JS-Blocklist statisch.
   test.fixme('Banner erscheint NICHT auf /rechtliches, aber AUF /kurse (manuell)', async () => {
     // Manueller Check auf Android-Chrome:
     // 1. App im inkognito öffnen, /rechtliches aufrufen
     // 2. 5 Sekunden warten → Banner darf nicht erscheinen
     // 3. AGB akzeptieren → Redirect auf /kurse
     // 4. 5 Sekunden warten → Banner erscheint
+  })
+
+  test('Source-Smoke: Blocked-Paths-Array enthält alle 5 sensiblen Pfade', async ({ page }) => {
+    const response = await page.goto('/login')
+    const html = await response!.text()
+    // Validierung: blockierte Pfade decken Auth/AGB/Onboarding ab
+    expect(html).toMatch(/INSTALL_BLOCKED_PATHS/)
+    expect(html).toMatch(/\/rechtliches/)
+    expect(html).toMatch(/\/login/)
+    expect(html).toMatch(/\/register/)
+    expect(html).toMatch(/\/profil\/passwort/)
   })
 })

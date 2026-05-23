@@ -19,8 +19,12 @@ export type AgbVersion = {
 
 /** Lädt die aktuell gültige Version (höchste sort_order). */
 export async function getCurrentAgbVersion(supabase: SupabaseClient): Promise<AgbVersion | null> {
-  const { data } = await supabase.from('agb_versions')
+  const { data, error } = await supabase.from('agb_versions')
     .select('*').order('sort_order', { ascending: false }).limit(1).maybeSingle()
+  if (error) {
+    console.error('[getCurrentAgbVersion] DB-Error:', error.message, error)
+    return null
+  }
   return (data as AgbVersion) || null
 }
 

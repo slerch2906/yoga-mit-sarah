@@ -484,7 +484,7 @@ export default function ProfilPage() {
             <p className="section-label">AGB-Verwaltung (Admin)</p>
             <div className="card mb-4">
               <p className="text-sm mb-1">
-                Aktuelle AGB-Version: <strong>{currentAgb?.label || 'lädt…'}</strong>
+                Aktuelle AGB-Version: <strong>{currentAgb?.label || 'Dezember 2025'}</strong>
               </p>
               <p className="text-xs text-yoga-text/55 mb-3 leading-relaxed">
                 Wenn du die AGB auf yogamitsarah.me/agb geändert hast: trag hier die neue Versions-Bezeichnung

@@ -113,7 +113,7 @@ export default function KursePage() {
 
     const { data, error } = await supabase
       .from('sessions')
-      .select(`id, date, time_start, duration_min, course:courses(id, name, max_spots), bookings!bookings_session_id_fkey(id, user_id, status)`)
+      .select(`id, date, time_start, duration_min, course:courses(id, name, max_spots, difficulty), bookings!bookings_session_id_fkey(id, user_id, status)`)
       .gte('date', weekStart.toISOString().split('T')[0])
       .lte('date', weekEnd.toISOString().split('T')[0])
       .eq('is_cancelled', false)
@@ -282,6 +282,10 @@ export default function KursePage() {
                       <span className="text-yoga-amber-text font-semibold"> · Ersatzstunde</span>
                     )}
                   </div>
+                  {/* Sarah-Wunsch 2026-05-24: Level (course.difficulty) als Schriftzug */}
+                  {s.course?.difficulty && (
+                    <div className="text-xs text-yoga-text/50 mt-0.5">{s.course.difficulty}</div>
+                  )}
                   {s.is_replacement && s.original_session && (
                     <div className="text-xs text-yoga-amber-text mt-0.5">
                       für {new Date(s.original_session.date).toLocaleDateString('de-DE', { day:'numeric', month:'short' })} · {s.original_session.time_start?.slice(0,5)} Uhr

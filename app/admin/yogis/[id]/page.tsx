@@ -766,7 +766,7 @@ export default function AdminYogiDetailPage() {
                                 {new Date(s.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })}
                                 {s.time_start && ` · ${s.time_start.slice(0,5)} Uhr`}
                                 {isReplacement && (
-                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-yoga-amber-text bg-yoga-amber-bg/70 rounded-full px-1.5 py-0.5">
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-yoga-text bg-yoga-amber-bg/70 rounded-full px-1.5 py-0.5">
                                     <i className="ti ti-refresh text-[10px]" />Ersatzstunde
                                   </span>
                                 )}

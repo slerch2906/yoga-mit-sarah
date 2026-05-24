@@ -1185,7 +1185,7 @@ export default function AdminKursePage() {
                           {' · '}{s.time_start?.slice(0,5)} Uhr
                           {s.is_cancelled && (s.cancel_reason === 'excluded' ? ' · Ausgeschlossen' : ' · Abgesagt')}
                           {s.is_replacement && (
-                            <span className="text-yoga-amber-text font-semibold">
+                            <span className="text-yoga-text font-semibold">
                               {' · Ersatzstunde'}
                               {s.original_session && (
                                 <span className="text-yoga-text/55 font-normal">

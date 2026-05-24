@@ -280,7 +280,7 @@ export default function KursePage() {
                       Ersatzstunde-Hinweis (eigene Zeile), Level */}
                   <div className="text-sm font-semibold truncate">{s.course?.name}</div>
                   {s.is_replacement && s.original_session && (
-                    <div className="text-xs text-yoga-amber-text font-semibold mt-0.5">
+                    <div className="text-xs text-yoga-text font-semibold mt-0.5">
                       Ersatzstunde für {new Date(s.original_session.date).toLocaleDateString('de-DE', { day:'numeric', month:'short' })} · {s.original_session.time_start?.slice(0,5)} Uhr
                     </div>
                   )}

@@ -518,12 +518,12 @@ export default function AdminDashboard() {
                   <h3 className="text-base font-bold">
                     {selectedSession.course?.name}
                     {selectedSession.is_replacement && (
-                      <span className="text-yoga-amber-text font-semibold"> · Ersatzstunde</span>
+                      <span className="text-yoga-text font-semibold"> · Ersatzstunde</span>
                     )}
                   </h3>
                   <p className="text-sm text-yoga-text/55">{new Date(selectedSession.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · {selectedSession.time_start?.slice(0,5)} Uhr</p>
                   {selectedSession.is_replacement && selectedSession.original_session && (
-                    <p className="text-xs text-yoga-amber-text mt-1 flex items-center gap-1">
+                    <p className="text-xs text-yoga-text mt-1 flex items-center gap-1">
                       <i className="ti ti-arrow-back-up" />
                       Ersatzstunde für{' '}
                       <strong>
@@ -853,7 +853,7 @@ export default function AdminDashboard() {
                   <div className="text-sm font-bold truncate">
                     {s.course?.name}
                     {s.is_replacement && (
-                      <span className="text-yoga-amber-text font-semibold"> · Ersatzstunde</span>
+                      <span className="text-yoga-text font-semibold"> · Ersatzstunde</span>
                     )}
                   </div>
                   <div className="text-xs text-yoga-text/55 mt-0.5">

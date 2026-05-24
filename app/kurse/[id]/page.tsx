@@ -390,14 +390,14 @@ export default function SessionDetailPage() {
         <h2 className="text-lg font-bold mb-1">
           {course?.name}
           {(session as any).origin && (
-            <span className="text-yoga-amber-text font-semibold"> · Ersatzstunde</span>
+            <span className="text-yoga-text font-semibold"> · Ersatzstunde</span>
           )}
         </h2>
         <p className="text-sm text-yoga-text/55 mb-2">
           {new Date(session.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · {session.time_start?.slice(0,5)} Uhr · {session.duration_min} min
         </p>
         {(session as any).origin && (
-          <div className="bg-yoga-amber-bg/60 border border-yoga-amber-text/20 rounded-yoga px-3 py-2 mb-2 flex items-center gap-1.5 text-sm text-yoga-amber-text">
+          <div className="bg-yoga-amber-bg/60 border border-yoga-amber-text/20 rounded-yoga px-3 py-2 mb-2 flex items-center gap-1.5 text-sm text-yoga-text">
             <i className="ti ti-arrow-back-up text-base" />
             <span>
               Ersatzstunde für{' '}

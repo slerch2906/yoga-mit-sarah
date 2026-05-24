@@ -446,7 +446,7 @@ export default function AdminSessionPage() {
           {/* Sarah-Wunsch 2026-05-23: wenn DIESE Stunde eine Ersatzstunde IST,
               zeige für welche Original-Stunde sie der Ersatz ist. */}
           {session?.replacementOf && (
-            <div className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-yoga-amber-text bg-yoga-amber-bg/70 rounded-full px-2.5 py-1">
+            <div className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-yoga-text bg-yoga-amber-bg/70 rounded-full px-2.5 py-1">
               <i className="ti ti-refresh text-sm" />
               Ersatzstunde für {new Date(session.replacementOf.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
               {session.replacementOf.time_start && ` · ${session.replacementOf.time_start.slice(0,5)} Uhr`}

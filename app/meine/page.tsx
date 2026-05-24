@@ -329,7 +329,7 @@ export default function MeinePage() {
                           Yogi-initiierte origin-Buchungen sind reine interne Logik. */}
                       <div className="text-sm font-semibold truncate">{enrol.course?.name}</div>
                       {s.is_replacement && s.original_session && (
-                        <div className="text-xs text-yoga-amber-text font-semibold mt-0.5 truncate">
+                        <div className="text-xs text-yoga-text font-semibold mt-0.5 truncate">
                           Ersatzstunde für {new Date(s.original_session.date).toLocaleDateString('de-DE', { day:'numeric', month:'short' })} · {s.original_session.time_start?.slice(0,5)} Uhr
                         </div>
                       )}

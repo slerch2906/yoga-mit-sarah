@@ -196,7 +196,7 @@ export default function MeinePage() {
                         <span className={`text-2xl font-bold ${free === 0 ? 'text-yoga-text/30' : ''}`}>{free}</span>
                         <span className="text-sm text-yoga-text/60">
                           {c.model === 'course'
-                            ? (c.course?.name ? `Kurs: ${c.course?.name}` : 'Kurs-Credits')
+                            ? (c.course?.name ? `aus Kurs: ${c.course?.name}` : 'aus Kurs-Credits')
                             : c.model === 'guthaben' ? 'Guthaben'
                             : `Einzelstunden-${c.total === 1 ? 'Credit' : 'Credits'}`}
                         </span>

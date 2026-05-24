@@ -289,7 +289,7 @@ export default function MeinePage() {
                     if (!userStart || !userEnd || !courseStart || !courseEnd) return null
                     if (userStart === courseStart && userEnd === courseEnd) return null
                     return (
-                      <div className="flex items-start gap-1.5 text-yoga-amber-text font-semibold">
+                      <div className="flex items-start gap-1.5 text-yoga-text font-semibold">
                         <i className="ti ti-user-check mt-0.5" />
                         <span>
                           Du nimmst teil vom {new Date(userStart).toLocaleDateString('de-DE', { day:'numeric', month:'short' })}

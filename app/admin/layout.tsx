@@ -10,6 +10,7 @@ const navItems = [
   { href: '/admin/kurse',       label: 'Kurse',        icon: 'ti-calendar' },
   // Sarah-Wunsch 2026-05-23: Einladungs-Liste in /admin/einladen integriert
   { href: '/admin/einladen',    label: 'Einladen',     icon: 'ti-user-plus' },
+  { href: '/admin/kursabbruch', label: 'Kursabbrüche', icon: 'ti-calendar-off' },
   { href: '/admin/protokoll',   label: 'Protokoll',    icon: 'ti-list-details' },
   { href: '/admin/nachweise',   label: 'AGB-Nachweise', icon: 'ti-shield-check' },
   // Sarah-Wunsch 2026-05-23 v5: "Mehr" innerhalb /admin/ damit Sidebar bleibt.

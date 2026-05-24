@@ -44,6 +44,8 @@ export default function AdminDashboard() {
   const [dashYogiResults, setDashYogiResults] = useState<any[]>([])
   const [dashAddingYogi, setDashAddingYogi] = useState(false)
   const [stats, setStats] = useState({ bookings: 0, cancellations: 0, waitlist: 0 })
+  // Sarah-Wunsch 2026-05-24: Dashboard-Kachel für offene Kursabbruch-Aufgaben
+  const [pendingCancellations, setPendingCancellations] = useState({ refunds: 0, openChoices: 0 })
   const [loading, setLoading] = useState(true)
   const [notifications, setNotifications] = useState<any[]>([])
   const [showCancelForm, setShowCancelForm] = useState(false)
@@ -151,6 +153,18 @@ export default function AdminDashboard() {
     const { data: notifs } = await supabase.from('admin_notifications')
       .select('*').eq('read', false).order('created_at', { ascending: false }).limit(10)
     setNotifications(notifs || [])
+
+    // Sarah-Wunsch 2026-05-24: Offene Kursabbruch-Aufgaben zählen
+    // refunds = Yogi wählte Erstattung, noch nicht überwiesen
+    // openChoices = Token nicht verfallen, Yogi hat noch nicht gewählt
+    const { count: refundsCount } = await supabase.from('course_cancellation_responses')
+      .select('id', { count: 'exact', head: true })
+      .eq('choice', 'erstattung').eq('refund_paid', false)
+    const { count: openCount } = await supabase.from('course_cancellation_responses')
+      .select('id', { count: 'exact', head: true })
+      .is('choice', null).gte('expires_at', new Date().toISOString())
+    setPendingCancellations({ refunds: refundsCount || 0, openChoices: openCount || 0 })
+
     setLoading(false)
   }
 
@@ -461,6 +475,38 @@ export default function AdminDashboard() {
       <AppHeader title="Admin Dashboard" isAdmin />
       {/* Sprechblase auch für Admin sichtbar — Erinnerung dass die Nachricht aktiv ist */}
       <AdminAnnouncementBubble />
+
+      {/* Sarah-Wunsch 2026-05-24: Action-Kachel für offene Kursabbruch-Aufgaben.
+          Erscheint NUR wenn Aufgaben offen sind. Klick → /admin/kursabbruch */}
+      {(pendingCancellations.refunds > 0 || pendingCancellations.openChoices > 0) && (
+        <div className="px-4 pt-3">
+          <button onClick={() => router.push('/admin/kursabbruch')}
+            className="w-full text-left bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga p-3 cursor-pointer hover:opacity-80 transition-opacity">
+            <div className="flex items-start gap-3">
+              <i className="ti ti-calendar-off text-2xl text-yoga-amber-text flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-yoga-amber-text">
+                  Kursabbrüche — offene Aufgaben
+                </div>
+                <div className="text-xs text-yoga-text/70 mt-0.5">
+                  {pendingCancellations.refunds > 0 && (
+                    <span className="block">
+                      💰 {pendingCancellations.refunds} {pendingCancellations.refunds === 1 ? 'Erstattung' : 'Erstattungen'} überweisen
+                    </span>
+                  )}
+                  {pendingCancellations.openChoices > 0 && (
+                    <span className="block">
+                      ⏳ {pendingCancellations.openChoices} {pendingCancellations.openChoices === 1 ? 'Yogi hat' : 'Yogis haben'} noch nicht entschieden
+                    </span>
+                  )}
+                </div>
+              </div>
+              <i className="ti ti-chevron-right text-yoga-text/40 flex-shrink-0" />
+            </div>
+          </button>
+        </div>
+      )}
+
       <div className="px-4 py-4">
 
         {/* Session Detail Modal */}

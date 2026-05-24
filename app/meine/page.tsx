@@ -249,8 +249,33 @@ export default function MeinePage() {
             // - Header + Stunden eng zusammen (mb-1.5 statt mb-2 + section-label weg)
             <div key={enrol.id} className={`mb-8 ${idx > 0 ? 'pt-4 border-t border-yoga-border' : ''}`}>
               <div className="card mb-1.5">
-                <div className="text-base font-bold mb-1">{enrol.course?.name}</div>
-                <div className="text-sm text-yoga-text/55 mb-2">{enrol.course?.weekday} · {enrol.course?.time_start?.slice(0,5)} Uhr</div>
+                <div className="text-base font-bold mb-2">{enrol.course?.name}</div>
+                {/* Sarah-Wunsch 2026-05-24: Kurs-Infos kompakt + Datumsbereich.
+                    "Deine Stunden absolviert"-Counter (unten) zeigt automatisch
+                    die EIGENE Anzahl — wenn der Yogi spät eingestiegen ist,
+                    ist sessions.length entsprechend kleiner als course.total_units. */}
+                <div className="text-xs text-yoga-text/60 space-y-0.5 mb-3">
+                  <div className="flex items-start gap-1.5">
+                    <i className="ti ti-clock text-yoga-text/40 mt-0.5" />
+                    <span>{enrol.course?.weekday} · {enrol.course?.time_start?.slice(0,5)} Uhr · {enrol.course?.duration_min || 75} min</span>
+                  </div>
+                  {enrol.course?.location && (
+                    <div className="flex items-start gap-1.5">
+                      <i className="ti ti-map-pin text-yoga-text/40 mt-0.5" />
+                      <span>{enrol.course.location}</span>
+                    </div>
+                  )}
+                  {enrol.course?.date_start && enrol.course?.date_end && (
+                    <div className="flex items-start gap-1.5">
+                      <i className="ti ti-calendar text-yoga-text/40 mt-0.5" />
+                      <span>
+                        {new Date(enrol.course.date_start).toLocaleDateString('de-DE', { day:'numeric', month:'short', year:'numeric' })}
+                        {' – '}
+                        {new Date(enrol.course.date_end).toLocaleDateString('de-DE', { day:'numeric', month:'short', year:'numeric' })}
+                      </span>
+                    </div>
+                  )}
+                </div>
                 <div className="h-1 bg-yoga-border rounded-full mb-1">
                   <div className="h-full bg-yoga-text/40 rounded-full"
                     style={{ width: sessions.length > 0 ? `${(done/sessions.length)*100}%` : '0%' }} />

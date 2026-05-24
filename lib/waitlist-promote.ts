@@ -119,6 +119,53 @@ async function tryAutoPromoteOne(
       })
     } catch (e) { console.error('waitlistPromoted email:', e) }
   }
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Sarah-Wunsch 2026-05-24: Wenn der Yogi durch dieses Promote seinen
+  // LETZTEN freien Credit aufgebraucht hat, muss er auch von allen
+  // ANDEREN Wartelisten entfernt werden (sonst würde später ein zweites
+  // Promote versuchen, fehlschlagen mangels Credit, und der Platz
+  // springt verspätet zum nächsten Yogi).
+  //
+  // Re-Check OHNE den gerade verwendeten Credit:
+  //   credit.used wurde durch den DB-Trigger trg_sync_credit_used jetzt um
+  //   1 hochgesetzt. Wir laden Credits neu und schauen ob noch welche frei
+  //   sind. Wenn nein → alle anderen "waitlist"-Einträge löschen (nicht
+  //   "notify"-Einträge, die sind reine Benachrichtigungs-Wünsche).
+  // ───────────────────────────────────────────────────────────────────────
+  const { data: creditsAfter } = await supabase.from('credits')
+    .select('id, total, used, model').eq('user_id', wl.user_id)
+    .gt('expires_at', nowIso)
+  const stillFree = (creditsAfter || []).filter((c: any) => c.total > c.used && c.model !== 'guthaben')
+
+  if (stillFree.length === 0) {
+    // Alle anderen waitlist-Einträge dieses Yogis holen
+    const { data: otherWaitlists } = await supabase.from('waitlist')
+      .select('id, session_id, session:sessions(date, time_start, course:courses(name))')
+      .eq('user_id', wl.user_id).eq('type', 'waitlist')
+
+    if (otherWaitlists && otherWaitlists.length > 0) {
+      const idsToDelete = otherWaitlists.map((w: any) => w.id)
+      await supabase.from('waitlist').delete().in('id', idsToDelete)
+
+      // Pro entfernter Warteliste eine Email an den Yogi (so wie beim
+      // Self-Booking-Pfad in app/kurse/[id]/page.tsx handleBook)
+      if (wl.profile?.email) {
+        for (const w of otherWaitlists as any[]) {
+          try {
+            await Email.waitlistRemovedCreditUsedElsewhere({
+              email: wl.profile.email,
+              firstName: wl.profile.first_name || 'Yogi',
+              courseName: w.session?.course?.name || '',
+              date: w.session?.date || '',
+              timeStart: w.session?.time_start || '',
+            })
+          } catch (e) { console.error('waitlistRemovedCreditUsedElsewhere email:', e) }
+        }
+      }
+    }
+  }
+
   return true
 }
 

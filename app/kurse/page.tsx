@@ -246,44 +246,41 @@ export default function KursePage() {
             <i className="ti ti-moon text-3xl block mb-2" />
             <p className="text-sm">Keine Stunden diese Woche</p>
           </div>
-        ) : (
-          /* Sarah-Wunsch 2026-05-24: Tages-Header entfernt — Wochentag + Datum
-             wandern IN die Card. Variante B: Wochentag + Uhrzeit beide groß
-             links übereinander, Datum + Dauer + Level klein rechts. */
-          Object.values(byDay).flat().map((s: any) => {
-            const dObj = new Date(s.date)
-            const today = isToday(dObj)
-            return (
+        ) : Object.entries(byDay).map(([date, daySessions]) => {
+          const dObj = new Date(date)
+          const today = isToday(dObj)
+          return (
+          <div key={date} className="mb-4">
+            <p className="text-xs font-bold mb-1 mt-3 uppercase tracking-wide">
+              {today ? (
+                <>
+                  <span className="text-yoga-text">HEUTE</span>
+                  <span className="text-yoga-text/50"> · {formatDate(dObj)}</span>
+                </>
+              ) : (
+                <span className="text-yoga-text/70">{formatDate(dObj)}</span>
+              )}
+            </p>
+            {daySessions.map(s => (
               <button key={s.id}
                 onClick={() => { if (!s.is_past) router.push(`/kurse/${s.id}`) }}
                 disabled={s.is_past}
-                className={`w-full flex items-center gap-2 mb-2 text-left transition-colors rounded-yoga border px-3 py-2.5
+                className={`w-full flex items-center gap-3 mb-2 text-left transition-colors rounded-yoga border p-3
                   ${s.is_past ? 'opacity-40 cursor-default' : 'hover:border-yoga-border2 active:scale-[0.98]'}
-                  ${s.my_booking && !s.is_past ? 'border-2 border-yoga-green-text bg-white' : 'border-yoga-border bg-white'}
-                  ${today && !s.is_past ? 'ring-2 ring-yoga-text/20' : ''}`}>
-                {/* Linke Spalte: Wochentag + Uhrzeit beide präsent */}
-                <div className="text-center flex-shrink-0 w-14">
-                  <div className={`text-base font-bold leading-tight ${s.is_past ? 'line-through' : ''}`}>
-                    {dObj.toLocaleDateString('de-DE', { weekday: 'short' })}
-                  </div>
-                  <div className={`text-base font-bold leading-tight mt-0.5 ${s.is_past ? 'line-through' : ''}`}>
+                  ${s.my_booking && !s.is_past ? 'border-2 border-yoga-green-text bg-white' : 'border-yoga-border bg-white'}`}>
+                <div className="text-center flex-shrink-0 w-12">
+                  <div className={`text-base font-bold ${s.is_past ? 'line-through' : ''}`}>
                     {s.time_start?.slice(0,5)}
                   </div>
+                  <div className="text-xs text-yoga-text/40">{s.duration_min} min</div>
                 </div>
-                <div className="w-px h-10 bg-yoga-border2 flex-shrink-0" />
-                {/* Hauptbereich: Kursname + Datum/Dauer/Level */}
+                <div className="w-px h-8 bg-yoga-border2 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold truncate">
                     {s.course?.name}
                     {s.is_replacement && (
                       <span className="text-yoga-amber-text font-semibold"> · Ersatzstunde</span>
                     )}
-                  </div>
-                  <div className="text-xs text-yoga-text/55 mt-0.5">
-                    {today ? <span className="font-semibold text-yoga-text">HEUTE</span>
-                           : dObj.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
-                    {' · '}{s.duration_min} min
-                    {s.course?.difficulty && <> · {s.course.difficulty}</>}
                   </div>
                   {s.is_replacement && s.original_session && (
                     <div className="text-xs text-yoga-amber-text mt-0.5">
@@ -293,9 +290,10 @@ export default function KursePage() {
                 </div>
                 {getBadge(s)}
               </button>
-            )
-          })
-        )}
+            ))}
+          </div>
+          )
+        })}
       </div>
       <BottomNav isAdmin={profile?.is_admin} />
     </div>

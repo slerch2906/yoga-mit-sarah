@@ -341,7 +341,7 @@ export default function MeinePage() {
                 </div>
                 {new Date(`${b.session?.date}T${b.session?.time_start}`) < new Date()
                   ? <span className="badge badge-done">Teilgenommen </span>
-                  : <span className="badge badge-enrolled">Gebucht</span>}
+                  : <span className="badge badge-enrolled">Angemeldet</span>}
               </button>
             ))}
           </div>

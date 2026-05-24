@@ -729,7 +729,6 @@ export default function AdminDashboard() {
                 refund_pending:        { label: 'Erstattung überweisen', icon: 'ti-cash',           tone: 'action', href: '/admin/kursabbruch' },
                 cron_silent_24h:       { label: 'Reminder-Cron seit 24h still', icon: 'ti-alert-octagon', tone: 'action' },
                 brevo_quota_warning:   { label: 'Brevo-Kontingent fast aufgebraucht', icon: 'ti-mail-exclamation', tone: 'action' },
-                agb_push_stuck:        { label: 'AGB-Push wird nicht akzeptiert', icon: 'ti-shield-x', tone: 'action' },
                 email_failed:          { label: 'E-Mail konnte nicht zugestellt werden', icon: 'ti-mail-x', tone: 'action' },
                 // 🟡 WARNINGS
                 course_almost_full:    { label: 'Kurs fast voll', icon: 'ti-users', tone: 'warn' },
@@ -737,7 +736,7 @@ export default function AdminDashboard() {
                 new_yogi_registered:   { label: 'Neuer Yogi registriert', icon: 'ti-user-plus', tone: 'info' },
                 account_deleted:       { label: 'Account gelöscht', icon: 'ti-user-x', tone: 'info' },
                 account_deleted_dsgvo: { label: 'Account DSGVO-gelöscht (PDF im Drive löschen!)', icon: 'ti-user-x', tone: 'action' },
-                course_completed:      { label: 'Kurs abgeschlossen', icon: 'ti-check', tone: 'info' },
+                course_ending_soon:    { label: 'Kurs endet in 2 Wochen — Folgekurs?', icon: 'ti-calendar-event', tone: 'warn' },
                 yogi_birthday:         { label: 'Yogi hat Geburtstag 🎂', icon: 'ti-cake', tone: 'info' },
                 system_alert:          { label: 'System-Warnung', icon: 'ti-alert-triangle', tone: 'warn' },
               }

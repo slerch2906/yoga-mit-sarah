@@ -979,12 +979,8 @@ export default function AdminKursePage() {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    {getCourseStatus(c) === 'beendet' && (
-                      <span className="badge" style={{background:'var(--yoga-red-bg)', color:'var(--yoga-red-text)'}}>
-                        Beendet
-                      </span>
-                    )}
-                    {/* "Läuft"-Badge entfernt (redundant zu grünem Status-Button) */}
+                    {/* "Beendet"-Badge entfernt (redundant zum Status-Pill neben dem Titel).
+                        "Läuft"-Badge war schon raus aus selbem Grund. */}
                     <span className={`badge ${c.is_single ? 'badge-wait' : 'badge-free'}`}>
                       {c.is_single ? 'Einzelstunde' : 'Kurs'}
                     </span>

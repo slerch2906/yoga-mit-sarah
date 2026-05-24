@@ -573,6 +573,55 @@ export default function AdminKursePage() {
   }
 
   async function deleteCourse(courseId: string, name: string) {
+    // ───────────────────────────────────────────────────────────────────────
+    // Sarah-KRITISCH 2026-05-24: Kurs-Löschung darf NUR möglich sein, wenn alle
+    // möglicherweise noch gültigen Yogi-Credits dieses Kurses abgelaufen sind.
+    // Regel: Credits gelten bis 8 Tage NACH Kursende (date_end). Daher Kurs erst
+    // ab dem 9. Tag nach date_end löschbar (1 Tag Puffer = 9 Tage gesamt).
+    //
+    // Zusätzliche Sicherheits-Prüfung: gibt es noch CREDITS mit expires_at in
+    // der Zukunft (egal welcher Kurs sie zugeordnet sind)? Wenn ja → blockieren,
+    // auch wenn date_end-Regel bestanden wurde (z.B. manuell verlängert).
+    // ───────────────────────────────────────────────────────────────────────
+    const { data: course } = await supabase.from('courses')
+      .select('date_end').eq('id', courseId).single()
+
+    if (course?.date_end) {
+      const dateEnd = new Date(course.date_end)
+      const earliestDelete = new Date(dateEnd.getTime() + 9 * 24 * 60 * 60 * 1000)
+      const now = new Date()
+      if (now < earliestDelete) {
+        const daysLeft = Math.ceil((earliestDelete.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+        alert(
+          `Kurs kann erst ab dem 9. Tag nach Kursende gelöscht werden.\n\n` +
+          `Kursende: ${dateEnd.toLocaleDateString('de-DE')}\n` +
+          `Frühestes Löschdatum: ${earliestDelete.toLocaleDateString('de-DE')}\n` +
+          `Noch ${daysLeft} Tag${daysLeft === 1 ? '' : 'e'} warten.\n\n` +
+          `Grund: Yogi-Credits sind bis 8 Tage nach Kursende gültig.\n` +
+          `Sie würden sonst mit dem Kurs gelöscht werden.`
+        )
+        return
+      }
+    }
+
+    // Safety-Net: gibt es trotzdem noch GÜLTIGE Credits für diesen Kurs?
+    // (z.B. wenn Sarah expires_at manuell verlängert hat)
+    const { data: validCredits } = await supabase.from('credits')
+      .select('id, user_id, expires_at, total, used')
+      .eq('course_id', courseId)
+      .gt('expires_at', new Date().toISOString())
+    if (validCredits && validCredits.length > 0) {
+      const stillUsable = validCredits.filter(c => (c.total - c.used) > 0)
+      if (stillUsable.length > 0) {
+        alert(
+          `Kurs kann nicht gelöscht werden: ${stillUsable.length} Yogi${stillUsable.length === 1 ? ' hat' : 's haben'} ` +
+          `noch gültige Credits aus diesem Kurs.\n\n` +
+          `Bitte erst Credits verbrauchen, ablaufen lassen oder als Guthaben umwandeln.`
+        )
+        return
+      }
+    }
+
     if (!confirm(`Kurs "${name}" wirklich komplett löschen? Alle Sessions, Buchungen und Enrollments werden ebenfalls gelöscht. Das kann nicht rückgängig gemacht werden!`)) return
 
     // Betroffene Yogis laden und informieren

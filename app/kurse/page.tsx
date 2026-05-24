@@ -268,10 +268,6 @@ export default function KursePage() {
                 className={`w-full flex items-center gap-3 mb-2 text-left transition-colors rounded-yoga border p-3
                   ${s.is_past ? 'opacity-40 cursor-default' : 'hover:border-yoga-border2 active:scale-[0.98]'}
                   ${s.my_booking && !s.is_past ? 'border-2 border-yoga-green-text bg-white' : 'border-yoga-border bg-white'}`}>
-                {/* Variante A: kleines Foto links bei Charity / wenn image_url gesetzt */}
-                {s.course?.image_url && (
-                  <img src={s.course.image_url} alt="" className="w-12 h-12 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
-                )}
                 <div className="text-center flex-shrink-0 w-12">
                   <div className={`text-base font-bold ${s.is_past ? 'line-through' : ''}`}>
                     {s.time_start?.slice(0,5)}
@@ -279,6 +275,10 @@ export default function KursePage() {
                   <div className="text-xs text-yoga-text/40">{s.duration_min} min</div>
                 </div>
                 <div className="w-px h-8 bg-yoga-border2 flex-shrink-0" />
+                {/* Variante A v2: Bild ZWISCHEN Trenner und Titel (Sarah-Wunsch 2026-05-24) */}
+                {s.course?.image_url && (
+                  <img src={s.course.image_url} alt="" className="w-12 h-12 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
+                )}
                 <div className="flex-1 min-w-0">
                   {/* Sarah-Wunsch 2026-05-24: Reihenfolge — Kurstitel,
                       Ersatzstunde-Hinweis (eigene Zeile), Level, Charity-Pille */}

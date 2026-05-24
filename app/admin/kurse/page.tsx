@@ -1034,11 +1034,13 @@ export default function AdminKursePage() {
             <button onClick={() => setShowForm(true)} className="btn-primary mb-4">
               <i className="ti ti-plus mr-1" /> Neuen Kurs anlegen
             </button>
+            {/* Sarah-Wunsch 2026-05-24: Aktive = is_active UND date_end >= heute.
+                Beendete Kurse (is_active UND date_end < heute) eigene Sektion drunter. */}
             <p className="section-label">Aktive Kurse</p>
-            {courses.filter(c => c.is_active).length === 0 && (
-              <p className="text-sm text-yoga-text/40 text-center py-4">Noch keine Kurse</p>
+            {courses.filter(c => c.is_active && c.date_end >= new Date().toISOString().split('T')[0]).length === 0 && (
+              <p className="text-sm text-yoga-text/40 text-center py-4">Keine aktiven Kurse</p>
             )}
-            {courses.filter(c => c.is_active).map(c => (
+            {courses.filter(c => c.is_active && c.date_end >= new Date().toISOString().split('T')[0]).map(c => (
               <div key={c.id} className="card mb-3">
                 <div className="flex items-start justify-between mb-2">
                   <div>
@@ -1178,9 +1180,58 @@ export default function AdminKursePage() {
                 )}
               </div>
             ))}
+            {/* NEU 2026-05-24: Beendete Kurse — is_active=true UND date_end < heute.
+                Bereit zum Archivieren/Löschen (jeweils nach 9-Tage-Frist). */}
+            {(() => {
+              const today = new Date().toISOString().split('T')[0]
+              const ended = courses.filter(c => c.is_active && c.date_end < today)
+              if (ended.length === 0) return null
+              return (
+                <>
+                  <p className="section-label mt-6">Beendete Kurse</p>
+                  {ended.map(c => {
+                    const dateEnd = new Date(c.date_end)
+                    const earliestArchive = new Date(dateEnd.getTime() + 9 * 24 * 60 * 60 * 1000)
+                    const canArchive = new Date() >= earliestArchive
+                    const daysLeft = canArchive ? 0 : Math.ceil((earliestArchive.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+                    return (
+                      <div key={c.id} className="card mb-2 opacity-80">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-bold truncate">{c.name}</div>
+                            <div className="text-xs text-yoga-text/50 mt-0.5">
+                              {c.weekday} · {c.time_start?.slice(0,5)} Uhr
+                            </div>
+                            <div className="text-xs text-yoga-text/50">
+                              Endete am {new Date(c.date_end).toLocaleDateString('de-DE')}
+                            </div>
+                            {!canArchive && (
+                              <div className="text-xs text-yoga-amber-text mt-1">
+                                <i className="ti ti-clock mr-0.5" />Archivieren in {daysLeft} Tag{daysLeft === 1 ? '' : 'en'} möglich (Credit-Schutz)
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-col gap-1 flex-shrink-0">
+                            <button onClick={() => archiveCourse(c)}
+                              className={`text-xs rounded-full px-3 py-1.5 font-semibold border-0 cursor-pointer hover:opacity-80 ${canArchive ? 'bg-yoga-gray text-yoga-text' : 'bg-yoga-gray text-yoga-text/40'}`}>
+                              <i className="ti ti-archive mr-1" />Archivieren
+                            </button>
+                            <button onClick={() => deleteCourse(c.id, c.name)}
+                              className={`text-xs rounded-full px-3 py-1.5 font-semibold border-0 cursor-pointer hover:opacity-80 ${canArchive ? 'bg-yoga-red-bg text-yoga-red-text' : 'bg-yoga-red-bg text-yoga-red-text/50'}`}>
+                              <i className="ti ti-trash mr-1" />Löschen
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </>
+              )
+            })()}
+
             {courses.filter(c => !c.is_active).length > 0 && (
               <>
-                <p className="section-label mt-4">Archivierte Kurse</p>
+                <p className="section-label mt-6">Archivierte Kurse</p>
                 {courses.filter(c => !c.is_active).map(c => (
                   <div key={c.id} className="card mb-2 opacity-70 relative">
                     <div className="flex items-center justify-between">

@@ -542,12 +542,57 @@ export default function AdminKursePage() {
   }
 
   async function archiveCourse(courseObj: any) {
-    // Sarah 2026-05-22: Admin darf jeden Kurs archivieren, auch mit zukünftigen
-    // Terminen. Bei zukünftigen Terminen oder Teilnehmern kommt ein expliziter
-    // Hinweis-Dialog mit "Trotzdem archivieren".
+    // ───────────────────────────────────────────────────────────────────────
+    // Sarah-Wunsch 2026-05-24 (Sicherheits-Regel uniform):
+    // Auch Archivieren erst 9 Tage NACH date_end erlauben — gleiche Logik
+    // wie deleteCourse. Damit ist es technisch unmöglich, dass ein archivierter
+    // Kurs Yogi-Credits "versteckt" oder unzugänglich macht solange die
+    // Credits noch gültig sind (8 Tage nach Kursende).
+    //
+    // Reine Code-Analyse: Archivieren macht aktuell NUR is_active=false und
+    // löscht KEINE Credits. Aber als safe Default + uniforme Logik mit Löschen.
+    // ───────────────────────────────────────────────────────────────────────
+    if (courseObj.date_end) {
+      const dateEnd = new Date(courseObj.date_end)
+      const earliestArchive = new Date(dateEnd.getTime() + 9 * 24 * 60 * 60 * 1000)
+      const now = new Date()
+      if (now < earliestArchive) {
+        const daysLeft = Math.ceil((earliestArchive.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+        alert(
+          `Kurs kann erst ab dem 9. Tag nach Kursende archiviert werden.\n\n` +
+          `Kursende: ${dateEnd.toLocaleDateString('de-DE')}\n` +
+          `Frühestes Archivierungs-Datum: ${earliestArchive.toLocaleDateString('de-DE')}\n` +
+          `Noch ${daysLeft} Tag${daysLeft === 1 ? '' : 'e'} warten.\n\n` +
+          `Grund: Yogi-Credits sind bis 8 Tage nach Kursende gültig.\n` +
+          `Bis dahin muss der Kurs aktiv bleiben damit Yogis ihre Credits ` +
+          `noch nutzen können.\n\n` +
+          `Wenn du Stunden absagen willst: nutze "Stunde absagen" pro Session.\n` +
+          `Wenn der Kurs als ganzer ausfällt: nutze "Kurs abbrechen" (Yogis ` +
+          `wählen Guthaben oder Erstattung).`
+        )
+        return
+      }
+    }
+
+    // Safety-Net: noch gültige Credits mit Restbestand?
+    const { data: validCredits } = await supabase.from('credits')
+      .select('id, total, used, expires_at')
+      .eq('course_id', courseObj.id)
+      .gt('expires_at', new Date().toISOString())
+    if (validCredits && validCredits.length > 0) {
+      const stillUsable = validCredits.filter(c => (c.total - c.used) > 0)
+      if (stillUsable.length > 0) {
+        alert(
+          `Kurs kann nicht archiviert werden: ${stillUsable.length} Yogi${stillUsable.length === 1 ? ' hat' : 's haben'} ` +
+          `noch gültige Credits aus diesem Kurs.\n\n` +
+          `Bitte erst Credits verbrauchen, ablaufen lassen oder als Guthaben umwandeln.`
+        )
+        return
+      }
+    }
+
+    // Ab hier: alle Schutz-Bedingungen erfüllt → Standard-Confirm
     const today = new Date().toISOString().split('T')[0]
-    // Nur aktive (nicht gecancelte) zukünftige Sessions zählen — eine "abgesagte"
-    // Session ist effektiv schon weg, sollte den Admin nicht ausbremsen.
     const futureSessions = (courseObj.sessions || [])
       .filter((s: any) => s.date >= today && !s.is_cancelled)
     const enrolledCount = courseObj.participant_count

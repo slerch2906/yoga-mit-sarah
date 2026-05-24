@@ -46,7 +46,8 @@ async function setupSessionWithYogi1Booked(opts: {
   // dann date+time manuell auf den gewünschten Zeitpunkt.
   const courseName = `${E2E_PREFIX} 90min ${Date.now()}-${Math.random().toString(36).slice(2,5)}`
   const target = new Date(Date.now() + opts.minutesUntilStart * 60_000)
-  const dateStr = target.toISOString().split('T')[0]
+  // Berlin-lokales Datum (sonst Mitternachts-Race wenn target nach Berlin-Mitternacht aber vor UTC-Mitternacht).
+  const dateStr = target.toLocaleDateString('en-CA')
   const hh = String(target.getHours()).padStart(2, '0')
   const mm = String(target.getMinutes()).padStart(2, '0')
   const timeStr = `${hh}:${mm}:00`
@@ -242,7 +243,8 @@ test.describe('[E2E] waitlist-offer API: Race + Edge Cases', () => {
     const db = getServiceClient()
     const courseName = `${E2E_PREFIX} Race-Offer-${Date.now()}`
     const target = new Date(Date.now() + 60 * 60_000)
-    const dateStr = target.toISOString().split('T')[0]
+    // Berlin-lokales Datum (target.getHours/Minutes sind lokal — UTC-Datum wäre Mitternachts-Race).
+    const dateStr = target.toLocaleDateString('en-CA')
     const timeStr = `${String(target.getHours()).padStart(2,'0')}:${String(target.getMinutes()).padStart(2,'0')}:00`
     const { data: course } = await db.from('courses').insert({
       name: courseName, weekday: 'Test', time_start: timeStr, duration_min: 75,
@@ -337,7 +339,8 @@ test.describe('[E2E] waitlist-offer API: Race + Edge Cases', () => {
     await db.from('credits').delete().eq('user_id', yogi1Id).is('course_id', null)
 
     const target = new Date(Date.now() + 45 * 60_000)
-    const dateStr = target.toISOString().split('T')[0]
+    // Berlin-lokales Datum (target.getHours/Minutes sind lokal — UTC-Datum wäre Mitternachts-Race).
+    const dateStr = target.toLocaleDateString('en-CA')
     const timeStr = `${String(target.getHours()).padStart(2,'0')}:${String(target.getMinutes()).padStart(2,'0')}:00`
     const { data: course } = await db.from('courses').insert({
       name: `${E2E_PREFIX} NoCredit-${Date.now()}`, weekday: 'Test', time_start: timeStr,
@@ -449,7 +452,8 @@ test.describe('[E2E] /warteliste/angebot/[token] UI-States', () => {
     await giveYogiSingleCredit(yogi1Id, 1)
     const db = getServiceClient()
     const target = new Date(Date.now() + 60 * 60_000)
-    const dateStr = target.toISOString().split('T')[0]
+    // Berlin-lokales Datum (target.getHours/Minutes sind lokal — UTC-Datum wäre Mitternachts-Race).
+    const dateStr = target.toLocaleDateString('en-CA')
     const timeStr = `${String(target.getHours()).padStart(2,'0')}:${String(target.getMinutes()).padStart(2,'0')}:00`
     const { data: course } = await db.from('courses').insert({
       name: `${E2E_PREFIX} UI-Success-${Date.now()}`, weekday: 'Test', time_start: timeStr,
@@ -481,7 +485,8 @@ test.describe('[E2E] /warteliste/angebot/[token] UI-States', () => {
     const yogi2Id = (await getUserIdByEmail(process.env.TEST_YOGI2_EMAIL!))!
     const db = getServiceClient()
     const target = new Date(Date.now() + 60 * 60_000)
-    const dateStr = target.toISOString().split('T')[0]
+    // Berlin-lokales Datum (target.getHours/Minutes sind lokal — UTC-Datum wäre Mitternachts-Race).
+    const dateStr = target.toLocaleDateString('en-CA')
     const timeStr = `${String(target.getHours()).padStart(2,'0')}:${String(target.getMinutes()).padStart(2,'0')}:00`
     const { data: course } = await db.from('courses').insert({
       name: `${E2E_PREFIX} UI-Late-${Date.now()}`, weekday: 'Test', time_start: timeStr,
@@ -549,7 +554,8 @@ test.describe('[E2E] /warteliste/angebot/[token] UI-States', () => {
     await db.from('credits').delete().eq('user_id', yogi1Id).is('course_id', null)
 
     const target = new Date(Date.now() + 45 * 60_000)
-    const dateStr = target.toISOString().split('T')[0]
+    // Berlin-lokales Datum (target.getHours/Minutes sind lokal — UTC-Datum wäre Mitternachts-Race).
+    const dateStr = target.toLocaleDateString('en-CA')
     const timeStr = `${String(target.getHours()).padStart(2,'0')}:${String(target.getMinutes()).padStart(2,'0')}:00`
     const { data: course } = await db.from('courses').insert({
       name: `${E2E_PREFIX} UI-NoCred-${Date.now()}`, weekday: 'Test', time_start: timeStr,

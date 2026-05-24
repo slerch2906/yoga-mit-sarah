@@ -481,11 +481,11 @@ export default function AdminDashboard() {
       {(pendingCancellations.refunds > 0 || pendingCancellations.openChoices > 0) && (
         <div className="px-4 pt-3">
           <button onClick={() => router.push('/admin/kursabbruch')}
-            className="w-full text-left bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga p-3 cursor-pointer hover:opacity-80 transition-opacity">
+            className="w-full text-left bg-white border border-yoga-border rounded-yoga p-3 cursor-pointer hover:opacity-80 transition-opacity">
             <div className="flex items-start gap-3">
-              <i className="ti ti-calendar-off text-2xl text-yoga-amber-text flex-shrink-0 mt-0.5" />
+              <i className="ti ti-calendar-off text-2xl text-yoga-text flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-yoga-amber-text">
+                <div className="text-sm font-semibold text-yoga-text">
                   Kursabbrüche — offene Aufgaben
                 </div>
                 <div className="text-xs text-yoga-text/70 mt-0.5">
@@ -713,36 +713,70 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Admin Benachrichtigungen */}
+        {/* Admin Benachrichtigungen — Sarah-Wunsch 2026-05-24: ausgebaut mit
+            8 neuen Typen (refund_pending, cron_silent_24h, brevo_quota_warning,
+            agb_push_stuck, course_completed, yogi_birthday) plus bestehenden
+            (new_yogi_registered, account_deleted_dsgvo, email_failed). Jeder
+            Typ hat Icon, Label, Farbe (action-required vs info) + ggf. Link. */}
         {notifications.length > 0 && (
           <div className="mb-4">
             <p className="section-label">Benachrichtigungen</p>
-            {notifications.map(n => (
-              <div key={n.id} className="card mb-2 border-l-4 border-l-yoga-amber-text">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-semibold text-yoga-amber-text">
-                      {n.type === 'account_deleted' ? 'Account gelöscht'
-                        : n.type === 'account_deleted_dsgvo' ? 'Account DSGVO-gelöscht (PDF im Drive löschen!)'
-                        : n.type === 'new_yogi_registered' ? 'Neuer Yogi registriert'
-                        : n.type === 'email_failed' ? 'E-Mail konnte nicht zugestellt werden'
-                        : n.type === 'system_alert' ? 'System-Warnung'
-                        : n.type}
-                    </p>
-                    <p className="text-sm text-yoga-text/70 mt-0.5">{n.message}</p>
-                    <p className="text-xs text-yoga-text/40 mt-1">
-                      {new Date(n.created_at).toLocaleDateString('de-DE', { day:'numeric', month:'short' })} · {new Date(n.created_at).toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' })}
-                    </p>
+            {notifications.map(n => {
+              // Notification-Type-Mapping
+              type NMeta = { label: string; icon: string; tone: 'action' | 'warn' | 'info'; href?: string }
+              const META: Record<string, NMeta> = {
+                // 🔴 ACTION-REQUIRED (du musst handeln)
+                refund_pending:        { label: 'Erstattung überweisen', icon: 'ti-cash',           tone: 'action', href: '/admin/kursabbruch' },
+                cron_silent_24h:       { label: 'Reminder-Cron seit 24h still', icon: 'ti-alert-octagon', tone: 'action' },
+                brevo_quota_warning:   { label: 'Brevo-Kontingent fast aufgebraucht', icon: 'ti-mail-exclamation', tone: 'action' },
+                agb_push_stuck:        { label: 'AGB-Push wird nicht akzeptiert', icon: 'ti-shield-x', tone: 'action' },
+                email_failed:          { label: 'E-Mail konnte nicht zugestellt werden', icon: 'ti-mail-x', tone: 'action' },
+                // 🟡 WARNINGS
+                course_almost_full:    { label: 'Kurs fast voll', icon: 'ti-users', tone: 'warn' },
+                // 🟢 INFO
+                new_yogi_registered:   { label: 'Neuer Yogi registriert', icon: 'ti-user-plus', tone: 'info' },
+                account_deleted:       { label: 'Account gelöscht', icon: 'ti-user-x', tone: 'info' },
+                account_deleted_dsgvo: { label: 'Account DSGVO-gelöscht (PDF im Drive löschen!)', icon: 'ti-user-x', tone: 'action' },
+                course_completed:      { label: 'Kurs abgeschlossen', icon: 'ti-check', tone: 'info' },
+                yogi_birthday:         { label: 'Yogi hat Geburtstag 🎂', icon: 'ti-cake', tone: 'info' },
+                system_alert:          { label: 'System-Warnung', icon: 'ti-alert-triangle', tone: 'warn' },
+              }
+              const meta = META[n.type] || { label: n.type, icon: 'ti-bell', tone: 'info' as const }
+              const tones = {
+                action: 'border-l-yoga-red-text  text-yoga-red-text',
+                warn:   'border-l-yoga-amber-text text-yoga-amber-text',
+                info:   'border-l-yoga-text/40    text-yoga-text/80',
+              }
+              const toneCls = tones[meta.tone]
+              return (
+                <div key={n.id} className={`card mb-2 border-l-4 ${toneCls.split(' ')[0]}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-semibold flex items-center gap-1.5 ${toneCls.split(' ')[1]}`}>
+                        <i className={`ti ${meta.icon}`} />
+                        {meta.label}
+                      </p>
+                      <p className="text-sm text-yoga-text/70 mt-0.5">{n.message}</p>
+                      <p className="text-xs text-yoga-text/40 mt-1">
+                        {new Date(n.created_at).toLocaleDateString('de-DE', { day:'numeric', month:'short' })} · {new Date(n.created_at).toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' })}
+                      </p>
+                      {meta.href && (
+                        <button onClick={() => router.push(meta.href!)}
+                          className="text-xs mt-1.5 text-yoga-text underline cursor-pointer bg-transparent border-0 p-0">
+                          → Jetzt erledigen
+                        </button>
+                      )}
+                    </div>
+                    <button onClick={async () => {
+                      await supabase.from('admin_notifications').update({ read: true }).eq('id', n.id)
+                      setNotifications(prev => prev.filter(x => x.id !== n.id))
+                    }} className="text-yoga-text/40 border-0 bg-transparent cursor-pointer text-lg flex-shrink-0">
+                      <i className="ti ti-x" />
+                    </button>
                   </div>
-                  <button onClick={async () => {
-                    await supabase.from('admin_notifications').update({ read: true }).eq('id', n.id)
-                    setNotifications(prev => prev.filter(x => x.id !== n.id))
-                  }} className="text-yoga-text/40 border-0 bg-transparent cursor-pointer text-lg flex-shrink-0">
-                    <i className="ti ti-x" />
-                  </button>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 

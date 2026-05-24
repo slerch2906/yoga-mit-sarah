@@ -837,18 +837,18 @@ export default function AdminDashboard() {
           const highlight = isToday && !isPast && !s.is_cancelled
           return (
             <button key={s.id} onClick={() => loadSessionDetail(s)}
-              className={`w-full card mb-3 text-left hover:border-yoga-border2 ${s.is_cancelled || isPast ? 'opacity-40' : ''} ${highlight ? 'border-2 border-yoga-text' : ''}`}>
-              {/* Sarah-Wunsch 2026-05-24: Wochentag vorne groß (analog Yogi-Pattern) */}
-              <div className="flex items-center gap-3">
-                <div className="text-center flex-shrink-0 w-12">
-                  <div className="text-base font-bold">
+              className={`w-full bg-white border rounded-yoga px-3 py-2.5 mb-2 text-left hover:border-yoga-border2 ${s.is_cancelled || isPast ? 'opacity-40' : ''} ${highlight ? 'border-2 border-yoga-text' : 'border-yoga-border'}`}>
+              {/* Sarah-Wunsch 2026-05-24: Wochentag vorne, kompakt + nur Ausgetragen-Info */}
+              <div className="flex items-center gap-2">
+                <div className="text-center flex-shrink-0 w-10">
+                  <div className="text-base font-bold leading-tight">
                     {new Date(s.date).toLocaleDateString('de-DE', { weekday: 'short' })}
                   </div>
-                  <div className="text-xs text-yoga-text/50 mt-0.5">
+                  <div className="text-[10px] text-yoga-text/50 mt-0.5 leading-tight">
                     {new Date(s.date).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
                   </div>
                 </div>
-                <div className="w-px h-10 bg-yoga-border2 flex-shrink-0" />
+                <div className="w-px h-9 bg-yoga-border2 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-bold truncate">
                     {s.course?.name}
@@ -858,12 +858,8 @@ export default function AdminDashboard() {
                   </div>
                   <div className="text-xs text-yoga-text/55 mt-0.5">
                     {s.time_start?.slice(0,5)}
-                    {!s.is_cancelled && !isPast && (
-                      <>
-                        <span className="mx-1">·</span>
-                        <i className="ti ti-check" /> {s.active_count} angemeldet
-                        {s.cancelled_count > 0 && <> · <i className="ti ti-x" /> {s.cancelled_count} ausgetragen</>}
-                      </>
+                    {!s.is_cancelled && !isPast && s.cancelled_count > 0 && (
+                      <> · <i className="ti ti-x" /> {s.cancelled_count} ausgetragen</>
                     )}
                   </div>
                 </div>

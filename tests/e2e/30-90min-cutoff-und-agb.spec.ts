@@ -601,10 +601,12 @@ test.describe('[E2E] AGB-Workflow Variante A — Initial + Admin-Push', () => {
   test.describe('Admin-Profil', () => {
     test.use({ storageState: 'tests/.auth/admin.json' })
 
-    test('Admin-Profil zeigt "Aktuelle AGB-Version: <label>" + Push-Button', async ({ page }) => {
+    test('Admin-Profil zeigt "Aktuelle Version: <label>" + Push-Button', async ({ page }) => {
       await page.goto('/profil')
       await page.waitForLoadState('networkidle')
-      await expect(page.getByText(/Aktuelle AGB-Version:/i)).toBeVisible({ timeout: 10_000 })
+      // Sarah-Wunsch 2026-05-23: Label im AGB-Block gekürzt auf "Aktuelle Version:"
+      // (vorher "Aktuelle AGB-Version:") — Kontext im AGB-Block macht "AGB-" redundant.
+      await expect(page.getByText(/Aktuelle Version:/i)).toBeVisible({ timeout: 10_000 })
       // Fallback "Dezember 2025" oder echte Version
       await expect(page.getByRole('button', { name: /neue agb-version pushen/i }).first())
         .toBeVisible()

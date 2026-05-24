@@ -72,11 +72,13 @@ test.describe('[E2E] PWA: App-Icon + Install-Banner', () => {
     expect(html).toMatch(/INSTALL_BLOCKED_PATHS\s*=\s*\[[^\]]*'\/profil\/passwort'/)
   })
 
-  test('Service Worker registriert sich und Cache-Version ist v6', async ({ page }) => {
+  test('Service Worker registriert sich und Cache-Version ist gesetzt', async ({ page }) => {
     const swRes = await page.request.get('/sw.js')
     expect(swRes.status()).toBe(200)
     const swBody = await swRes.text()
-    expect(swBody).toContain("CACHE_VERSION = 'yoga-sarah-v6'")
+    // Sarah-Wunsch 2026-05-23: Cache-Version wird bei CSS/UI-Änderungen hoch-
+    // gezogen (v6 → v7 → v8 → ...). Test prüft Format statt fixe Nummer.
+    expect(swBody).toMatch(/CACHE_VERSION\s*=\s*['"`]yoga-sarah-v\d+['"`]/)
   })
 
   // beforeinstallprompt-Event-Verhalten lässt sich nur manuell auf

@@ -141,6 +141,12 @@ test.describe('Registrierung: Erfolgreicher Flow', () => {
     // Passwort eingeben
     await page.locator('input[type="password"]').fill('TestPass!2026')
 
+    // Sarah-Wunsch 2026-05-23: Geburtsdatum ist neuerdings Pflichtfeld bei
+    // Registrierung. Setze gültiges Geburtsdatum (30 Jahre alt) für den Test.
+    const testBirthdate = new Date()
+    testBirthdate.setFullYear(testBirthdate.getFullYear() - 30)
+    await page.locator('input[type="date"]').fill(testBirthdate.toISOString().split('T')[0])
+
     // Konto erstellen
     await page.getByRole('button', { name: /konto erstellen.*loslegen/i }).click()
 

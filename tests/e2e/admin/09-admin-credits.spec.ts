@@ -41,7 +41,7 @@ test.describe('Credits verwalten: Read-only und Editierbarkeit', () => {
     }
   })
 
-  test('Guthaben-Credits zeigen "Nur Lesezugriff", keine Edit/Delete-Buttons', async ({ page }) => {
+  test('Guthaben-Credits sind LÖSCHBAR (für Auszahlung) — Sarah-Wunsch Welle A', async ({ page }) => {
     // Guthaben anlegen
     const db = await getAdminClient()
     await db.from('credits').delete().eq('user_id', yogi1Id).eq('model', 'guthaben')
@@ -54,7 +54,9 @@ test.describe('Credits verwalten: Read-only und Editierbarkeit', () => {
 
     const guthabenCard = page.locator('.card', { hasText: 'Guthaben aus Kursabbruch' }).first()
     await expect(guthabenCard).toBeVisible({ timeout: 5_000 })
-    await expect(guthabenCard.getByText('Nur Lesezugriff')).toBeVisible()
+    // Sarah-Wunsch Welle A (2026-05-23): Guthaben-Credits sind jetzt LÖSCHBAR
+    // (für ausgezahlte Erstattung). Hinweis-Text: "Löschbar (für Auszahlung)".
+    await expect(guthabenCard.getByText(/Löschbar.*Auszahlung/i)).toBeVisible()
 
     // Cleanup
     await db.from('credits').delete().eq('user_id', yogi1Id).eq('model', 'guthaben')

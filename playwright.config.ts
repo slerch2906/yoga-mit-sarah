@@ -5,6 +5,10 @@ dotenv.config({ path: '.env.test' })
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // Nur unsere eigenen Specs (.spec.ts) — verhindert dass Chrome-Extension-
+  // Files (Adobe Acrobat hat .spec.js und .test.js) versehentlich mit-geladen
+  // werden bei manchen Playwright-Discovery-Modi.
+  testMatch: /\.spec\.ts$/,
   fullyParallel: false,      // Tests laufen sequentiell – teilen sich DB-Zustand
   retries: process.env.CI ? 1 : 0,
   workers: 1,

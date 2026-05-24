@@ -193,6 +193,54 @@ test.describe('[E2E] Wartelisten-Konflikt: Credit anderweitig verwendet', () => 
     // free.length === 0 → return false (skip)
     expect(src).toMatch(/free\.length\s*===?\s*0|return false/)
   })
+
+  // Sarah-Wunsch 2026-05-24: Nach Auto-Promote muss der yogi auch von allen
+  // anderen Wartelisten entfernt werden, wenn das sein letzter freier Credit war.
+  test('lib/waitlist-promote.ts: Re-Check nach Promote (creditsAfter / stillFree)', async () => {
+    const src = read('lib/waitlist-promote.ts')
+    expect(src).toMatch(/creditsAfter/)
+    expect(src).toMatch(/stillFree/)
+  })
+
+  test('lib/waitlist-promote.ts: löscht andere Wartelisten + sendet Email pro Eintrag', async () => {
+    const src = read('lib/waitlist-promote.ts')
+    expect(src).toMatch(/otherWaitlists/)
+    // Lädt andere waitlist-Einträge (nur type=waitlist, nicht notify)
+    expect(src).toMatch(/\.eq\(['"]type['"],\s*['"]waitlist['"]\)/)
+    // Pro entfernter Warteliste eine Email
+    expect(src).toMatch(/for\s*\(\s*const\s+w\s+of\s+otherWaitlists/)
+    expect(src).toMatch(/Email\.waitlistRemovedCreditUsedElsewhere/)
+  })
+})
+
+// ── 10b) Kurs-Löschen/Archivieren: 9-Tage-Sperre nach Kursende ─────────────
+// Sarah-Bug 2026-05-24: Beim Löschen eines beendeten Kurses gingen valide
+// Yogi-Credits verloren (8-Tage-Gültigkeit nach Kursende). Lösung: Kurs erst
+// 9 Tage nach date_end löschbar/archivierbar. Symmetrische Sperre.
+test.describe('[E2E] Kurs-Löschen/Archivieren: 9-Tage-Sperre', () => {
+  test('app/admin/kurse/page.tsx: deleteCourse hat 9-Tage-Sperre nach date_end', async () => {
+    const src = read('app/admin/kurse/page.tsx')
+    // Datum-Check + Alert mit Tagen-Hinweis
+    expect(src).toMatch(/deleteCourse/)
+    expect(src).toMatch(/date_end/)
+    // Irgendeine Form von 9-Tage-Logik (9, NINE_DAYS, oder Berechnung)
+    expect(src).toMatch(/9.{0,30}(tag|day|Day)/i)
+  })
+
+  test('app/admin/kurse/page.tsx: archiveCourse hat 9-Tage-Sperre nach date_end', async () => {
+    const src = read('app/admin/kurse/page.tsx')
+    expect(src).toMatch(/archiveCourse/)
+    // Sperre + Begründungstext
+    expect(src).toMatch(/(kann.{0,40}archiv|archiv.{0,40}erst|Tage|gültig|Credit)/i)
+  })
+
+  test('app/admin/kurse/page.tsx: Safety-Net prüft auf valide Credits vor Delete', async () => {
+    const src = read('app/admin/kurse/page.tsx')
+    // Safety-Net: credits-Tabelle wird vor dem Löschen geprüft
+    expect(src).toMatch(/from\(['"]credits['"]\)/)
+    // Im deleteCourse-Kontext: total > used oder expires_at-Check
+    expect(src).toMatch(/expires_at|total.{0,10}used/)
+  })
 })
 
 // ── 11) Credit-Sichtbarkeit nach Kurs-Ende ─────────────────────────────────

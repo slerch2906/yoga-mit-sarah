@@ -276,20 +276,16 @@ export default function KursePage() {
                 </div>
                 <div className="w-px h-8 bg-yoga-border2 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold truncate">
-                    {s.course?.name}
-                    {s.is_replacement && (
-                      <span className="text-yoga-amber-text font-semibold"> · Ersatzstunde</span>
-                    )}
-                  </div>
-                  {/* Sarah-Wunsch 2026-05-24: Level (course.difficulty) als Schriftzug */}
+                  {/* Sarah-Wunsch 2026-05-24: Reihenfolge — Kurstitel,
+                      Ersatzstunde-Hinweis (eigene Zeile), Level */}
+                  <div className="text-sm font-semibold truncate">{s.course?.name}</div>
+                  {s.is_replacement && s.original_session && (
+                    <div className="text-xs text-yoga-amber-text font-semibold mt-0.5">
+                      Ersatzstunde für {new Date(s.original_session.date).toLocaleDateString('de-DE', { day:'numeric', month:'short' })} · {s.original_session.time_start?.slice(0,5)} Uhr
+                    </div>
+                  )}
                   {s.course?.difficulty && (
                     <div className="text-xs text-yoga-text/50 mt-0.5">{s.course.difficulty}</div>
-                  )}
-                  {s.is_replacement && s.original_session && (
-                    <div className="text-xs text-yoga-amber-text mt-0.5">
-                      für {new Date(s.original_session.date).toLocaleDateString('de-DE', { day:'numeric', month:'short' })} · {s.original_session.time_start?.slice(0,5)} Uhr
-                    </div>
                   )}
                 </div>
                 {getBadge(s)}

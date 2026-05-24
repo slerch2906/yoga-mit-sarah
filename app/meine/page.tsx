@@ -238,13 +238,17 @@ export default function MeinePage() {
         {enrollments.length > 0 && (
           <p className="section-label">{enrollments.length === 1 ? 'Dein Kurs' : 'Deine Kurse'}</p>
         )}
-        {enrollments.map(enrol => {
+        {enrollments.map((enrol, idx) => {
           const sessions = courseSessions[enrol.course_id] || []
           // Absolviert erst wenn Session zeitlich vorbei ist (date+time+duration), nicht nur date
           const done = sessions.filter(s => isStarted(s) && s.myBooking?.status === 'active').length
           return (
-            <div key={enrol.id} className="mb-6">
-              <div className="card mb-2">
+            // Sarah-Wunsch 2026-05-24: visuelle Gruppe pro Kurs.
+            // - Mehr Luft zwischen Kursen (mb-8 statt mb-6)
+            // - Ab dem 2. Kurs ein sehr dezenter Querstreifen darüber als Trenner
+            // - Header + Stunden eng zusammen (mb-1.5 statt mb-2 + section-label weg)
+            <div key={enrol.id} className={`mb-8 ${idx > 0 ? 'pt-4 border-t border-yoga-border' : ''}`}>
+              <div className="card mb-1.5">
                 <div className="text-base font-bold mb-1">{enrol.course?.name}</div>
                 <div className="text-sm text-yoga-text/55 mb-2">{enrol.course?.weekday} · {enrol.course?.time_start?.slice(0,5)} Uhr</div>
                 <div className="h-1 bg-yoga-border rounded-full mb-1">
@@ -257,7 +261,6 @@ export default function MeinePage() {
                   <i className="ti ti-calendar-plus" /> Alle Termine exportieren
                 </button>
               </div>
-              <p className="section-label">Kursstunden</p>
               {/* Kursstunden: ausgeschlossene gefiltert, abgesagte ausgegraut */}
               {sessions.map(s => {
                 const isCancelled = s.is_cancelled

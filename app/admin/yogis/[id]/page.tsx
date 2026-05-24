@@ -497,6 +497,17 @@ export default function AdminYogiDetailPage() {
           <p className="text-xs text-yoga-text/40 mt-1">
             Dabei seit {new Date(yogi.created_at).toLocaleDateString('de-DE', { month:'long', year:'numeric' })}
           </p>
+          {yogi.birthdate && (() => {
+            // Sarah-Wunsch 2026-05-23: Geburtsdatum + Alter sichtbar im Admin-Detail
+            const [y, m, d] = (yogi.birthdate as string).split('-')
+            const bd = new Date(yogi.birthdate as string)
+            const ageYears = Math.floor((Date.now() - bd.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+            return (
+              <p className="text-xs text-yoga-text/40 mt-0.5">
+                Geboren am {d}.{m}.{y} ({ageYears} Jahre)
+              </p>
+            )
+          })()}
           {(yogi.emergency_name || yogi.emergency_phone) && (
             <div className="mt-2 p-2 bg-yoga-amber-bg/40 rounded-yoga border border-yoga-amber-text/20">
               <div className="text-xs text-yoga-text/50 mb-1">Notfallkontakt</div>

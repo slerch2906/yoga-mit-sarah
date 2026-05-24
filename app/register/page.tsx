@@ -8,6 +8,7 @@ import { Email } from '@/lib/email'
 function RegisterInner() {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
+  const [birthdate, setBirthdate] = useState('') // YYYY-MM-DD (date-input format)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -68,6 +69,17 @@ function RegisterInner() {
     e.preventDefault()
     if (!firstName.trim()) { setError('Bitte gib deinen Vornamen ein.'); return }
     if (!lastName.trim()) { setError('Bitte gib deinen Nachnamen ein.'); return }
+    // Sarah-Wunsch 2026-05-23: Geburtsdatum Pflicht bei Registrierung
+    if (!birthdate) { setError('Bitte gib dein Geburtsdatum ein.'); return }
+    const bd = new Date(birthdate)
+    if (isNaN(bd.getTime())) { setError('Geburtsdatum ist ungültig.'); return }
+    const today = new Date()
+    if (bd > today) { setError('Geburtsdatum darf nicht in der Zukunft liegen.'); return }
+    // Plausibilitäts-Check: min. 14 Jahre (sonst Tippfehler oder Kinder ohne
+    // Einverständnis der Eltern — vor allem fürs Recht)
+    const age = (today.getTime() - bd.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+    if (age < 14) { setError('Du musst mindestens 14 Jahre alt sein, um dich anzumelden.'); return }
+    if (age > 120) { setError('Geburtsdatum scheint nicht zu stimmen.'); return }
     setLoading(true)
     setError('')
 
@@ -102,6 +114,7 @@ function RegisterInner() {
       first_name: firstName.trim(),
       last_name: lastName.trim(),
       email: email.trim(),
+      birthdate, // YYYY-MM-DD
     })
 
     await supabase.from('invitations').update({ used: true, accepted_at: new Date().toISOString() }).eq('token', token!)
@@ -229,6 +242,13 @@ function RegisterInner() {
                 <input className="field-input" value={lastName}
                   onChange={e => setLastName(e.target.value)} placeholder="Müller" required />
               </div>
+            </div>
+            <div>
+              <label className="field-label">Geburtsdatum *</label>
+              <input className="field-input" type="date" value={birthdate}
+                onChange={e => setBirthdate(e.target.value)}
+                max={new Date().toISOString().split('T')[0]}
+                required />
             </div>
             <div>
               <label className="field-label">E-Mail *</label>

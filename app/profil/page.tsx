@@ -242,6 +242,16 @@ export default function ProfilPage() {
       const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)
       if (!emailOk) { alert('Bitte gib eine gültige E-Mail-Adresse ein (z.B. name@beispiel.de).'); return }
     }
+    if (field === 'birthdate') {
+      // Erwartet YYYY-MM-DD (date-input liefert das). Plausibilitäts-Check.
+      const bd = new Date(value)
+      if (isNaN(bd.getTime())) { alert('Geburtsdatum ist ungültig.'); return }
+      const today = new Date()
+      if (bd > today) { alert('Geburtsdatum darf nicht in der Zukunft liegen.'); return }
+      const age = (today.getTime() - bd.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+      if (age < 14) { alert('Du musst mindestens 14 Jahre alt sein.'); return }
+      if (age > 120) { alert('Geburtsdatum scheint nicht zu stimmen.'); return }
+    }
 
     if (field === 'email') {
       const { error } = await supabase.auth.updateUser({ email: value })
@@ -359,10 +369,17 @@ export default function ProfilPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" /></div>
 
   const fields = [
-    { key: 'first_name', label: 'Vorname',  value: profile?.first_name },
-    { key: 'last_name',  label: 'Nachname', value: profile?.last_name },
-    { key: 'email',      label: 'E-Mail',   value: userEmail || profile?.email },
+    { key: 'first_name', label: 'Vorname',     value: profile?.first_name },
+    { key: 'last_name',  label: 'Nachname',    value: profile?.last_name },
+    { key: 'birthdate',  label: 'Geburtsdatum', value: profile?.birthdate },
+    { key: 'email',      label: 'E-Mail',       value: userEmail || profile?.email },
   ]
+  // Geburtsdatum im deutschen Format anzeigen (DB liefert YYYY-MM-DD)
+  function formatBirthdate(iso: string | null | undefined): string {
+    if (!iso) return '—'
+    const [y, m, d] = iso.split('-')
+    return `${d}.${m}.${y}`
+  }
 
   const rechtliches = [
     { label: 'Datenschutzerklärung', url: 'https://yogamitsarah.me/privacy-policy/' },
@@ -771,7 +788,8 @@ export default function ProfilPage() {
                 <div className="flex items-center gap-2">
                   <input className="field-input flex-1" value={editValue}
                     onChange={e => setEditValue(e.target.value)}
-                    type={f.key === 'email' ? 'email' : 'text'} />
+                    type={f.key === 'email' ? 'email' : f.key === 'birthdate' ? 'date' : 'text'}
+                    max={f.key === 'birthdate' ? new Date().toISOString().split('T')[0] : undefined} />
                   <button onClick={() => handleSave(f.key)}
                     className="text-sm bg-yoga-text text-yoga-bg rounded-full px-3 py-1.5 font-semibold">Speichern</button>
                   <button onClick={() => setEditing(null)} className="text-sm text-yoga-text/50">Abbrechen</button>
@@ -780,10 +798,14 @@ export default function ProfilPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-xs text-yoga-text/50">{f.label}</div>
-                    <div className="text-sm font-semibold mt-0.5">{f.value || '—'}</div>
+                    <div className="text-sm font-semibold mt-0.5">
+                      {f.key === 'birthdate' ? formatBirthdate(f.value) : (f.value || '—')}
+                    </div>
                   </div>
                   <button onClick={() => { setEditing(f.key); setEditValue(f.value || '') }}
-                    className="text-xs border border-yoga-border2 rounded-full px-3 py-1 text-yoga-text/60">Ändern</button>
+                    className="text-xs border border-yoga-border2 rounded-full px-3 py-1 text-yoga-text/60">
+                    {f.key === 'birthdate' && !f.value ? 'Hinzufügen' : 'Ändern'}
+                  </button>
                 </div>
               )}
             </div>

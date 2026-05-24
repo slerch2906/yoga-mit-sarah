@@ -840,7 +840,7 @@ export default function AdminDashboard() {
               className={`w-full card mb-3 text-left hover:border-yoga-border2 ${s.is_cancelled || isPast ? 'opacity-40' : ''} ${highlight ? 'border-2 border-yoga-text' : ''}`}>
               {/* Sarah-Wunsch 2026-05-24: Wochentag vorne groß (analog Yogi-Pattern) */}
               <div className="flex items-center gap-3">
-                <div className="text-center flex-shrink-0 w-14">
+                <div className="text-center flex-shrink-0 w-12">
                   <div className="text-base font-bold">
                     {new Date(s.date).toLocaleDateString('de-DE', { weekday: 'short' })}
                   </div>

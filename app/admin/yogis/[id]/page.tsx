@@ -855,7 +855,7 @@ export default function AdminYogiDetailPage() {
                 <button key={b.id} onClick={() => router.push(`/admin/sessions/${b.session.id}`)}
                   className="w-full card mb-2 flex items-center gap-2.5 text-left hover:border-yoga-border2 cursor-pointer">
                   {/* Sarah-Wunsch 2026-05-24: Wochentag vorne groß (analog Yogi-Ansicht) */}
-                  <div className="text-center flex-shrink-0 w-14">
+                  <div className="text-center flex-shrink-0 w-12">
                     <div className="text-base font-bold">
                       {new Date(b.session.date).toLocaleDateString('de-DE', { weekday: 'short' })}
                     </div>
@@ -976,7 +976,7 @@ export default function AdminYogiDetailPage() {
             {bookings.slice(0, 10).map(b => (
               <div key={b.id} className="card mb-2 flex items-center gap-2.5">
                 {/* Sarah-Wunsch 2026-05-24: Wochentag vorne groß (analog Yogi-Ansicht) */}
-                <div className="text-center flex-shrink-0 w-14">
+                <div className="text-center flex-shrink-0 w-12">
                   <div className="text-base font-bold">
                     {b.session?.date ? new Date(b.session.date).toLocaleDateString('de-DE', { weekday: 'short' }) : '—'}
                   </div>

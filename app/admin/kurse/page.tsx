@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import { Email } from '@/lib/email'
 import { createClient } from '@/lib/supabase/client'
@@ -1034,14 +1034,36 @@ export default function AdminKursePage() {
             <button onClick={() => setShowForm(true)} className="btn-primary mb-4">
               <i className="ti ti-plus mr-1" /> Neuen Kurs anlegen
             </button>
-            {/* Sarah-Wunsch 2026-05-24: Aktive = is_active UND date_end >= heute.
-                Beendete Kurse (is_active UND date_end < heute) eigene Sektion drunter. */}
+            {/* Sarah-Wunsch 2026-05-24: Aktive + Beendete teilen die GLEICHE Render-
+                Logik (identisches Card-Markup, identische Buttons). Implementation:
+                ALLE is_active Kurse in eine sortierte Liste — beendete ans Ende —
+                und vor dem ersten beendeten Kurs eine Zwischenüberschrift einfügen
+                via Fragment. So bleibt das 140-Zeilen-JSX 1:1 und beide Sektionen
+                haben automatisch gleiches Layout. */}
             <p className="section-label">Aktive Kurse</p>
             {courses.filter(c => c.is_active && c.date_end >= new Date().toISOString().split('T')[0]).length === 0 && (
               <p className="text-sm text-yoga-text/40 text-center py-4">Keine aktiven Kurse</p>
             )}
-            {courses.filter(c => c.is_active && c.date_end >= new Date().toISOString().split('T')[0]).map(c => (
-              <div key={c.id} className="card mb-3">
+            {(() => {
+              const today = new Date().toISOString().split('T')[0]
+              return courses
+                .filter(c => c.is_active)
+                .sort((a, b) => {
+                  const aEnded = a.date_end < today ? 1 : 0
+                  const bEnded = b.date_end < today ? 1 : 0
+                  return aEnded - bEnded
+                })
+            })().map((c, idx, arr) => {
+              const today = new Date().toISOString().split('T')[0]
+              const isEnded = c.date_end < today
+              const prevEnded = idx > 0 && arr[idx - 1].date_end < today
+              const showEndedHeader = isEnded && !prevEnded
+              return (
+                <Fragment key={c.id}>
+                  {showEndedHeader && (
+                    <p className="section-label mt-6">Beendete Kurse</p>
+                  )}
+                  <div className="card mb-3" data-course-card={isEnded ? 'ended' : 'active'}>
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <div className="flex items-center gap-2 mb-0.5">
@@ -1178,56 +1200,10 @@ export default function AdminKursePage() {
                     ))}
                   </div>
                 )}
-              </div>
-            ))}
-            {/* NEU 2026-05-24: Beendete Kurse — is_active=true UND date_end < heute.
-                Bereit zum Archivieren/Löschen (jeweils nach 9-Tage-Frist). */}
-            {(() => {
-              const today = new Date().toISOString().split('T')[0]
-              const ended = courses.filter(c => c.is_active && c.date_end < today)
-              if (ended.length === 0) return null
-              return (
-                <>
-                  <p className="section-label mt-6">Beendete Kurse</p>
-                  {ended.map(c => {
-                    const dateEnd = new Date(c.date_end)
-                    const earliestArchive = new Date(dateEnd.getTime() + 9 * 24 * 60 * 60 * 1000)
-                    const canArchive = new Date() >= earliestArchive
-                    const daysLeft = canArchive ? 0 : Math.ceil((earliestArchive.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
-                    return (
-                      <div key={c.id} className="card mb-2 opacity-80">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <div className="text-sm font-bold truncate">{c.name}</div>
-                            <div className="text-xs text-yoga-text/50 mt-0.5">
-                              {c.weekday} · {c.time_start?.slice(0,5)} Uhr
-                            </div>
-                            <div className="text-xs text-yoga-text/50">
-                              Endete am {new Date(c.date_end).toLocaleDateString('de-DE')}
-                            </div>
-                            {!canArchive && (
-                              <div className="text-xs text-yoga-amber-text mt-1">
-                                <i className="ti ti-clock mr-0.5" />Archivieren in {daysLeft} Tag{daysLeft === 1 ? '' : 'en'} möglich (Credit-Schutz)
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex flex-col gap-1 flex-shrink-0">
-                            <button onClick={() => archiveCourse(c)}
-                              className={`text-xs rounded-full px-3 py-1.5 font-semibold border-0 cursor-pointer hover:opacity-80 ${canArchive ? 'bg-yoga-gray text-yoga-text' : 'bg-yoga-gray text-yoga-text/40'}`}>
-                              <i className="ti ti-archive mr-1" />Archivieren
-                            </button>
-                            <button onClick={() => deleteCourse(c.id, c.name)}
-                              className={`text-xs rounded-full px-3 py-1.5 font-semibold border-0 cursor-pointer hover:opacity-80 ${canArchive ? 'bg-yoga-red-bg text-yoga-red-text' : 'bg-yoga-red-bg text-yoga-red-text/50'}`}>
-                              <i className="ti ti-trash mr-1" />Löschen
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </>
+                  </div>
+                </Fragment>
               )
-            })()}
+            })}
 
             {courses.filter(c => !c.is_active).length > 0 && (
               <>

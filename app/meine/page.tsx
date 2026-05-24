@@ -276,22 +276,19 @@ export default function MeinePage() {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold truncate">
                         {enrol.course?.name}
-                        {/* Sarah-Wunsch 2026-05-24: kein "Vorhol/Nachhol"-Status mehr —
-                            beide Pfade (admin-replacement + yogi-initiated-origin)
-                            zeigen einheitlich "Ersatzstunde". Wenn beide true,
-                            nur einmal anzeigen. */}
-                        {(s.is_replacement || s.myBooking?.origin) && (
+                        {/* Sarah-Klarstellung 2026-05-24: "Ersatzstunde"-Tag NUR bei
+                            Admin-angelegten Ersatz-Sessions (is_replacement =
+                            sessions.replacement_session_id zeigt von einer
+                            abgesagten Original-Session auf diese hier).
+                            Yogi-initiierte Nachhol-Buchungen (booking.origin_session_id)
+                            sind reine INTERNE Verrechnungs-Logik — kein UI-Tag. */}
+                        {s.is_replacement && (
                           <span className="text-yoga-amber-text font-semibold"> · Ersatzstunde</span>
                         )}
                       </div>
                       {s.is_replacement && s.original_session && (
                         <div className="text-xs text-yoga-amber-text mt-0.5 truncate">
                           für {new Date(s.original_session.date).toLocaleDateString('de-DE', { day:'numeric', month:'short' })} · {s.original_session.time_start?.slice(0,5)} Uhr
-                        </div>
-                      )}
-                      {s.myBooking?.origin && (
-                        <div className="text-xs text-yoga-amber-text mt-0.5 truncate">
-                          Ersatz für {new Date(s.myBooking.origin.date).toLocaleDateString('de-DE', { day:'numeric', month:'short' })} · {s.myBooking.origin.time_start?.slice(0,5)} Uhr
                         </div>
                       )}
                     </div>

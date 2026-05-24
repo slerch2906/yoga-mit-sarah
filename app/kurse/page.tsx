@@ -292,8 +292,8 @@ export default function KursePage() {
                     <div className="text-xs text-yoga-text/50 mt-0.5">{s.course.difficulty}</div>
                   )}
                   {s.course?.is_free && (
-                    <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-[10px] font-semibold">
-                      🆓 Kostenlos
+                    <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full bg-yoga-green-bg text-yoga-green-text text-[10px] font-semibold">
+                      Kostenlos
                     </span>
                   )}
                 </div>

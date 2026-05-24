@@ -409,8 +409,8 @@ export default function SessionDetailPage() {
                 )}
               </h2>
               {course?.is_free && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-xs font-semibold">
-                  🆓 Kostenlos
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-yoga-green-bg text-yoga-green-text text-xs font-semibold">
+                  Kostenlos
                 </span>
               )}
             </div>
@@ -423,8 +423,8 @@ export default function SessionDetailPage() {
               <span className="text-yoga-text font-semibold"> · Ersatzstunde</span>
             )}
             {course?.is_free && (
-              <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-xs font-semibold align-middle">
-                🆓 Kostenlos
+              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full bg-yoga-green-bg text-yoga-green-text text-xs font-semibold align-middle">
+                Kostenlos
               </span>
             )}
           </h2>
@@ -600,9 +600,9 @@ export default function SessionDetailPage() {
               </div>
             )}
             {course?.is_free && freeSpots > 0 && course?.is_open && (
-              <div className="bg-green-50 border border-green-200 rounded-yoga p-3 mb-4">
-                <p className="text-sm text-green-800 leading-relaxed">
-                  <span className="font-bold">🆓 Kostenlose Stunde</span> — kein Credit nötig. Einfach anmelden und teilnehmen.
+              <div className="bg-yoga-green-bg border border-yoga-green-text/20 rounded-yoga p-3 mb-4">
+                <p className="text-sm text-yoga-green-text leading-relaxed">
+                  <span className="font-bold">Kostenlose Stunde</span> — kein Credit nötig. Einfach anmelden und teilnehmen.
                 </p>
               </div>
             )}

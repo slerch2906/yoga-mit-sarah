@@ -29,7 +29,17 @@ export default function AdminAnnouncementBubble() {
       .then(({ data }) => {
         if (data?.is_active && data?.message?.trim()) {
           setMessage(data.message.trim())
-          if (data.link_url) setLinkUrl(data.link_url)
+          if (data.link_url) {
+            // Link normalisieren: wenn weder absolute URL (http/https)
+            // noch interner Pfad (/) → https:// voranstellen.
+            // Sonst zerstoert der Browser den relativen Link mit
+            // aktueller Domain (Bug 2026-05-24).
+            const raw = data.link_url.trim()
+            const normalized = /^https?:\/\//i.test(raw) || raw.startsWith('/')
+              ? raw
+              : `https://${raw}`
+            setLinkUrl(normalized)
+          }
           if (data.link_label) setLinkLabel(data.link_label)
         }
       })

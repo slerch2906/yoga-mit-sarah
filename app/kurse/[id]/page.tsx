@@ -541,7 +541,9 @@ export default function SessionDetailPage() {
           <>
             <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
               <p className="text-sm text-yoga-text/80 leading-relaxed">
-                Du bist angemeldet. Abmeldung kostenlos bis <strong>{deadline}</strong> – danach gilt die Stunde als wahrgenommen.
+                {course?.is_free
+                  ? 'Du bist angemeldet. Abmeldung jederzeit möglich.'
+                  : <>Du bist angemeldet. Abmeldung kostenlos bis <strong>{deadline}</strong> – danach gilt die Stunde als wahrgenommen.</>}
               </p>
             </div>
             <button onClick={() => setShowCancel(true)} className="btn-danger mb-2">
@@ -554,14 +556,24 @@ export default function SessionDetailPage() {
         {/* ABMELDE-BESTÄTIGUNG */}
         {!past && !session.is_cancelled && myBooking && showCancel && (
           <>
-            <div className={`rounded-yoga p-3 mb-4 ${within3h ? 'bg-yoga-red-bg text-yoga-red-text' : 'bg-yoga-green-bg text-yoga-green-text'}`}>
-              <p className="text-sm font-semibold mb-1">
-                {within3h ? ' Zu spät für kostenlose Abmeldung' : 'Rechtzeitige Abmeldung'}
-              </p>
-              <p className="text-sm leading-relaxed opacity-90">
-                {within3h ? 'Credit wird nicht zurückgebucht.' : 'Dein Credit wird zurückgebucht.'}
-              </p>
-            </div>
+            {course?.is_free ? (
+              // Charity: kein Credit involviert
+              <div className="rounded-yoga p-3 mb-4 bg-yoga-green-bg text-yoga-green-text">
+                <p className="text-sm font-semibold mb-1">Abmeldung jederzeit möglich</p>
+                <p className="text-sm leading-relaxed opacity-90">
+                  Möchtest du dich wirklich abmelden?
+                </p>
+              </div>
+            ) : (
+              <div className={`rounded-yoga p-3 mb-4 ${within3h ? 'bg-yoga-red-bg text-yoga-red-text' : 'bg-yoga-green-bg text-yoga-green-text'}`}>
+                <p className="text-sm font-semibold mb-1">
+                  {within3h ? ' Zu spät für kostenlose Abmeldung' : 'Rechtzeitige Abmeldung'}
+                </p>
+                <p className="text-sm leading-relaxed opacity-90">
+                  {within3h ? 'Credit wird nicht zurückgebucht.' : 'Dein Credit wird zurückgebucht.'}
+                </p>
+              </div>
+            )}
             <button onClick={handleCancel} className="btn-danger mb-2" disabled={actionLoading}>
               {actionLoading ? 'Wird abgemeldet...' : 'Ja, abmelden'}
             </button>

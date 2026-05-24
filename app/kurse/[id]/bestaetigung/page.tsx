@@ -21,7 +21,7 @@ function BestaetigungInner() {
     async function load() {
       const user = await getCurrentUser()
       const [{ data: sess }, { data: prof }] = await Promise.all([
-        supabase.from('sessions').select('*, course:courses(name)').eq('id', id).single(),
+        supabase.from('sessions').select('*, course:courses(name, is_free)').eq('id', id).single(),
         user ? supabase.from('profiles').select('*').eq('id', user.id).single() : Promise.resolve({ data: null }),
       ])
       setSession(sess)
@@ -197,7 +197,14 @@ function BestaetigungInner() {
           {sessionDate.toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · {session.time_start?.slice(0,5)} Uhr
         </p>
 
-        {within3h ? (
+        {session.course?.is_free ? (
+          // Charity: kein Credit → keine Frist
+          <div className="bg-yoga-card border border-yoga-border rounded-yoga p-3 text-left mb-5">
+            <p className="text-sm text-yoga-text/70 leading-relaxed">
+              Abmeldung jederzeit möglich.
+            </p>
+          </div>
+        ) : within3h ? (
           <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 text-left mb-5">
             <p className="text-sm text-yoga-amber-text leading-relaxed">
               <strong>Kurzfristige Buchung:</strong> Abmeldung nicht mehr möglich. Dein Credit ist verbraucht – viel Freude!

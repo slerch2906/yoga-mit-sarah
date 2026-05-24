@@ -72,12 +72,19 @@ export default function AdminAnnouncementBubble() {
             <p className="text-sm text-yoga-text/85 leading-snug">
               {message}
             </p>
-            {linkUrl && (
-              <a href={linkUrl}
-                className="inline-block mt-2 text-xs font-semibold px-3 py-1.5 rounded-full bg-yoga-text text-white hover:opacity-90">
-                {linkLabel}
-              </a>
-            )}
+            {linkUrl && (() => {
+              // App-interne Pfade (/...) im selben Tab oeffnen.
+              // Externe Links (http/https zu anderer Domain) IMMER in neuem Tab —
+              // sonst verlaesst der Yogi die App und kann nicht zurueck.
+              const isInternal = linkUrl.startsWith('/')
+              return (
+                <a href={linkUrl}
+                  {...(isInternal ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
+                  className="inline-block mt-2 text-xs font-semibold px-3 py-1.5 rounded-full bg-yoga-text text-white hover:opacity-90">
+                  {linkLabel}
+                </a>
+              )
+            })()}
           </div>
         </div>
       </div>

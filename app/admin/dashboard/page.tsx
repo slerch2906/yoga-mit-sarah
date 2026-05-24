@@ -739,6 +739,7 @@ export default function AdminDashboard() {
                 course_ending_soon:    { label: 'Kurs endet in 2 Wochen — Folgekurs?', icon: 'ti-calendar-event', tone: 'warn' },
                 yogi_birthday:         { label: 'Yogi hat Geburtstag 🎂', icon: 'ti-cake', tone: 'info' },
                 system_alert:          { label: 'System-Warnung', icon: 'ti-alert-triangle', tone: 'warn' },
+                course_cancellation_complete: { label: 'Kursabbruch — alle Yogis haben geantwortet', icon: 'ti-checks', tone: 'info', href: '/admin/kursabbruch' },
               }
               const meta = META[n.type] || { label: n.type, icon: 'ti-bell', tone: 'info' as const }
               const tones = {

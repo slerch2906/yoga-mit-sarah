@@ -455,30 +455,11 @@ export default function SessionDetailPage() {
             Diese Stunde ist bereits vergangen
           </span>
         )}
-        {/* Teilen-Button — vor allem für Charity-Stunden hilfreich (Sarah-Wunsch 2026-05-24) */}
-        {!past && (
-          <button onClick={async () => {
-            const shareText = `${course?.name || 'Yoga-Stunde'} · ${new Date(session.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · ${session.time_start?.slice(0,5)} Uhr${course?.is_free ? ' — kostenlos!' : ''}`
-            const shareUrl = typeof window !== 'undefined' ? window.location.href : ''
-            if (typeof navigator !== 'undefined' && (navigator as any).share) {
-              try {
-                await (navigator as any).share({ title: course?.name || 'Yoga', text: shareText, url: shareUrl })
-              } catch (e) { /* user cancelled */ }
-            } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
-              try {
-                await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`)
-                alert('Link kopiert — kannst du jetzt in WhatsApp oder einer anderen App einfügen.')
-              } catch (e) { alert('Teilen nicht verfügbar') }
-            }
-          }}
-            className="mt-2 inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-full bg-yoga-gray hover:bg-yoga-card text-yoga-text border border-yoga-border">
-            <i className="ti ti-share" /> Teilen
-          </button>
-        )}
+        {/* Teilen-Button wurde 2026-05-24 in Admin-Stundenseite verlagert — Sarah teilt selbst per WhatsApp */}
       </div>
 
       <div className="px-4 py-4">
-        {/* Info grid */}
+        {/* Info grid — bei Charity (is_free) nur Plätze + Warteliste, keine Credits/Abmeldefrist */}
         <div className="grid grid-cols-2 gap-2 mb-4">
           <div className="info-tile">
             <div className="lbl">{myBooking ? 'Dein Status' : 'Freie Plätze'}</div>
@@ -486,18 +467,22 @@ export default function SessionDetailPage() {
               {myBooking ? 'Angemeldet ' : past ? '—' : freeSpots <= 0 ? 'Ausgebucht' : `${freeSpots} frei`}
             </div>
           </div>
-          <div className="info-tile">
-            <div className="lbl">Abmeldefrist</div>
-            <div className={`val ${within3h && !past ? 'text-yoga-amber-text' : ''}`}>
-              {past ? 'Vergangen' : deadline}
+          {!course?.is_free && (
+            <div className="info-tile">
+              <div className="lbl">Abmeldefrist</div>
+              <div className={`val ${within3h && !past ? 'text-yoga-amber-text' : ''}`}>
+                {past ? 'Vergangen' : deadline}
+              </div>
             </div>
-          </div>
-          <div className="info-tile">
-            <div className="lbl">Deine Credits</div>
-            <div className={`val ${freeCredits === 0 ? 'text-yoga-red-text' : ''}`}>
-              {freeCredits} verfügbar
+          )}
+          {!course?.is_free && (
+            <div className="info-tile">
+              <div className="lbl">Deine Credits</div>
+              <div className={`val ${freeCredits === 0 ? 'text-yoga-red-text' : ''}`}>
+                {freeCredits} verfügbar
+              </div>
             </div>
-          </div>
+          )}
           <div className="info-tile">
             <div className="lbl">Warteliste</div>
             <div className="val">{myWaitlist ? (myWaitlist.type === 'notify' ? 'Benachrichtigung aktiv' : `Pos. ${myWaitlist.position}`) : '—'}</div>
@@ -634,11 +619,14 @@ export default function SessionDetailPage() {
                   </>
                 ) : (
                   <>
-                    <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
-                      <p className="text-sm text-yoga-text/80 leading-relaxed">
-                        Abmeldung kostenlos bis <strong>{deadline}</strong> – Credit kommt zurück.
-                      </p>
-                    </div>
+                    {/* Storno-Hinweis NUR bei Credit-pflichtigen Stunden — bei Charity sinnlos */}
+                    {!course?.is_free && (
+                      <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
+                        <p className="text-sm text-yoga-text/80 leading-relaxed">
+                          Abmeldung kostenlos bis <strong>{deadline}</strong> – Credit kommt zurück.
+                        </p>
+                      </div>
+                    )}
                     <button onClick={handleBook} className="btn-primary mb-2" disabled={actionLoading}>
                       {actionLoading ? 'Wird eingetragen...' : 'Für diese Stunde eintragen'}
                     </button>

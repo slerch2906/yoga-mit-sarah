@@ -475,8 +475,36 @@ export default function AdminSessionPage() {
                 if (error) alert('Fehler: ' + error.message)
                 else alert('Charity-Stunde wurde in der Sprechblase für alle Yogis promoted.')
               }}
-              className="mt-3 w-full text-sm font-semibold bg-green-600 text-white rounded-yoga py-2.5 hover:bg-green-700">
+              className="mt-3 w-full text-sm font-semibold bg-yoga-green-text text-white rounded-yoga py-2.5 hover:opacity-90">
               <i className="ti ti-bullhorn mr-1" /> In Sprechblase posten (für alle Yogis)
+            </button>
+          )}
+          {/* Teilen-Button — für Admin sinnvoll, damit sie über WhatsApp/Email teilen kann */}
+          {!session?.is_cancelled && (
+            <button
+              onClick={async () => {
+                const sessionDate = new Date(session.date)
+                const isThisYear = sessionDate.getFullYear() === new Date().getFullYear()
+                const dateFormatted = sessionDate.toLocaleDateString('de-DE',
+                  isThisYear
+                    ? { weekday:'short', day:'numeric', month:'long' }
+                    : { weekday:'short', day:'numeric', month:'long', year:'numeric' })
+                const shareText = `${session?.course?.name || 'Yoga-Stunde'} · ${dateFormatted} · ${session?.time_start?.slice(0,5)} Uhr${session?.course?.is_free ? ' — kostenlos!' : ''}`
+                // Link auf Yogi-Page, nicht Admin-Page
+                const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/kurse/${id}` : ''
+                if (typeof navigator !== 'undefined' && (navigator as any).share) {
+                  try {
+                    await (navigator as any).share({ title: session?.course?.name || 'Yoga', text: shareText, url: shareUrl })
+                  } catch (e) { /* user cancelled */ }
+                } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                  try {
+                    await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`)
+                    alert('Link kopiert — kannst du jetzt in WhatsApp oder einer anderen App einfügen.')
+                  } catch (e) { alert('Teilen nicht verfügbar') }
+                }
+              }}
+              className="mt-2 w-full text-sm font-semibold bg-yoga-gray hover:bg-yoga-card text-yoga-text border border-yoga-border rounded-yoga py-2">
+              <i className="ti ti-share mr-1" /> Stunde teilen (WhatsApp / Email)
             </button>
           )}
           {session?.is_cancelled && (

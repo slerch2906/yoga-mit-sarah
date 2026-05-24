@@ -271,18 +271,20 @@ test.describe('[E2E] Charity-Feature: is_free + image_url', () => {
     expect(src).toMatch(/Kostenlos/)
   })
 
-  test('app/kurse/[id]: Detail-Page hat Teilen-Button + is_free-Pille', async () => {
+  test('app/kurse/[id]: Detail-Page hat is_free-Pille + Charity-Kacheln ausgeblendet', async () => {
     const src = read('app/kurse/[id]/page.tsx')
-    expect(src).toMatch(/navigator.*share|navigator.*clipboard/)
     expect(src).toMatch(/course\?\.is_free/)
-    expect(src).toMatch(/Teilen/)
+    // Bei Charity sollen Credits-/Abmeldefrist-Kacheln + Storno-Hinweis weg
+    expect(src).toMatch(/!course\?\.is_free/)
   })
 
-  test('app/admin/sessions/[id]: "In Sprechblase posten"-Button bei is_free', async () => {
+  test('app/admin/sessions/[id]: "In Sprechblase posten"-Button bei is_free + Teilen-Button', async () => {
     const src = read('app/admin/sessions/[id]/page.tsx')
     expect(src).toMatch(/In Sprechblase posten/)
     expect(src).toMatch(/admin_announcement/)
     expect(src).toMatch(/link_url:/)
+    // Teilen-Button (vorher in Yogi-Page, jetzt hier)
+    expect(src).toMatch(/Stunde teilen|navigator.*share|navigator.*clipboard/)
   })
 
   test('components/AdminAnnouncementBubble rendert Link-Button wenn link_url', async () => {

@@ -854,16 +854,19 @@ export default function AdminYogiDetailPage() {
               {futureSingles.map((b: any) => (
                 <button key={b.id} onClick={() => router.push(`/admin/sessions/${b.session.id}`)}
                   className="w-full card mb-2 flex items-center gap-2.5 text-left hover:border-yoga-border2 cursor-pointer">
-                  <div className="flex-shrink-0 w-20">
-                    <div className="text-sm font-bold">
-                      {new Date(b.session.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })}
+                  {/* Sarah-Wunsch 2026-05-24: Wochentag vorne groß (analog Yogi-Ansicht) */}
+                  <div className="text-center flex-shrink-0 w-14">
+                    <div className="text-base font-bold">
+                      {new Date(b.session.date).toLocaleDateString('de-DE', { weekday: 'short' })}
                     </div>
-                    <div className="text-xs text-yoga-text/50">{b.session.time_start?.slice(0,5)} Uhr</div>
+                    <div className="text-xs text-yoga-text/50 mt-0.5">
+                      {new Date(b.session.date).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
+                    </div>
                   </div>
-                  <div className="w-px h-6 bg-yoga-border2 flex-shrink-0" />
+                  <div className="w-px h-8 bg-yoga-border2 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold truncate">{b.session?.course?.name || '—'}</div>
-                    <div className="text-xs text-yoga-text/45">Einzelstunde · {b.session?.duration_min || 75} min</div>
+                    <div className="text-xs text-yoga-text/45">{b.session.time_start?.slice(0,5)} · Einzelstunde · {b.session?.duration_min || 75} min</div>
                   </div>
                   <i className="ti ti-chevron-right text-sm text-yoga-text/30 flex-shrink-0" />
                 </button>
@@ -972,16 +975,19 @@ export default function AdminYogiDetailPage() {
             <p className="section-label mt-2">Letzte Buchungen</p>
             {bookings.slice(0, 10).map(b => (
               <div key={b.id} className="card mb-2 flex items-center gap-2.5">
-                <div className="flex-shrink-0 w-20">
-                  <div className="text-sm font-bold">
-                    {b.session?.date ? new Date(b.session.date).toLocaleDateString('de-DE', { day:'numeric', month:'short' }) : '—'}
+                {/* Sarah-Wunsch 2026-05-24: Wochentag vorne groß (analog Yogi-Ansicht) */}
+                <div className="text-center flex-shrink-0 w-14">
+                  <div className="text-base font-bold">
+                    {b.session?.date ? new Date(b.session.date).toLocaleDateString('de-DE', { weekday: 'short' }) : '—'}
                   </div>
-                  <div className="text-xs text-yoga-text/50">{b.session?.time_start?.slice(0,5)}</div>
+                  <div className="text-xs text-yoga-text/50 mt-0.5">
+                    {b.session?.date ? new Date(b.session.date).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' }) : ''}
+                  </div>
                 </div>
-                <div className="w-px h-6 bg-yoga-border2 flex-shrink-0" />
+                <div className="w-px h-8 bg-yoga-border2 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold truncate">{b.session?.course?.name}</div>
-                  <div className="text-xs text-yoga-text/40">{b.type === 'single' ? 'Einzelstunde' : 'Kursstunde'}</div>
+                  <div className="text-xs text-yoga-text/40">{b.session?.time_start?.slice(0,5)} · {b.type === 'single' ? 'Einzelstunde' : 'Kursstunde'}</div>
                 </div>
                 {getStatusBadge(b)}
               </div>

@@ -838,19 +838,36 @@ export default function AdminDashboard() {
           return (
             <button key={s.id} onClick={() => loadSessionDetail(s)}
               className={`w-full card mb-3 text-left hover:border-yoga-border2 ${s.is_cancelled || isPast ? 'opacity-40' : ''} ${highlight ? 'border-2 border-yoga-text' : ''}`}>
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <div className="text-sm font-bold">
+              {/* Sarah-Wunsch 2026-05-24: Wochentag vorne groß (analog Yogi-Pattern) */}
+              <div className="flex items-center gap-3">
+                <div className="text-center flex-shrink-0 w-14">
+                  <div className="text-base font-bold">
+                    {new Date(s.date).toLocaleDateString('de-DE', { weekday: 'short' })}
+                  </div>
+                  <div className="text-xs text-yoga-text/50 mt-0.5">
+                    {new Date(s.date).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
+                  </div>
+                </div>
+                <div className="w-px h-10 bg-yoga-border2 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold truncate">
                     {s.course?.name}
                     {s.is_replacement && (
                       <span className="text-yoga-amber-text font-semibold"> · Ersatzstunde</span>
                     )}
                   </div>
-                  <div className="text-xs text-yoga-text/55">
-                    {new Date(s.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })} · {s.time_start?.slice(0,5)} Uhr
+                  <div className="text-xs text-yoga-text/55 mt-0.5">
+                    {s.time_start?.slice(0,5)}
+                    {!s.is_cancelled && !isPast && (
+                      <>
+                        <span className="mx-1">·</span>
+                        <i className="ti ti-check" /> {s.active_count} angemeldet
+                        {s.cancelled_count > 0 && <> · <i className="ti ti-x" /> {s.cancelled_count} ausgetragen</>}
+                      </>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 flex-shrink-0">
                   {s.is_cancelled ? (
                     <span className="badge badge-full">Abgesagt</span>
                   ) : isPast ? (
@@ -863,12 +880,6 @@ export default function AdminDashboard() {
                   <i className="ti ti-chevron-right text-sm text-yoga-text/30" />
                 </div>
               </div>
-              {!s.is_cancelled && !isPast && (
-                <div className="flex gap-3 text-xs text-yoga-text/50">
-                  <span><i className="ti ti-check mr-0.5" />{s.active_count} angemeldet</span>
-                  {s.cancelled_count > 0 && <span><i className="ti ti-x mr-0.5" />{s.cancelled_count} ausgetragen</span>}
-                </div>
-              )}
             </button>
           )
         })}

@@ -18,22 +18,32 @@ const slides = [
   {
     icon: 'ti-calendar-week',
     title: 'Deine Yoga-Woche',
+    tabHint: 'Tab „Kurse" — unten links',
     body: 'Hier siehst du alle Stunden dieser Woche. Mit den Pfeilen oder dem Datum oben wechselst du die Woche. Stunden in denen du angemeldet bist haben einen grünen Rahmen.',
   },
   {
     icon: 'ti-heart',
     title: 'Deine Stunden — und wie Credits entstehen',
+    tabHint: 'Tab „Meine" — dritter Tab unten',
     body: 'Unter „Meine" findest du alle Stunden auf die Sarah dich eingetragen hat. Wenn du eine rechtzeitig (bis 3h vorher) absagst, bekommst du einen Credit zum Nachholen — den kannst du dann für eine andere Stunde nutzen.',
   },
   {
     icon: 'ti-circle-plus',
     title: 'Stunde buchen',
+    tabHint: 'In „Kurse" auf eine freie Stunde tippen',
     body: 'Klick einfach auf eine freie Stunde und wähle „Buchen". Ein Credit wird automatisch verrechnet — du musst nichts weiter tun.',
   },
   {
     icon: 'ti-list',
     title: 'Volle Stunde? Kein Problem',
+    tabHint: 'Tab „Warteliste" — zweiter Tab unten',
     body: 'Trag dich auf die Warteliste ein — du wirst automatisch nachgerückt sobald ein Platz frei wird. Oder lass dich einfach nur benachrichtigen und entscheide dann ob du kommen willst.',
+  },
+  {
+    icon: 'ti-device-mobile',
+    title: 'App auf den Startbildschirm',
+    tabHint: 'Profil → „Anleitung anzeigen"',
+    body: 'Damit du die App wie eine echte App auf dem Handy hast: Wenn unten ein kleines „Installieren"-Fenster aufpoppt, einfach drauftippen. Falls nicht: geh in dein Profil und klick auf „Anleitung anzeigen" — da steht für iPhone und Android wie es geht.',
   },
 ]
 
@@ -91,10 +101,17 @@ export default function OnboardingTour({ onComplete }: Props) {
 
         {/* Body */}
         <div className="px-5 py-6 text-center">
-          <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-yoga-amber-bg flex items-center justify-center">
+          <div className="mx-auto mb-3 w-16 h-16 rounded-full bg-yoga-amber-bg flex items-center justify-center">
             <i className={`ti ${slide.icon} text-3xl text-yoga-text`} />
           </div>
-          <h2 className="text-lg font-bold mb-2">{slide.title}</h2>
+          <h2 className="text-lg font-bold mb-1">{slide.title}</h2>
+          {/* Sarah-Wunsch 2026-05-24: eindeutiger Hinweis welcher Tab/Aktion gemeint ist */}
+          {slide.tabHint && (
+            <div className="inline-flex items-center gap-1 text-xs font-semibold text-yoga-amber-text bg-yoga-amber-bg rounded-full px-2.5 py-0.5 mb-3">
+              <i className="ti ti-arrow-down text-xs" />
+              {slide.tabHint}
+            </div>
+          )}
           <p className="text-sm text-yoga-text/75 leading-relaxed">
             {slide.body}
           </p>

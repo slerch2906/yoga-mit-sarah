@@ -33,11 +33,12 @@ test.describe('[E2E] Onboarding-Tour: Component existiert + korrekte Slides', ()
     expect(exists('components/OnboardingTour.tsx')).toBe(true)
   })
 
-  test('Genau 4 Slides definiert', () => {
+  test('Genau 5 Slides definiert', () => {
     const src = read('components/OnboardingTour.tsx')
-    // slides Array mit genau 4 Einträgen — zähle die Title-Strings
+    // slides Array mit genau 5 Einträgen (Sarah-Wunsch 2026-05-24:
+    // 5. Slide für App-Installation hinzugefügt)
     const titles = src.match(/title:\s*['"`]([^'"`]+)['"`]/g) || []
-    expect(titles.length, '4 Slides erwartet').toBe(4)
+    expect(titles.length, '5 Slides erwartet').toBe(5)
   })
 
   test('Slide 1: Yoga-Woche (Wochenplan-Erklärung)', () => {

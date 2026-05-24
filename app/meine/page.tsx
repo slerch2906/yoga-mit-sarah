@@ -273,11 +273,12 @@ export default function MeinePage() {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold truncate">
                         {enrol.course?.name}
-                        {s.is_replacement && (
+                        {/* Sarah-Wunsch 2026-05-24: kein "Vorhol/Nachhol"-Status mehr —
+                            beide Pfade (admin-replacement + yogi-initiated-origin)
+                            zeigen einheitlich "Ersatzstunde". Wenn beide true,
+                            nur einmal anzeigen. */}
+                        {(s.is_replacement || s.myBooking?.origin) && (
                           <span className="text-yoga-amber-text font-semibold"> · Ersatzstunde</span>
-                        )}
-                        {s.myBooking?.origin && (
-                          <span className="text-yoga-amber-text font-semibold"> · Vorhol/Nachhol</span>
                         )}
                       </div>
                       {s.is_replacement && s.original_session && (

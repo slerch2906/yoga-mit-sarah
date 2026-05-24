@@ -30,7 +30,7 @@ export async function promoteWaitlistOrOfferLate(
 ): Promise<{ mode: 'auto-promoted' | 'late-offer-sent' | 'noop'; details?: any }> {
   // 1) Session-Daten holen
   const { data: session } = await supabase.from('sessions')
-    .select('id, date, time_start, is_cancelled, course:courses(name)')
+    .select('id, date, time_start, is_cancelled, course:courses(name, is_free)')
     .eq('id', sessionId).maybeSingle()
   if (!session || (session as any).is_cancelled) return { mode: 'noop' }
 
@@ -40,6 +40,7 @@ export async function promoteWaitlistOrOfferLate(
 
   const minutesUntilStart = (sessionStart - now) / 60000
   const courseName = (session as any).course?.name || ''
+  const isFreeCourse = !!(session as any).course?.is_free
   const dateStr = (session as any).date
   const timeStr = (session as any).time_start
 
@@ -56,9 +57,12 @@ export async function promoteWaitlistOrOfferLate(
   if (waitlist.length === 0) return { mode: 'noop' }
 
   // 4) Über 90 Min: alte Auto-Promote Logic — ersten Yogi mit gültigem Credit nehmen
+  // Bei Charity (is_free): IMMER den ersten Yogi nehmen, kein Credit nötig.
   if (sessionStart - now > NINETY_MIN_MS) {
     for (const wl of waitlist) {
-      const promoted = await tryAutoPromoteOne(supabase, wl, sessionId, { courseName, dateStr, timeStr })
+      const promoted = isFreeCourse
+        ? await tryAutoPromoteOneFree(supabase, wl, sessionId, { courseName, dateStr, timeStr })
+        : await tryAutoPromoteOne(supabase, wl, sessionId, { courseName, dateStr, timeStr })
       if (promoted) return { mode: 'auto-promoted', details: { user_id: wl.user_id } }
     }
     return { mode: 'noop' }
@@ -87,6 +91,31 @@ export async function promoteWaitlistOrOfferLate(
     } catch (e) { console.error('waitlistOfferLate email:', e) }
   }
   return { mode: 'late-offer-sent', details: { recipients: waitlist.length } }
+}
+
+/**
+ * Charity-Variante: Yogi promoten OHNE Credit (für is_free Kurse).
+ * Keine Credit-Konflikt-Logik nötig, weil keine Credits verbraucht werden.
+ */
+async function tryAutoPromoteOneFree(
+  supabase: SupabaseClient, wl: any, sessionId: string,
+  meta: { courseName: string; dateStr: string; timeStr: string },
+): Promise<boolean> {
+  await supabase.from('bookings').upsert({
+    user_id: wl.user_id, session_id: sessionId, credit_id: null,
+    type: 'single', status: 'active', cancelled_at: null, cancel_late: false,
+  }, { onConflict: 'user_id,session_id' })
+  await supabase.from('waitlist').delete().eq('id', wl.id)
+  if (wl.profile?.email) {
+    try {
+      await Email.waitlistPromoted({
+        email: wl.profile.email,
+        firstName: wl.profile.first_name || 'Yogi',
+        courseName: meta.courseName, date: meta.dateStr, timeStart: meta.timeStr,
+      })
+    } catch (e) { console.error('waitlistPromoted (free) email:', e) }
+  }
+  return true
 }
 
 /** Hilfs-Funktion: einen Yogi aus Waitlist auto-promoten (Course/Tenpack-Credit). */

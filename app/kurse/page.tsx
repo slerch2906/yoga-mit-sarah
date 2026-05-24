@@ -113,7 +113,7 @@ export default function KursePage() {
 
     const { data, error } = await supabase
       .from('sessions')
-      .select(`id, date, time_start, duration_min, course:courses(id, name, max_spots, difficulty), bookings!bookings_session_id_fkey(id, user_id, status)`)
+      .select(`id, date, time_start, duration_min, course:courses(id, name, max_spots, difficulty, is_free, image_url), bookings!bookings_session_id_fkey(id, user_id, status)`)
       .gte('date', weekStart.toISOString().split('T')[0])
       .lte('date', weekEnd.toISOString().split('T')[0])
       .eq('is_cancelled', false)
@@ -268,6 +268,10 @@ export default function KursePage() {
                 className={`w-full flex items-center gap-3 mb-2 text-left transition-colors rounded-yoga border p-3
                   ${s.is_past ? 'opacity-40 cursor-default' : 'hover:border-yoga-border2 active:scale-[0.98]'}
                   ${s.my_booking && !s.is_past ? 'border-2 border-yoga-green-text bg-white' : 'border-yoga-border bg-white'}`}>
+                {/* Variante A: kleines Foto links bei Charity / wenn image_url gesetzt */}
+                {s.course?.image_url && (
+                  <img src={s.course.image_url} alt="" className="w-12 h-12 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
+                )}
                 <div className="text-center flex-shrink-0 w-12">
                   <div className={`text-base font-bold ${s.is_past ? 'line-through' : ''}`}>
                     {s.time_start?.slice(0,5)}
@@ -277,7 +281,7 @@ export default function KursePage() {
                 <div className="w-px h-8 bg-yoga-border2 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   {/* Sarah-Wunsch 2026-05-24: Reihenfolge — Kurstitel,
-                      Ersatzstunde-Hinweis (eigene Zeile), Level */}
+                      Ersatzstunde-Hinweis (eigene Zeile), Level, Charity-Pille */}
                   <div className="text-sm font-semibold truncate">{s.course?.name}</div>
                   {s.is_replacement && s.original_session && (
                     <div className="text-xs text-yoga-text font-semibold mt-0.5">
@@ -286,6 +290,11 @@ export default function KursePage() {
                   )}
                   {s.course?.difficulty && (
                     <div className="text-xs text-yoga-text/50 mt-0.5">{s.course.difficulty}</div>
+                  )}
+                  {s.course?.is_free && (
+                    <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-[10px] font-semibold">
+                      🆓 Kostenlos
+                    </span>
                   )}
                 </div>
                 {getBadge(s)}

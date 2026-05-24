@@ -203,13 +203,15 @@ export default function ProfilPage() {
       if (prof?.is_admin) {
         const [annRes, healthRes] = await Promise.all([
           supabase.from('admin_announcement')
-            .select('message, is_active, update_banner_version, update_banner_set_at')
+            .select('message, is_active, update_banner_version, update_banner_set_at, link_url, link_label')
             .eq('id', 1).maybeSingle(),
           supabase.rpc('get_system_health'),
         ])
         if (annRes.data) {
           setAnnText(annRes.data.message || '')
           setAnnActive(!!annRes.data.is_active)
+          setAnnLinkUrl((annRes.data as any).link_url || '')
+          setAnnLinkLabel((annRes.data as any).link_label || '')
           setBannerVersion((annRes.data as any).update_banner_version || null)
           setBannerSetAt((annRes.data as any).update_banner_set_at || null)
         }
@@ -282,6 +284,8 @@ export default function ProfilPage() {
   // Sarah-Wunsch 2026-05-23: Mehr-Menü für Admin (Nachricht, Bulk-Mail, Status, Protokoll)
   const [annText, setAnnText] = useState('')
   const [annActive, setAnnActive] = useState(false)
+  const [annLinkUrl, setAnnLinkUrl] = useState('')
+  const [annLinkLabel, setAnnLinkLabel] = useState('')
   const [savingAnn, setSavingAnn] = useState(false)
   // Update-Banner (Option C: manueller Trigger mit klarem Status)
   const [bannerVersion, setBannerVersion] = useState<string | null>(null)
@@ -425,11 +429,30 @@ export default function ProfilPage() {
                   checked={annActive}
                   onChange={e => setAnnActive(e.target.checked)} />
               </label>
+              {/* Optionaler Button mit Link — z.B. um Charity-Stunde zu promoten */}
+              <div className="space-y-2 mb-3">
+                <p className="text-xs text-yoga-text/55">Optional: Button mit Link (z.B. zur Charity-Stunde)</p>
+                <input
+                  className="w-full bg-white border border-yoga-border2 rounded-yoga px-3 py-2 text-sm text-yoga-text outline-none focus:border-yoga-text/40 transition-colors"
+                  value={annLinkUrl}
+                  onChange={e => setAnnLinkUrl(e.target.value)}
+                  placeholder="z.B. /kurse/abc-123" />
+                <input
+                  className="w-full bg-white border border-yoga-border2 rounded-yoga px-3 py-2 text-sm text-yoga-text outline-none focus:border-yoga-text/40 transition-colors"
+                  value={annLinkLabel}
+                  onChange={e => setAnnLinkLabel(e.target.value)}
+                  placeholder="z.B. Jetzt anmelden" />
+              </div>
               <button disabled={savingAnn}
                 onClick={async () => {
                   setSavingAnn(true)
                   const { error } = await supabase.from('admin_announcement')
-                    .update({ message: annText, is_active: annActive, updated_at: new Date().toISOString() })
+                    .update({
+                      message: annText, is_active: annActive,
+                      link_url: annLinkUrl.trim() || null,
+                      link_label: annLinkLabel.trim() || null,
+                      updated_at: new Date().toISOString(),
+                    })
                     .eq('id', 1)
                   setSavingAnn(false)
                   if (error) alert('Fehler beim Speichern: ' + error.message)

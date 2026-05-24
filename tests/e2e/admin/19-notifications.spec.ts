@@ -213,6 +213,85 @@ test.describe('[E2E] Wartelisten-Konflikt: Credit anderweitig verwendet', () => 
   })
 })
 
+// ── 10a) Charity-Feature: is_free + image_url + Sprechblasen-Promote ──────
+// Sarah-Wunsch 2026-05-24: Kostenfreie Stunden (z.B. Charity Yoga) ohne
+// Credit-Verbrauch, mit kleinem Foto in Wochenübersicht und Promote-Button.
+test.describe('[E2E] Charity-Feature: is_free + image_url', () => {
+  test('courses-Tabelle hat is_free + image_url Spalten', async () => {
+    const db = getServiceClient()
+    const { data, error } = await db.from('courses')
+      .select('is_free, image_url').limit(1).maybeSingle()
+    expect(error?.message || '').toBe('')
+    expect(data).toBeDefined()
+  })
+
+  test('admin_announcement hat link_url + link_label Spalten', async () => {
+    const db = getServiceClient()
+    const { data, error } = await db.from('admin_announcement')
+      .select('link_url, link_label').eq('id', 1).maybeSingle()
+    expect(error?.message || '').toBe('')
+    expect(data).toBeDefined()
+  })
+
+  test('Storage-Bucket course-images existiert (public)', async () => {
+    const db = getServiceClient()
+    const { data } = await db.storage.listBuckets()
+    const bucket = (data || []).find((b: any) => b.id === 'course-images')
+    expect(bucket).toBeDefined()
+    expect(bucket?.public).toBe(true)
+  })
+
+  test('app/admin/kurse: Form hat is_free + image_url Felder', async () => {
+    const src = read('app/admin/kurse/page.tsx')
+    expect(src).toMatch(/is_free:\s*false/)
+    expect(src).toMatch(/image_url:\s*['"]/)
+    expect(src).toMatch(/Kostenlos.*Credit/)
+    expect(src).toMatch(/course-images/)
+  })
+
+  test('app/kurse/[id]: handleBook skippt Credit-Picker bei is_free', async () => {
+    const src = read('app/kurse/[id]/page.tsx')
+    expect(src).toMatch(/isCharity\s*=\s*!!.*is_free/)
+    expect(src).toMatch(/!isCharity\s*&&\s*!bestCredit/)
+    expect(src).toMatch(/if\s*\(\s*!isCharity\s*\)/)
+  })
+
+  test('lib/waitlist-promote.ts: tryAutoPromoteOneFree existiert + skip Credit', async () => {
+    const src = read('lib/waitlist-promote.ts')
+    expect(src).toMatch(/tryAutoPromoteOneFree/)
+    expect(src).toMatch(/isFreeCourse/)
+    // Kein credit_id wird gesetzt
+    expect(src).toMatch(/credit_id:\s*null/)
+  })
+
+  test('app/kurse: Wochenübersicht zeigt Foto + Kostenlos-Pille', async () => {
+    const src = read('app/kurse/page.tsx')
+    expect(src).toMatch(/s\.course\?\.image_url/)
+    expect(src).toMatch(/s\.course\?\.is_free/)
+    expect(src).toMatch(/Kostenlos/)
+  })
+
+  test('app/kurse/[id]: Detail-Page hat Teilen-Button + is_free-Pille', async () => {
+    const src = read('app/kurse/[id]/page.tsx')
+    expect(src).toMatch(/navigator.*share|navigator.*clipboard/)
+    expect(src).toMatch(/course\?\.is_free/)
+    expect(src).toMatch(/Teilen/)
+  })
+
+  test('app/admin/sessions/[id]: "In Sprechblase posten"-Button bei is_free', async () => {
+    const src = read('app/admin/sessions/[id]/page.tsx')
+    expect(src).toMatch(/In Sprechblase posten/)
+    expect(src).toMatch(/admin_announcement/)
+    expect(src).toMatch(/link_url:/)
+  })
+
+  test('components/AdminAnnouncementBubble rendert Link-Button wenn link_url', async () => {
+    const src = read('components/AdminAnnouncementBubble.tsx')
+    expect(src).toMatch(/link_url|linkUrl/)
+    expect(src).toMatch(/link_label|linkLabel/)
+  })
+})
+
 // ── 10b) Kurs-Löschen/Archivieren: 9-Tage-Sperre nach Kursende ─────────────
 // Sarah-Bug 2026-05-24: Beim Löschen eines beendeten Kurses gingen valide
 // Yogi-Credits verloren (8-Tage-Gültigkeit nach Kursende). Lösung: Kurs erst

@@ -154,7 +154,7 @@ export default function AdminSessionPage() {
   async function loadData() {
     const [{ data: sess }, { data: bkgs }, { data: wl }] = await Promise.all([
       // KEIN self-referenzierender Subquery (PostgREST → 400). Replacement separat unten.
-      supabase.from('sessions').select('*, course:courses(name, id)').eq('id', id).single(),
+      supabase.from('sessions').select('*, course:courses(name, id, is_free, image_url)').eq('id', id).single(),
       supabase.from('bookings')
         .select('*, profile:profiles(email, first_name, last_name)')
         .eq('session_id', id).eq('status', 'active'),
@@ -435,9 +435,42 @@ export default function AdminSessionPage() {
 
         {/* Session Info */}
         <div className="card mb-4">
-          <div className="text-base font-bold mb-1">{session?.course?.name}</div>
-          <div className="text-sm text-yoga-text/60">{dateStr} · {session?.time_start?.slice(0,5)} Uhr</div>
-          <div className="text-sm text-yoga-text/50 mt-1">{session?.duration_min} Minuten</div>
+          <div className="flex items-start gap-3">
+            {session?.course?.image_url && (
+              <img src={session.course.image_url} alt="" className="w-14 h-14 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="text-base font-bold mb-1">
+                {session?.course?.name}
+                {session?.course?.is_free && (
+                  <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-xs font-semibold align-middle">
+                    🆓 Kostenlos
+                  </span>
+                )}
+              </div>
+              <div className="text-sm text-yoga-text/60">{dateStr} · {session?.time_start?.slice(0,5)} Uhr</div>
+              <div className="text-sm text-yoga-text/50 mt-1">{session?.duration_min} Minuten</div>
+            </div>
+          </div>
+          {/* Charity-Quick-Promote: 1 Klick → Sprechblase mit Link zu dieser Stunde */}
+          {session?.course?.is_free && !session?.is_cancelled && (
+            <button
+              onClick={async () => {
+                const linkUrl = `/kurse/${id}`
+                const message = `Diese Woche: ${session.course.name} am ${new Date(session.date).toLocaleDateString('de-DE', { weekday:'long', day:'numeric', month:'long' })} um ${session.time_start?.slice(0,5)} Uhr — kostenlos!`
+                const { error } = await supabase.from('admin_announcement')
+                  .update({
+                    message, is_active: true,
+                    link_url: linkUrl, link_label: 'Zur Stunde',
+                    updated_at: new Date().toISOString(),
+                  }).eq('id', 1)
+                if (error) alert('Fehler: ' + error.message)
+                else alert('Charity-Stunde wurde in der Sprechblase für alle Yogis promoted.')
+              }}
+              className="mt-3 w-full text-sm font-semibold bg-green-600 text-white rounded-yoga py-2.5 hover:bg-green-700">
+              <i className="ti ti-bullhorn mr-1" /> In Sprechblase posten (für alle Yogis)
+            </button>
+          )}
           {session?.is_cancelled && (
             <div className={`mt-2 text-sm font-semibold ${isExcluded(session) ? 'text-yoga-text/50' : 'text-yoga-red-text'}`}>
               {isExcluded(session) ? 'Diese Stunde ist ausgeschlossen (zählt nicht als Einheit)' : 'Diese Stunde ist bereits abgesagt'}

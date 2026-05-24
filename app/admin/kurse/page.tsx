@@ -49,7 +49,8 @@ const emptyForm = {
   duration_min: 75, location: '', description: '',
   bring_along: '', difficulty: 'Alle Level',
   max_spots: 12, total_units: 10,
-  date_start: '', date_end: '', is_single: false
+  date_start: '', date_end: '', is_single: false,
+  is_free: false, image_url: '',
 }
 
 export default function AdminKursePage() {
@@ -90,6 +91,7 @@ export default function AdminKursePage() {
   const [previewDates, setPreviewDates] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const supabase = createClient()
 
@@ -155,6 +157,8 @@ export default function AdminKursePage() {
       difficulty: course.difficulty || 'Alle Level', max_spots: course.max_spots,
       total_units: course.total_units, date_start: course.date_start,
       date_end: course.date_end, is_single: course.is_single,
+      is_free: course.is_free || false,
+      image_url: course.image_url || '',
     })
     setShowForm(true)
   }
@@ -179,6 +183,8 @@ export default function AdminKursePage() {
       date_start: form.date_start,
       date_end: form.date_end || form.date_start,
       is_single: form.is_single, is_active: true,
+      is_free: form.is_free,
+      image_url: form.image_url || null,
     }
 
     if (editCourse) {
@@ -202,6 +208,8 @@ export default function AdminKursePage() {
           max_spots: courseData.max_spots,
           duration_min: courseData.duration_min,
           time_start: courseData.time_start,
+          is_free: courseData.is_free,
+          image_url: courseData.image_url,
         }).eq('id', editCourse.id)
         // Zukünftige Sessions: Uhrzeit + Dauer aktualisieren
         const today = new Date().toISOString().split('T')[0]
@@ -1264,6 +1272,42 @@ export default function AdminKursePage() {
                 <input type="checkbox" checked={form.is_single} readOnly className="w-5 h-5" />
                 <span className="text-sm">Einzelne Stunde</span>
               </label>
+              <label className="flex items-center gap-3 card cursor-pointer" onClick={() => setForm({...form, is_free: !form.is_free})}>
+                <input type="checkbox" checked={form.is_free} readOnly className="w-5 h-5" />
+                <span className="text-sm">
+                  Kostenlos <span className="text-yoga-text/50">(kein Credit nötig — z.B. Charity Yoga)</span>
+                </span>
+              </label>
+              {/* Bild-Upload — sinnvoll v.a. bei is_free, aber für jeden Kurs verfügbar */}
+              <div>
+                <label className="field-label">Bild (optional)</label>
+                {form.image_url && (
+                  <div className="mb-2 flex items-center gap-3">
+                    <img src={form.image_url} alt="Vorschau" className="w-20 h-20 rounded-yoga object-cover border border-yoga-border" />
+                    <button type="button" className="btn-secondary text-xs"
+                      onClick={() => setForm({...form, image_url: ''})}>
+                      Entfernen
+                    </button>
+                  </div>
+                )}
+                <input className="field-input text-sm" type="file" accept="image/jpeg,image/png,image/webp"
+                  disabled={uploadingImage}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]; if (!file) return
+                    if (file.size > 5 * 1024 * 1024) { alert('Bild zu groß (max 5 MB)'); return }
+                    setUploadingImage(true)
+                    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+                    const path = `${editCourse?.id || 'new'}-${Date.now()}.${ext}`
+                    const { error: upErr } = await supabase.storage.from('course-images').upload(path, file, { upsert: true })
+                    if (upErr) { alert('Upload-Fehler: ' + upErr.message); setUploadingImage(false); return }
+                    const { data: urlData } = supabase.storage.from('course-images').getPublicUrl(path)
+                    setForm({...form, image_url: urlData.publicUrl})
+                    setUploadingImage(false)
+                    e.target.value = ''
+                  }} />
+                {uploadingImage && <p className="text-xs text-yoga-text/50 mt-1">Wird hochgeladen…</p>}
+                <p className="text-xs text-yoga-text/50 mt-1">JPG/PNG/WebP · max 5 MB · wird als kleines Foto neben der Stunde angezeigt</p>
+              </div>
               {!form.is_single && (
                 <div>
                   <label className="field-label">Wochentag *</label>

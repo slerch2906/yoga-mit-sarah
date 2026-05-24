@@ -125,10 +125,12 @@ export default function SessionDetailPage() {
   }
 
   async function handleBook() {
-    if (!bestCredit) return
+    const isCharity = !!(session as any)?.course?.is_free
+    // Charity-Stunde: kein Credit nötig. Sonst: Credit muss da sein.
+    if (!isCharity && !bestCredit) return
     const user = await getCurrentUser()
-    // Vor dem Buchen: Wartelisten-Konflikt-Check
-    const conflicts = await checkWaitlistConflicts(user!.id)
+    // Wartelisten-Konflikt-Check NUR wenn ein Credit verwendet wird (= nicht charity)
+    const conflicts = isCharity ? [] : await checkWaitlistConflicts(user!.id)
     if (conflicts.length > 0 && !showWaitlistConflict) {
       // Modal anzeigen, User muss bestätigen
       setConflictingWaitlists(conflicts)
@@ -162,28 +164,36 @@ export default function SessionDetailPage() {
     const { data: existingBooking } = await supabase.from('bookings')
       .select('*').eq('session_id', id).eq('user_id', user!.id).maybeSingle()
 
-    // Smart Credit-Picker (Sarah-Regel 2026-05-22):
-    //   1. Course-Credit zuerst probieren (mit minutengenauem 10d-/8d-Fenster-Check)
-    //   2. Falls Fenster nicht passt: Fallback auf Single/Tenpack/Quartal
-    //   3. Falls weder noch → Fehlermeldung
-    const pick = await selectCreditForBooking(supabase, user!.id, id as string, session!.date, session!.time_start)
-    if (!pick.ok) {
-      alert(pick.message)
-      setActionLoading(false)
-      return
+    let chosenCreditId: string | null = null
+    let originSessionId: string | null = null
+    let pickUsedModel: string | null = null
+    if (!isCharity) {
+      // Smart Credit-Picker (Sarah-Regel 2026-05-22):
+      //   1. Course-Credit zuerst probieren (mit minutengenauem 10d-/8d-Fenster-Check)
+      //   2. Falls Fenster nicht passt: Fallback auf Single/Tenpack/Quartal
+      //   3. Falls weder noch → Fehlermeldung
+      const pick = await selectCreditForBooking(supabase, user!.id, id as string, session!.date, session!.time_start)
+      if (!pick.ok) {
+        alert(pick.message)
+        setActionLoading(false)
+        return
+      }
+      chosenCreditId = pick.creditId
+      originSessionId = pick.originSessionId
+      pickUsedModel = pick.usedModel
     }
-    const chosenCreditId = pick.creditId
-    const originSessionId = pick.originSessionId
+    // Bei Charity: chosenCreditId bleibt null (bookings.credit_id ist NULLABLE)
 
     // Buchungstyp: 'course' wenn der Yogi entweder
     //   a) einen Course-Credit des EIGENEN Kurses verwendet, ODER
     //   b) im Kurs der Session enrolled ist (egal welcher Credit bezahlt).
     // Sonst 'single' (Drop-In in fremden Kurs mit Punktekarte/Guthaben-Credit).
+    // Charity (is_free): IMMER 'single' — kein Kurs-Block, keine Aggregation.
     const sessCourseId = (session as any)?.course_id
     const { data: enrolledHere } = await supabase.from('enrollments')
       .select('id').eq('user_id', user!.id).eq('course_id', sessCourseId).maybeSingle()
-    const usedIsCourseModel = pick.usedModel === 'course'
-    const bookingType = (enrolledHere || usedIsCourseModel) ? 'course' : 'single'
+    const usedIsCourseModel = pickUsedModel === 'course'
+    const bookingType = isCharity ? 'single' : ((enrolledHere || usedIsCourseModel) ? 'course' : 'single')
 
     let error = null
     if (existingBooking) {
@@ -387,12 +397,38 @@ export default function SessionDetailPage() {
           className="flex items-center gap-1 text-sm text-yoga-text/60 mb-2.5 hover:opacity-80">
           <i className="ti ti-arrow-left" /> Zurück
         </button>
-        <h2 className="text-lg font-bold mb-1">
-          {course?.name}
-          {(session as any).origin && (
-            <span className="text-yoga-text font-semibold"> · Ersatzstunde</span>
-          )}
-        </h2>
+        {/* Charity / Bild — kleines Foto links neben Titel (Variante A) */}
+        {course?.image_url && (
+          <div className="flex items-start gap-3 mb-2">
+            <img src={course.image_url} alt="" className="w-16 h-16 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-bold mb-1">
+                {course?.name}
+                {(session as any).origin && (
+                  <span className="text-yoga-text font-semibold"> · Ersatzstunde</span>
+                )}
+              </h2>
+              {course?.is_free && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-xs font-semibold">
+                  🆓 Kostenlos
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+        {!course?.image_url && (
+          <h2 className="text-lg font-bold mb-1">
+            {course?.name}
+            {(session as any).origin && (
+              <span className="text-yoga-text font-semibold"> · Ersatzstunde</span>
+            )}
+            {course?.is_free && (
+              <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-xs font-semibold align-middle">
+                🆓 Kostenlos
+              </span>
+            )}
+          </h2>
+        )}
         <p className="text-sm text-yoga-text/55 mb-2">
           {new Date(session.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · {session.time_start?.slice(0,5)} Uhr · {session.duration_min} min
         </p>
@@ -418,6 +454,26 @@ export default function SessionDetailPage() {
           <span className="inline-block mt-2 text-xs px-2 py-1 rounded-full bg-yoga-gray text-yoga-text/50 font-semibold">
             Diese Stunde ist bereits vergangen
           </span>
+        )}
+        {/* Teilen-Button — vor allem für Charity-Stunden hilfreich (Sarah-Wunsch 2026-05-24) */}
+        {!past && (
+          <button onClick={async () => {
+            const shareText = `${course?.name || 'Yoga-Stunde'} · ${new Date(session.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · ${session.time_start?.slice(0,5)} Uhr${course?.is_free ? ' — kostenlos!' : ''}`
+            const shareUrl = typeof window !== 'undefined' ? window.location.href : ''
+            if (typeof navigator !== 'undefined' && (navigator as any).share) {
+              try {
+                await (navigator as any).share({ title: course?.name || 'Yoga', text: shareText, url: shareUrl })
+              } catch (e) { /* user cancelled */ }
+            } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+              try {
+                await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`)
+                alert('Link kopiert — kannst du jetzt in WhatsApp oder einer anderen App einfügen.')
+              } catch (e) { alert('Teilen nicht verfügbar') }
+            }
+          }}
+            className="mt-2 inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-full bg-yoga-gray hover:bg-yoga-card text-yoga-text border border-yoga-border">
+            <i className="ti ti-share" /> Teilen
+          </button>
         )}
       </div>
 
@@ -531,8 +587,9 @@ export default function SessionDetailPage() {
         {/* NICHT ANGEMELDET + KEIN WARTELISTENEINTRAG */}
         {!past && !session.is_cancelled && !myBooking && !myWaitlist && (
           <>
+            {/* Charity-Stunde (is_free): brauchst keinen Credit. Treat als Pseudo-"hat Credit". */}
             {/* Kurs gesperrt für externe Buchungen */}
-            {!course?.is_open && freeSpots > 0 && freeCredits > 0 && (
+            {!course?.is_open && freeSpots > 0 && (freeCredits > 0 || course?.is_free) && (
               <div className="bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga p-4 mb-4">
                 <p className="text-sm font-bold text-yoga-amber-text mb-1">
                   <i className="ti ti-lock mr-1" /> Kurs noch nicht freigegeben
@@ -542,7 +599,14 @@ export default function SessionDetailPage() {
                 </p>
               </div>
             )}
-            {course?.is_open && freeSpots > 0 && freeCredits > 0 ? (
+            {course?.is_free && freeSpots > 0 && course?.is_open && (
+              <div className="bg-green-50 border border-green-200 rounded-yoga p-3 mb-4">
+                <p className="text-sm text-green-800 leading-relaxed">
+                  <span className="font-bold">🆓 Kostenlose Stunde</span> — kein Credit nötig. Einfach anmelden und teilnehmen.
+                </p>
+              </div>
+            )}
+            {course?.is_open && freeSpots > 0 && (freeCredits > 0 || course?.is_free) ? (
               <>
                 {within3h ? (
                   <>

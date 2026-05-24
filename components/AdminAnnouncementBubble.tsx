@@ -17,16 +17,20 @@ const FALLBACK_AVATAR = 'https://yogamitsarah.me/wp-content/uploads/2025/09/Logo
 
 export default function AdminAnnouncementBubble() {
   const [message, setMessage] = useState<string | null>(null)
+  const [linkUrl, setLinkUrl] = useState<string | null>(null)
+  const [linkLabel, setLinkLabel] = useState<string>('Jetzt anschauen')
   const [avatarSrc, setAvatarSrc] = useState('/sarah.jpg')
 
   useEffect(() => {
     const supabase = createClient()
     supabase.from('admin_announcement')
-      .select('message, is_active')
+      .select('message, is_active, link_url, link_label')
       .eq('id', 1).maybeSingle()
       .then(({ data }) => {
         if (data?.is_active && data?.message?.trim()) {
           setMessage(data.message.trim())
+          if (data.link_url) setLinkUrl(data.link_url)
+          if (data.link_label) setLinkLabel(data.link_label)
         }
       })
   }, [])
@@ -58,6 +62,12 @@ export default function AdminAnnouncementBubble() {
             <p className="text-sm text-yoga-text/85 leading-snug">
               {message}
             </p>
+            {linkUrl && (
+              <a href={linkUrl}
+                className="inline-block mt-2 text-xs font-semibold px-3 py-1.5 rounded-full bg-yoga-text text-white hover:opacity-90">
+                {linkLabel}
+              </a>
+            )}
           </div>
         </div>
       </div>

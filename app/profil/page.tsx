@@ -294,6 +294,9 @@ export default function ProfilPage() {
   const [cronHealth, setCronHealth] = useState<{ active: boolean; last_status: string; minutes_ago: number } | null>(null)
   // Erweiterter System-Health (Sarah-Wunsch 2026-05-23)
   const [systemHealth, setSystemHealth] = useState<any>(null)
+  // Sarah-Wunsch 2026-05-24: Email-Fehler-Details + Erledigt-Markierung
+  const [showFailuresModal, setShowFailuresModal] = useState(false)
+  const [emailFailures, setEmailFailures] = useState<any[]>([])
   const [showProtocol, setShowProtocol] = useState(false)
   const [protocolItems, setProtocolItems] = useState<any[]>([])
   const [loadingProtocol, setLoadingProtocol] = useState(false)
@@ -585,14 +588,24 @@ export default function ProfilPage() {
                 </span>
               </div>
 
-              {/* 3. Email-Failures (7 Tage) — kritisch wenn > 0 */}
+              {/* 3. Email-Failures (7 Tage) — klickbar wenn > 0 */}
               <div className="flex items-center justify-between">
                 <span className="text-yoga-text/60">Email-Fehler (7d)</span>
                 {(() => {
                   const f = systemHealth?.failures_7d ?? null
                   if (f === null) return <span className="text-xs text-yoga-text/40">…</span>
                   if (f === 0) return <span className="text-xs text-green-700">✅ keine</span>
-                  return <span className="text-xs text-yoga-red-text">❌ {f} fehlgeschlagen</span>
+                  // Klickbar — öffnet Modal mit Details
+                  return (
+                    <button onClick={async () => {
+                      const { data } = await supabase.rpc('list_email_failures' as any)
+                      setEmailFailures((data as any[]) || [])
+                      setShowFailuresModal(true)
+                    }}
+                      className="text-xs text-yoga-red-text underline cursor-pointer hover:opacity-80">
+                      ❌ {f} fehlgeschlagen — Details
+                    </button>
+                  )
                 })()}
               </div>
 
@@ -772,6 +785,60 @@ export default function ProfilPage() {
                     </a>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Email-Fehler Detail-Modal (Sarah-Wunsch 2026-05-24) — öffnet
+                sich vom System-Status-Card-Klick aus. Zeigt Empfänger,
+                Betreff, Fehler-Text + Button "Als erledigt markieren" das
+                admin_notifications.read=true setzt. get_system_health zählt
+                nur read=false → ❌ verschwindet sofort aus System-Status. */}
+            {showFailuresModal && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay" onClick={() => setShowFailuresModal(false)}>
+                <div className="bg-yoga-card w-full max-w-md mx-auto rounded-t-2xl p-5 pb-10 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-bold">Email-Fehler (letzte 7 Tage)</h3>
+                    <button onClick={() => setShowFailuresModal(false)} className="text-yoga-text/40 border-0 bg-transparent cursor-pointer">
+                      <i className="ti ti-x text-xl" />
+                    </button>
+                  </div>
+                  {emailFailures.length === 0 ? (
+                    <p className="text-sm text-yoga-text/60 text-center py-4">Keine offenen Fehler.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {emailFailures.map(f => (
+                        <div key={f.id} className="card text-xs space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-yoga-red-text">
+                              <i className="ti ti-mail-x mr-1" />Zustellung gescheitert
+                            </span>
+                            <span className="text-yoga-text/40">
+                              {new Date(f.created_at).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}
+                            </span>
+                          </div>
+                          <div><span className="text-yoga-text/50">An:</span> <span className="font-mono">{f.recipient}</span></div>
+                          <div><span className="text-yoga-text/50">Betreff:</span> {f.subject}</div>
+                          <div className="bg-yoga-red-bg/40 rounded p-2 text-yoga-red-text text-[11px] leading-snug">
+                            {f.status > 0 && <span className="font-semibold">HTTP {f.status}: </span>}
+                            {f.error}
+                          </div>
+                          <button onClick={async () => {
+                            await supabase.rpc('acknowledge_email_failure' as any, { failure_id: f.id })
+                            setEmailFailures(prev => prev.filter(x => x.id !== f.id))
+                            const { data: h } = await supabase.rpc('get_system_health')
+                            setSystemHealth(h)
+                          }}
+                            className="w-full btn-ghost text-xs py-1.5 mt-1">
+                            <i className="ti ti-check mr-1" />Als erledigt markieren
+                          </button>
+                        </div>
+                      ))}
+                      <p className="text-[10px] text-yoga-text/40 text-center pt-2 leading-snug">
+                        „Als erledigt" entfernt den Eintrag aus dem System-Status, behält ihn aber im Audit-Log.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </>

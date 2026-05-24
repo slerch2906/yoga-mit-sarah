@@ -275,6 +275,30 @@ export default function MeinePage() {
                       </span>
                     </div>
                   )}
+                  {/* Sarah-Wunsch 2026-05-24: Yogi-Range-Hinweis wenn er nur in
+                      einem Teil des Kurses teilnimmt (Welle-48-Feature:
+                      enrolled_from_unit / enrolled_until_unit). Zeige Hinweis
+                      sobald seine Range vom Gesamt-Kurs abweicht. */}
+                  {(() => {
+                    if (sessions.length === 0) return null
+                    const sorted = [...sessions].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+                    const userStart = sorted[0]?.date
+                    const userEnd = sorted[sorted.length - 1]?.date
+                    const courseStart = enrol.course?.date_start
+                    const courseEnd = enrol.course?.date_end
+                    if (!userStart || !userEnd || !courseStart || !courseEnd) return null
+                    if (userStart === courseStart && userEnd === courseEnd) return null
+                    return (
+                      <div className="flex items-start gap-1.5 text-yoga-amber-text font-semibold">
+                        <i className="ti ti-user-check mt-0.5" />
+                        <span>
+                          Du nimmst teil vom {new Date(userStart).toLocaleDateString('de-DE', { day:'numeric', month:'short' })}
+                          {' bis '}
+                          {new Date(userEnd).toLocaleDateString('de-DE', { day:'numeric', month:'short', year:'numeric' })}
+                        </span>
+                      </div>
+                    )
+                  })()}
                 </div>
                 <div className="h-1 bg-yoga-border rounded-full mb-1">
                   <div className="h-full bg-yoga-text/40 rounded-full"

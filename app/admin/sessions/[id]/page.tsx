@@ -457,7 +457,15 @@ export default function AdminSessionPage() {
             <button
               onClick={async () => {
                 const linkUrl = `/kurse/${id}`
-                const message = `Diese Woche: ${session.course.name} am ${new Date(session.date).toLocaleDateString('de-DE', { weekday:'long', day:'numeric', month:'long' })} um ${session.time_start?.slice(0,5)} Uhr — kostenlos!`
+                // Neutrale Ankündigung — egal ob in 2 Tagen oder in 5 Wochen.
+                // Datum aus session.date, Jahr nur wenn nicht aktuelles Jahr.
+                const sessionDate = new Date(session.date)
+                const isThisYear = sessionDate.getFullYear() === new Date().getFullYear()
+                const dateFormatted = sessionDate.toLocaleDateString('de-DE',
+                  isThisYear
+                    ? { weekday:'long', day:'numeric', month:'long' }
+                    : { weekday:'long', day:'numeric', month:'long', year:'numeric' })
+                const message = `${session.course.name} am ${dateFormatted} um ${session.time_start?.slice(0,5)} Uhr — kostenlos!`
                 const { error } = await supabase.from('admin_announcement')
                   .update({
                     message, is_active: true,

@@ -115,10 +115,8 @@ export default function YogiCreditExpiryBanner() {
   return (
     <div className="px-4 pt-3 space-y-2">
       {reminders.map(r => (
-        <div key={r.id}
-          className={`card border-l-4 ${r.kind === 'alert' ? 'border-l-yoga-red-text' : 'border-l-yoga-amber-text'}`}>
-          <p className={`text-sm font-semibold flex items-center gap-1.5 ${r.kind === 'alert' ? 'text-yoga-red-text' : 'text-yoga-amber-text'}`}>
-            <i className={`ti ${r.kind === 'alert' ? 'ti-alert-circle' : 'ti-clock-exclamation'}`} />
+        <div key={r.id} className="card">
+          <p className={`text-sm font-semibold ${r.kind === 'alert' ? 'text-yoga-red-text' : 'text-yoga-amber-text'}`}>
             {r.kind === 'alert' ? 'Achtung — heute' : 'Hinweis'}
           </p>
           <p className="text-sm text-yoga-text/80 mt-0.5 leading-snug">{r.text}</p>

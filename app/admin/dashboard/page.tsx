@@ -40,6 +40,8 @@ export default function AdminDashboard() {
   const [selectedSession, setSelectedSession] = useState<any>(null)
   const [sessionBookings, setSessionBookings] = useState<any[]>([])
   const [showDashAddYogi, setShowDashAddYogi] = useState(false)
+  // Sarah-Wunsch 2026-05-25: 3h-Frist-Modal auch im Dashboard (gleiches Pattern wie /admin/sessions/[id])
+  const [cancelChoice, setCancelChoice] = useState<{ bookingId: string; sessionId: string; within3h: boolean } | null>(null)
   const [dashYogiSearch, setDashYogiSearch] = useState('')
   const [dashYogiResults, setDashYogiResults] = useState<any[]>([])
   const [dashAddingYogi, setDashAddingYogi] = useState(false)
@@ -169,23 +171,37 @@ export default function AdminDashboard() {
   }
 
   async function cancelBookingForYogi(bookingId: string, creditId: string | null, sessionId: string) {
-    if (!confirm('Yogi aus dieser Stunde austragen und Credit zurückgeben?')) return
+    // Sarah-Wunsch 2026-05-25: 3h-Frist-Auswahl als Modal (statt confirm).
+    // Session-Zeit frisch aus DB, damit der Check auch bei stale state stimmt.
+    const { data: freshSession } = await supabase.from('sessions')
+      .select('date, time_start').eq('id', sessionId).single()
+    let within3h = false
+    if (freshSession) {
+      const sessionStart = new Date(`${freshSession.date}T${freshSession.time_start}`).getTime()
+      within3h = (sessionStart - Date.now()) <= 3 * 60 * 60 * 1000 && sessionStart > Date.now()
+    }
+    setCancelChoice({ bookingId, sessionId, within3h })
+  }
+
+  async function confirmCancelBooking(creditReturned: boolean) {
+    if (!cancelChoice) return
+    const { bookingId, sessionId, within3h } = cancelChoice
+    const cancelLate = !creditReturned
+    setCancelChoice(null)
 
     await supabase.from('bookings').update({
-      status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false
+      status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: cancelLate
     }).eq('id', bookingId)
 
     // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
+    // cancel_late=true verhindert die Rueckbuchung (Credit verfaellt)
 
     await supabase.from('audit_log').insert({
       action: 'booking_cancelled_by_admin',
-      details: { booking_id: bookingId, session_id: sessionId }
+      details: { booking_id: bookingId, session_id: sessionId, credit_returned: creditReturned, within_3h: within3h }
     })
 
     // Sarah-Regel 2026-05-23: zentraler Helper mit 90-Min-Cutoff.
-    // > 90 Min: erster Waitlist-Yogi wird auto-promoted (alte Logic).
-    // ≤ 90 Min: alle Waitlist-Yogis kriegen Auswahl-Mail mit Token.
-    // Notify-Subscribers werden in beiden Fällen informiert.
     try { await promoteWaitlistOrOfferLate(supabase, sessionId) } catch(e) { console.error('promote:', e) }
 
     // Reload session detail
@@ -508,6 +524,48 @@ export default function AdminDashboard() {
       )}
 
       <div className="px-4 py-4">
+
+        {/* Cancel-Booking Modal — Sarah-Wunsch 2026-05-25: 3h-Frist Auswahl */}
+        {cancelChoice && (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-end modal-overlay">
+            <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10">
+              {cancelChoice.within3h ? (
+                <>
+                  <h3 className="text-base font-bold mb-2">Stunde beginnt in weniger als 3 Stunden</h3>
+                  <p className="text-sm text-yoga-text/70 mb-3 leading-snug">
+                    Der Platz wird in beiden Fällen freigegeben und der Warteliste angeboten.
+                    Wähle, was mit dem Credit passieren soll:
+                  </p>
+                  <div className="space-y-2">
+                    <button onClick={() => confirmCancelBooking(true)}
+                      className="w-full btn-primary text-sm">
+                      Credit zurückbuchen
+                    </button>
+                    <button onClick={() => confirmCancelBooking(false)}
+                      className="w-full text-sm bg-yoga-amber-bg text-yoga-amber-text border-0 rounded-full px-4 py-2.5 font-semibold cursor-pointer">
+                      Credit verfällt (z.B. WhatsApp-Abmeldung)
+                    </button>
+                    <button onClick={() => setCancelChoice(null)}
+                      className="w-full btn-secondary text-sm">Abbrechen</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-base font-bold mb-2">Yogi austragen?</h3>
+                  <p className="text-sm text-yoga-text/70 mb-4 leading-snug">
+                    Der Credit wird zurückgebucht. Platz wird der Warteliste angeboten.
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={() => setCancelChoice(null)}
+                      className="flex-1 btn-secondary text-sm">Abbrechen</button>
+                    <button onClick={() => confirmCancelBooking(true)}
+                      className="flex-1 btn-primary text-sm">Austragen</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Session Detail Modal */}
         {selectedSession && !showCancelForm && (

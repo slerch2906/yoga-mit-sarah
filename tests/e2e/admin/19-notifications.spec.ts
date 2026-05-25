@@ -387,13 +387,21 @@ test.describe('[E2E] Welle E: Yogi-Banner + Dashboard-Guthaben-Aufgabe', () => {
 test.describe('[E2E] Welle D: Dedup-Fix + max_spots-Promote + Guthaben-Sektion', () => {
   test('fn_notify_refund_pending: Dedup-Check verhindert Doppel-Notifications', async () => {
     const db = getServiceClient()
-    // Real-DB-Test: aktuelle DB hat nach Cleanup 0 unread. Nach Cron-Run
-    // sollten keine NEUEN refund_pending fuer alte responses entstehen.
-    const { count } = await db.from('admin_notifications')
-      .select('id', { count: 'exact', head: true })
+    // Dedup-Check: pro (admin, request_id) darf es maximal 1 unread refund_pending
+    // geben — wenn es Duplikate fuer dieselbe request_id gaebe, waere die Dedup
+    // im Trigger kaputt. Wir gruppieren manuell.
+    const { data, error } = await db.from('admin_notifications')
+      .select('id, details')
       .eq('read', false).eq('type', 'refund_pending')
-    // 0 erwartet (Migration hat alle als read markiert, Trigger erzeugt keine neuen)
-    expect(count).toBeLessThanOrEqual(3) // Toleranz fuer parallele E2E-Tests
+    expect(error?.message || '').toBe('')
+    const byResponse = new Map<string, number>()
+    for (const row of (data || []) as any[]) {
+      const rid = row.details?.response_id ?? `__no_response__${row.id}`
+      byResponse.set(rid, (byResponse.get(rid) ?? 0) + 1)
+    }
+    for (const [rid, n] of byResponse.entries()) {
+      expect(n, `Dedup verletzt fuer response ${rid}: ${n} unread refund_pending`).toBeLessThanOrEqual(1)
+    }
   })
 
   test('app/admin/kurse: max_spots-Erhoehung triggert promoteWaitlistOrOfferLate-Loop', async () => {

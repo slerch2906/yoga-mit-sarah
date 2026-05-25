@@ -116,7 +116,7 @@ test.describe('[E2E-SYS] BLOCK A: Auth + Registrierung + AGB + Onboarding', () =
 
   test('A5 — Login-Recovery-Hinweis vorhanden (Sarah-Wunsch Welle A)', () => {
     const login = read('app/login/page.tsx')
-    expect(login).toMatch(/E-Mail-Adresse vergessen\? Wende dich an Sarah/)
+    expect(login).toMatch(/Email vergessen\? Wende dich an Sarah/)
   })
 })
 

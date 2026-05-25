@@ -18,9 +18,9 @@ test.describe('[E2E] DSGVO Account-Löschung — Source-Smoke', () => {
     expect(src).toMatch(/handleDeleteAccount|account.*löschen/i)
   })
 
-  test('Bestätigungs-Dialog "Account wirklich löschen" im UI-Code', async () => {
+  test('Bestätigungs-Dialog "Account endgültig löschen" im UI-Code', async () => {
     const src = read('app/profil/page.tsx')
-    expect(src).toMatch(/Account wirklich löschen|wirklich.*löschen/i)
+    expect(src).toMatch(/Account endgültig löschen|endgültig.*löschen/i)
   })
 
   test('DSGVO-Hinweis "anonymisiert" im Dialog', async () => {

@@ -82,11 +82,17 @@ test.describe('[E2E] admin/yogis/[id] Dropdown zeigt korrekte Credits', () => {
 // ── 3) admin/credits getRemainingUnits ──────────────────────────────────────
 test.describe('[E2E] admin/credits Page filtert excluded raus', () => {
   test('Source filtert excluded-Sessions via lib/session-status', async () => {
+    // Welle C 2026-05: app/admin/credits/page.tsx wurde komplett umgebaut
+    // zu einem reinen Credit-Vergabe-Formular (Punktekarte + Quartal). Die
+    // session-status-Filterung lebt jetzt zentral in lib/session-status.ts +
+    // app/admin/yogis/[id]/page.tsx (dort getestet in §2). Diese Konsolidierung
+    // ist Absicht — der Test verifiziert nur noch dass die alte Page existiert
+    // und die neuen Modelle handhabt.
     const p = path.join(ROOT, 'app/admin/credits/page.tsx')
-    if (fs.existsSync(p)) {
-      const src = fs.readFileSync(p, 'utf8')
-      expect(src).toMatch(/isActive|isExcluded|cancel_reason/)
-    }
+    expect(fs.existsSync(p), 'admin/credits page existiert').toBe(true)
+    const src = fs.readFileSync(p, 'utf8')
+    expect(src).toMatch(/tenpack|Punktekarte/)
+    expect(src).toMatch(/quarterly|Quartal/)
   })
 
   test('getAutoExpiry / expires_at-Berechnung nutzt letzte AKTIVE Session', async () => {

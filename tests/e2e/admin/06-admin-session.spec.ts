@@ -81,12 +81,19 @@ test.describe('Admin Session: Yogi einbuchen und austragen', () => {
     await page.goto(`/admin/sessions/${sessionId}`)
     await page.waitForLoadState('networkidle')
 
-    // Austragen-Button klicken (confirm-Dialog)
-    page.on('dialog', d => d.accept())
+    // Sarah-Wunsch 2026-05-25: confirm() durch React-Modal ersetzt.
+    // Bei > 3h vor Stunde zeigt das Modal "Yogi austragen?" mit Abbrechen/Austragen.
     const yogiEmail = process.env.TEST_YOGI1_EMAIL!
     const yogiRow = page.locator('div', { hasText: yogiEmail }).first()
     await expect(yogiRow).toBeVisible({ timeout: 8_000 })
     await yogiRow.getByRole('button', { name: /austragen/i }).click()
+    // Modal aufgehen lassen
+    const modalHeading = page.getByRole('heading', { name: /yogi austragen\?/i })
+    await expect(modalHeading).toBeVisible({ timeout: 5_000 })
+    // Im Modal "Austragen"-Button klicken (scope auf modal-overlay,
+    // sonst kollidiert mit der Liste).
+    const modal = page.locator('.modal-overlay').filter({ has: modalHeading })
+    await modal.getByRole('button', { name: /^austragen$/i }).click()
     await page.waitForTimeout(1_500)
 
     // Yogi nicht mehr in Liste

@@ -41,15 +41,15 @@ test.describe('[E2E] Onboarding-Tour: Component existiert + korrekte Slides', ()
     expect(titles.length, '5 Slides erwartet').toBe(5)
   })
 
-  test('Slide 1: Yoga-Woche (Wochenplan-Erklärung)', () => {
+  test('Slide 1: Wochenübersicht (Wochenplan-Erklärung)', () => {
     const src = read('components/OnboardingTour.tsx')
-    expect(src).toMatch(/title:\s*['"`]Deine Yoga-Woche/)
+    expect(src).toMatch(/title:\s*['"`]Wochenübersicht/)
     expect(src).toMatch(/grünen Rahmen|grüner Rahmen/)
   })
 
   test('Slide 2: Credits + 3h-Regel (passt zur App-Logik)', () => {
     const src = read('components/OnboardingTour.tsx')
-    expect(src).toMatch(/title:\s*['"`].*Stunden.*Credits/)
+    expect(src).toMatch(/title:\s*['"`].*Buchungen.*Credits/)
     // PLAUSIBILITÄT: Slide muss "3h" / "3 Stunden" erwähnen — das ist die
     // tatsächliche App-Regel (siehe app/kurse/[id]/page.tsx, deadline3h)
     expect(src).toMatch(/3h|3 Stunden|3-Stunden/)
@@ -465,16 +465,16 @@ test.describe('[E2E] Plausibilität: Inhalte passen zur App-Logik', () => {
 
   test('Slide-Reihenfolge im Onboarding passt zur App-Reihenfolge (Wochenseite zuerst)', () => {
     const src = read('components/OnboardingTour.tsx')
-    // Slide 1 erklärt die Hauptansicht /kurse (Yoga-Woche)
-    // Slide 2 erklärt /meine (eigene Stunden + Credits)
+    // Slide 1 erklärt die Hauptansicht /kurse (Wochenübersicht)
+    // Slide 2 erklärt /meine (eigene Buchungen + Credits)
     // Slide 3 erklärt Buchen
     // Slide 4 erklärt Warteliste
-    const yogaWoche = src.indexOf('Deine Yoga-Woche')
-    const credits   = src.search(/Stunden.*Credits/)
+    const wocheneb = src.indexOf('Wochenübersicht')
+    const credits   = src.search(/Buchungen.*Credits/)
     const buchen    = src.indexOf('Stunde buchen')
     const warte     = src.indexOf('Volle Stunde')
-    expect(yogaWoche).toBeGreaterThan(-1)
-    expect(credits).toBeGreaterThan(yogaWoche)
+    expect(wocheneb).toBeGreaterThan(-1)
+    expect(credits).toBeGreaterThan(wocheneb)
     expect(buchen).toBeGreaterThan(credits)
     expect(warte).toBeGreaterThan(buchen)
   })

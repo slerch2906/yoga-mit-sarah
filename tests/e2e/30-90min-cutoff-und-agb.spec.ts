@@ -693,7 +693,7 @@ test.describe('[E2E] AGB-Workflow: Yogi-Re-Acceptance', () => {
       await page.waitForLoadState('networkidle')
 
       // Re-Acceptance-Banner mit Label in Anführungszeichen
-      await expect(page.getByText(/Neue AGB-Version „.+" — bitte erneut bestätigen/i))
+      await expect(page.getByText(/aktualisierte AGB-Version „.+"\. Bitte lies dir die Änderungen/i))
         .toBeVisible({ timeout: 10_000 })
       // Link zur Webseite
       await expect(page.getByRole('link', { name: /yogamitsarah\.me\/agb/i })).toBeVisible()

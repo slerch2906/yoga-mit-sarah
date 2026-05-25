@@ -139,8 +139,8 @@ test.describe('[E2E] AdminAnnouncementBubble', () => {
     // Bubble-Stil: bg-white + yoga-border + center
     expect(src).toMatch(/bg-white border border-yoga-border rounded-yoga/)
     expect(src).toMatch(/text-center/)
-    // Avatar w-14
-    expect(src).toMatch(/w-14 h-14/)
+    // Avatar w-[73px] (heute auf 73px gesetzt)
+    expect(src).toMatch(/w-\[73px\] h-\[73px\]/)
     // Lädt aus DB
     expect(src).toMatch(/admin_announcement/)
     expect(src).toMatch(/is_active/)

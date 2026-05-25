@@ -21,7 +21,9 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ['Mulish', 'sans-serif'],
+        // Sarah 2026-05-25 (Datenschutz): next/font/google bundelt Mulish lokal
+        // und injected die Font als CSS-Variable --font-mulish. Fallback sans-serif.
+        sans: ['var(--font-mulish)', 'Mulish', 'sans-serif'],
       },
       borderRadius: {
         'yoga': '12px',

@@ -1,6 +1,18 @@
 import type { Metadata, Viewport } from 'next'
+import { Mulish } from 'next/font/google'
 import './globals.css'
 import UpdateBanner from '@/components/UpdateBanner'
+
+// Sarah-Wunsch 2026-05-25 (Datenschutz): Mulish lokal via Next bundlen statt
+// dynamisch von Google-CDN laden. So entsteht KEINE Browser-Verbindung zu
+// fonts.googleapis.com / fonts.gstatic.com — saubere DSGVO-Loesung ohne
+// Consent-Banner-Pflicht (LG Muenchen I, 20.01.2022, Az. 3 O 17493/20).
+const mulish = Mulish({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'],
+  display: 'swap',
+  variable: '--font-mulish',
+})
 
 export const metadata: Metadata = {
   title: 'Yoga mit Sarah',
@@ -22,11 +34,12 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="de">
+    <html lang="de" className={mulish.variable}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+        {/* Sarah-Wunsch 2026-05-25 (Datenschutz): Mulish ist jetzt via next/font/google
+            lokal gebundelt — keine externe Verbindung zu Google-Servern mehr.
+            Tabler Icons bleiben vorerst via jsdelivr-CDN (Cloudflare, USA) —
+            siehe Punkt 1.5 der Datenschutz-Analyse. */}
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
 
         {/* Apple PWA Tags */}

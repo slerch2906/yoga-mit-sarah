@@ -19,7 +19,9 @@ export default function AdminAnnouncementBubble() {
   const [message, setMessage] = useState<string | null>(null)
   const [linkUrl, setLinkUrl] = useState<string | null>(null)
   const [linkLabel, setLinkLabel] = useState<string>('Jetzt anschauen')
-  const [avatarSrc, setAvatarSrc] = useState('/sarah.jpg')
+  // Sarah-Wunsch 2026-05-25: Cache-Bust nach neuem Foto-Upload — Browser laedt
+  // sonst die alte Datei aus dem PWA/SW-Cache. Query-String aendern = neue URL = frischer Fetch.
+  const [avatarSrc, setAvatarSrc] = useState('/sarah.jpg?v=20260525b')
 
   useEffect(() => {
     const supabase = createClient()

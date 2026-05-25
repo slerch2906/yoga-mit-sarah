@@ -36,11 +36,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="de" className={mulish.variable}>
       <head>
-        {/* Sarah-Wunsch 2026-05-25 (Datenschutz): Mulish ist jetzt via next/font/google
-            lokal gebundelt — keine externe Verbindung zu Google-Servern mehr.
-            Tabler Icons bleiben vorerst via jsdelivr-CDN (Cloudflare, USA) —
-            siehe Punkt 1.5 der Datenschutz-Analyse. */}
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css" />
+        {/* Sarah-Wunsch 2026-05-25 (Datenschutz): Mulish via next/font/google lokal
+            gebundelt + Tabler Icons via globals.css lokal importiert.
+            Keine externen Font/Icon-CDN-Requests mehr. */}
 
         {/* Apple PWA Tags */}
         <meta name="mobile-web-app-capable" content="yes" />

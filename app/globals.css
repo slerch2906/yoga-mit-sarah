@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Sarah-Wunsch 2026-05-25 (Datenschutz Punkt 1.5): Tabler Icons lokal importieren
+   statt von jsdelivr-CDN (Cloudflare USA) laden. Webpack bundlet die Webfont-Dateien
+   automatisch in das App-Build, kein externer Request mehr. */
+@import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+
 :root {
   --yoga-bg:      #cfcbca;
   --yoga-text:    #443c3c;

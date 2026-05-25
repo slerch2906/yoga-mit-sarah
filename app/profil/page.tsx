@@ -7,6 +7,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { fullLogout } from '@/lib/logout'
 import { getCurrentAgbVersion, type AgbVersion } from '@/lib/agb-version'
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
+import { Email } from '@/lib/email'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -377,12 +378,14 @@ export default function ProfilPage() {
       details: { user_id: user.id, email, full_name: fullName }
     })
 
+    // 4a) Yogi-Bestaetigungs-Email VOR dem Auth-Delete senden (DSGVO Art. 12).
+    //     Muss VOR dem Auth-Delete laufen, weil danach die Email-Adresse weg ist.
+    await Email.accountDeletedYogi({ email, firstName: profile?.first_name || 'Yogi' })
+
     // 5) Email an Admin
-    await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-email`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` },
-      body: JSON.stringify({ type: 'admin_dsgvo_deletion', data: { fullName, email } })
-    }).catch(() => {})
+    // Sarah-Fix 2026-05-25: zentraler Helper statt direkter fetch — sonst fehlt
+    // x-function-secret-Header und die Edge Function antwortet 401 (Email kam nie an).
+    await Email.adminDsgvoDeletion({ fullName, email })
 
     // 6) Auth User löschen + sofort ausloggen
     // Erst lokal ausloggen (Session löschen), dann Auth-User löschen

@@ -97,4 +97,15 @@ export const Email = {
   // den 2 Jahren des Kursabbruch-Guthabens ab).
   illnessCredit: (data: { email: string; firstName: string; courseName: string; hoursCredited: number; expiresAt: string }) =>
     sendEmail('illness_credit', data),
+
+  // Sarah-Befund 2026-05-25: zentral statt direkter fetch in profil/admin —
+  // sonst fehlt x-function-secret und Edge Function antwortet 401.
+  adminDsgvoDeletion: (data: { fullName: string; email: string }) =>
+    sendEmail('admin_dsgvo_deletion', data),
+
+  // Welle DSGVO-Bestaetigung 2026-05-25: Yogi bekommt VOR dem finalen Auth-Delete
+  // eine Bestaetigungs-Mail (Art. 12 DSGVO Transparenz). Diese Mail ist die letzte
+  // Nachricht — danach wird auch die Email-Adresse aus der DB entfernt.
+  accountDeletedYogi: (data: { email: string; firstName: string }) =>
+    sendEmail('account_deleted_yogi', data),
 }

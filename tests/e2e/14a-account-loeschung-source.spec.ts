@@ -38,4 +38,39 @@ test.describe('[E2E] DSGVO Account-Löschung — Source-Smoke', () => {
     const src = read('app/profil/page.tsx')
     expect(src).toMatch(/account_deleted_dsgvo|admin_dsgvo_deletion/i)
   })
+
+  // Sarah-Befund 2026-05-25: direkter fetch zur Edge Function ohne x-function-secret
+  // hat zu 401-Fehler gefuehrt — Admin-Email kam nie an. Loesung: zentraler Email-Helper.
+  // Diese Tests verhindern Rueckfall in das direkte-fetch-Pattern.
+  test('Profil-Loeschung nutzt zentralen Email-Helper (kein direkter fetch send-email)', async () => {
+    const src = read('app/profil/page.tsx')
+    expect(src).toMatch(/Email\.adminDsgvoDeletion/)
+    // Kein direkter fetch auf send-email mehr (waere ohne x-function-secret und wuerde 401)
+    expect(src).not.toMatch(/fetch\([^)]*\/functions\/v1\/send-email/)
+  })
+
+  test('Admin-Yogi-Loeschung nutzt zentralen Email-Helper', async () => {
+    const src = read('app/admin/yogis/[id]/page.tsx')
+    expect(src).toMatch(/Email\.adminDsgvoDeletion/)
+    expect(src).not.toMatch(/fetch\([^)]*\/functions\/v1\/send-email/)
+  })
+
+  // Yogi-Bestaetigungs-Email VOR dem finalen Auth-Delete (DSGVO Art. 12)
+  test('Yogi bekommt Bestaetigungs-Email vor Auth-Delete (Profil)', async () => {
+    const src = read('app/profil/page.tsx')
+    expect(src).toMatch(/Email\.accountDeletedYogi/)
+  })
+
+  test('Yogi bekommt Bestaetigungs-Email vor Auth-Delete (Admin loescht)', async () => {
+    const src = read('app/admin/yogis/[id]/page.tsx')
+    expect(src).toMatch(/Email\.accountDeletedYogi/)
+  })
+
+  test('lib/email.ts hat neue Helper adminDsgvoDeletion + accountDeletedYogi', async () => {
+    const src = read('lib/email.ts')
+    expect(src).toMatch(/adminDsgvoDeletion:/)
+    expect(src).toMatch(/accountDeletedYogi:/)
+    expect(src).toMatch(/admin_dsgvo_deletion/)
+    expect(src).toMatch(/account_deleted_yogi/)
+  })
 })

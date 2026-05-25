@@ -176,6 +176,12 @@ export default function AdminYogiDetailPage() {
     // 3. audit_log-PII anonymisieren (Name/Email in details JSONB entfernen)
     try { await supabase.rpc('anonymize_user_audit_logs' as any, { target_user_id: id }) } catch {}
 
+    // 3a. Yogi-Bestaetigungs-Email VOR dem Auth-Delete senden (DSGVO Art. 12).
+    //     Muss VOR Schritt 4 laufen, weil danach die Email-Adresse weg ist.
+    if (email) {
+      await Email.accountDeletedYogi({ email, firstName: yogi?.first_name || 'Yogi' })
+    }
+
     // 4. Auth-User löschen → Sessions invalidiert, profile cascadet weg
     //    (audit_log user_id wird SET NULL — Compliance-Spur bleibt erhalten)
     try {
@@ -199,12 +205,9 @@ export default function AdminYogiDetailPage() {
     })
 
     // Email an Sarah: PDF im Drive manuell entfernen
-    const { data: { session: sess } } = await supabase.auth.getSession()
-    await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-email`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sess?.access_token}` },
-      body: JSON.stringify({ type: 'admin_dsgvo_deletion', data: { fullName, email } })
-    }).catch(() => {})
+    // Sarah-Fix 2026-05-25: zentraler Helper statt direkter fetch — sonst fehlt
+    // x-function-secret-Header und die Edge Function antwortet 401.
+    await Email.adminDsgvoDeletion({ fullName, email })
 
     router.push('/admin/yogis')
   }

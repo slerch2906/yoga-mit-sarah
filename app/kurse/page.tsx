@@ -190,8 +190,9 @@ export default function KursePage() {
       {/* Sarah-Nachricht (nur sichtbar wenn Admin sie aktiviert hat) */}
       <AdminAnnouncementBubble />
 
-      {/* Sarah-Wunsch 2026-05-25: Credit-Ablauf-Warnungen */}
-      <YogiCreditExpiryBanner />
+      {/* Sarah-Wunsch 2026-05-25: Credit-Ablauf-Warnungen — NUR fuer Yogis,
+          nicht fuer Admins (Admins haben i.d.R. keine eigenen Credits zu tracken) */}
+      {!profile?.is_admin && <YogiCreditExpiryBanner />}
 
       {/* Neu-Yogi-Hinweis: noch keine einzige Buchung in der Historie */}
       {isNewYogi && (

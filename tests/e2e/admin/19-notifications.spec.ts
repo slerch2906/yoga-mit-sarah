@@ -419,10 +419,13 @@ test.describe('[E2E] Welle D: Dedup-Fix + max_spots-Promote + Guthaben-Sektion',
 // komplett ueberarbeitet (nur Punktekarte + Quartal-Abo, Guthaben raus, Kurs raus).
 test.describe('[E2E] Welle C: Admin-Austragen + Quick-Credit-Form', () => {
   test('Admin-Austragen: Modal bei 3h-Frist mit Credit-Wahl', async () => {
+    // Hinweis: Welle F (2026-05-25) hat das alte confirm()-Prompt durch ein
+    // React-Modal ersetzt; UI-Texte sind jetzt "Credit zurückbuchen" /
+    // "Credit verfällt". Welle-C-Logik (within3h-Check + cancelLate) bleibt.
     const src = read('app/admin/sessions/[id]/page.tsx')
     expect(src).toMatch(/within3h\s*=\s*\(?sessionStart\s*-\s*Date\.now\(\)\)\s*<=\s*3\s*\*\s*60\s*\*\s*60\s*\*\s*1000/)
-    expect(src).toMatch(/Credit wird ZURUECKGEBUCHT/)
-    expect(src).toMatch(/Credit VERFAELLT/)
+    expect(src).toMatch(/Credit zur[üu]ckbuchen/)
+    expect(src).toMatch(/Credit verf[äa]llt/)
     expect(src).toMatch(/cancel_late:\s*cancelLate/)
   })
 
@@ -571,6 +574,145 @@ test.describe('[E2E] Restliche Email-Templates (Coverage-Check)', () => {
       expect(src).toMatch(new RegExp(`${helper}:\\s*\\(data:`))
     })
   }
+})
+
+// ── 10a-6) Welle F: heutige UI-Fixes 2026-05-25 ───────────────────────────
+// Sarah-Wunsch 2026-05-25 (Nachmittag): UI-Politur:
+//  - 3h-Modal: React-Modal mit 3 Buttons (Credit-Wahl) statt confirm()
+//  - Session-Zeit FRISCH aus DB laden (statt aus state)
+//  - Yogi-Banner: 14-Tage-Vorwarnung Quartal, 7-Tage Punktekarte (NEU),
+//    Linker Streifen + Icons ENTFERNT, X-Button + localStorage-Dismiss
+//  - Banner nur fuer Yogis (!is_admin)
+//  - Sprechblase-Avatar: w-[73px] h-[73px]
+//  - Dummy-Pille: bg-yoga-text text-white an 4 Stellen
+test.describe('[E2E] Welle F: heutige UI-Fixes', () => {
+  // 3h-Modal Refactor — sessions/[id]/page.tsx
+  test('3h-Modal sessions/[id]: cancelChoice-State + confirmCancelBooking-Funktion', async () => {
+    const src = read('app/admin/sessions/[id]/page.tsx')
+    expect(src).toMatch(/cancelChoice/)
+    expect(src).toMatch(/setCancelChoice\(\{\s*bookingId,\s*sessionId,\s*within3h\s*\}\)/)
+    expect(src).toMatch(/async function confirmCancelBooking\(creditReturned:\s*boolean\)/)
+  })
+
+  test('3h-Modal sessions/[id]: kein altes confirm()-Prompt mehr', async () => {
+    const src = read('app/admin/sessions/[id]/page.tsx')
+    expect(src).not.toMatch(/confirm\(['"]Yogi aus dieser Stunde austragen/)
+    expect(src).not.toMatch(/confirm\(['"]Yogi austragen/)
+  })
+
+  test('3h-Modal sessions/[id]: Session-Zeit FRISCH aus DB geladen', async () => {
+    const src = read('app/admin/sessions/[id]/page.tsx')
+    // cancelBookingForYogi laedt frische Session statt state zu nutzen
+    expect(src).toMatch(/freshSession/)
+    expect(src).toMatch(/from\(['"]sessions['"]\)[\s\S]{0,200}\.select\(['"]date,\s*time_start['"]\)/)
+  })
+
+  test('3h-Modal sessions/[id]: 3-Button-UI innerhalb 3h (Credit zurueck / verfaellt / Abbrechen)', async () => {
+    const src = read('app/admin/sessions/[id]/page.tsx')
+    expect(src).toMatch(/Credit zur[üu]ckbuchen/)
+    expect(src).toMatch(/Credit verf[äa]llt.{0,40}WhatsApp/)
+    expect(src).toMatch(/cancelChoice\.within3h\s*\?/)
+  })
+
+  test('3h-Modal sessions/[id]: 2-Button-UI ausserhalb 3h (Abbrechen / Austragen)', async () => {
+    const src = read('app/admin/sessions/[id]/page.tsx')
+    // Else-Branch des within3h-Conditionals
+    expect(src).toMatch(/Yogi austragen\?/)
+    expect(src).toMatch(/Credit wird zur[üu]ckgebucht/)
+  })
+
+  // 3h-Modal Refactor — dashboard/page.tsx
+  test('3h-Modal dashboard: cancelChoice-State + confirmCancelBooking-Funktion', async () => {
+    const src = read('app/admin/dashboard/page.tsx')
+    expect(src).toMatch(/cancelChoice/)
+    expect(src).toMatch(/async function confirmCancelBooking\(creditReturned:\s*boolean\)/)
+    expect(src).not.toMatch(/confirm\(['"]Yogi aus dieser Stunde austragen/)
+  })
+
+  test('3h-Modal dashboard: Session-Zeit FRISCH aus DB geladen', async () => {
+    const src = read('app/admin/dashboard/page.tsx')
+    expect(src).toMatch(/from\(['"]sessions['"]\)[\s\S]{0,200}\.select\(['"]date,\s*time_start['"]\)/)
+  })
+
+  test('3h-Modal dashboard: 3-Button-UI innerhalb 3h', async () => {
+    const src = read('app/admin/dashboard/page.tsx')
+    expect(src).toMatch(/Credit zur[üu]ckbuchen/)
+    expect(src).toMatch(/Credit verf[äa]llt.{0,40}WhatsApp/)
+    expect(src).toMatch(/cancelChoice\.within3h\s*\?/)
+  })
+
+  // YogiCreditExpiryBanner — neue Fristen + Design
+  test('Banner: Quartal-Credits haben 14-Tage-Vorwarnung', async () => {
+    const banner = read('components/YogiCreditExpiryBanner.tsx')
+    // Quartal-Branch
+    expect(banner).toMatch(/c\.model === ['"]quarterly['"]/)
+    expect(banner).toMatch(/daysToExpire\s*<=\s*14/)
+  })
+
+  test('Banner: Punktekarte (single/tenpack) hat 7-Tage-Vorwarnung', async () => {
+    const banner = read('components/YogiCreditExpiryBanner.tsx')
+    expect(banner).toMatch(/c\.model === ['"]single['"]\s*\|\|\s*c\.model === ['"]tenpack['"]/)
+    expect(banner).toMatch(/daysToExpire\s*<=\s*7/)
+    // Punktekarte-Text
+    expect(banner).toMatch(/Punktekarte/)
+  })
+
+  test('Banner: X-Button + localStorage-Dismiss', async () => {
+    const banner = read('components/YogiCreditExpiryBanner.tsx')
+    expect(banner).toMatch(/ti-x/)
+    expect(banner).toMatch(/yogi-credit-expiry-dismissed/)
+    expect(banner).toMatch(/localStorage/)
+    expect(banner).toMatch(/aria-label="Hinweis schließen"/)
+  })
+
+  test('Banner: Linker Streifen (border-l-4) ENTFERNT', async () => {
+    const banner = read('components/YogiCreditExpiryBanner.tsx')
+    expect(banner).not.toMatch(/border-l-4/)
+  })
+
+  test('Banner: Icons (ti-clock-exclamation / ti-alert-circle) ENTFERNT', async () => {
+    const banner = read('components/YogiCreditExpiryBanner.tsx')
+    expect(banner).not.toMatch(/ti-clock-exclamation/)
+    expect(banner).not.toMatch(/ti-alert-circle/)
+  })
+
+  test('Banner nur fuer Yogis: app/kurse/page.tsx prueft !profile?.is_admin', async () => {
+    const src = read('app/kurse/page.tsx')
+    expect(src).toMatch(/\{\s*!profile\?\.is_admin\s*&&\s*<YogiCreditExpiryBanner/)
+  })
+
+  // Sprechblase-Avatar
+  test('AdminAnnouncementBubble: Avatar ist w-[73px] h-[73px]', async () => {
+    const src = read('components/AdminAnnouncementBubble.tsx')
+    expect(src).toMatch(/w-\[73px\]\s+h-\[73px\]/)
+    // Alte Groessen darf es nicht mehr geben
+    expect(src).not.toMatch(/className="[^"]*\bw-14\b[^"]*\bh-14\b/)
+    expect(src).not.toMatch(/className="[^"]*\bw-20\b[^"]*\bh-20\b/)
+  })
+
+  // Dummy-Pille: bg-yoga-text text-white an 4 Stellen
+  test('Dummy-Pille in app/admin/yogis/page.tsx: bg-yoga-text text-white', async () => {
+    const src = read('app/admin/yogis/page.tsx')
+    expect(src).toMatch(/bg-yoga-text\s+text-white[^"]*"[^>]*>\s*\n?\s*Dummy/)
+    // Alte amber-Variante darf nicht mehr existieren
+    expect(src).not.toMatch(/bg-amber-100\s+text-amber-700[^"]*"[^>]*>\s*\n?\s*Dummy/)
+  })
+
+  test('Dummy-Pille in app/admin/yogis/[id]/page.tsx: bg-yoga-text text-white', async () => {
+    const src = read('app/admin/yogis/[id]/page.tsx')
+    expect(src).toMatch(/bg-yoga-text\s+text-white[\s\S]{0,80}Dummy-User/)
+  })
+
+  test('Dummy-Pille in app/admin/kurse/page.tsx: bg-yoga-text text-white (2x)', async () => {
+    const src = read('app/admin/kurse/page.tsx')
+    const matches = src.match(/bg-yoga-text\s+text-white[^"]*"[^>]*>Dummy/g) || []
+    expect(matches.length).toBeGreaterThanOrEqual(2)
+  })
+
+  test('Dummy-Pille in app/admin/sessions/[id]/page.tsx: bg-yoga-text text-white', async () => {
+    const src = read('app/admin/sessions/[id]/page.tsx')
+    expect(src).toMatch(/bg-yoga-text\s+text-white[^"]*"[^>]*>Dummy/)
+  })
 })
 
 // ── 14) Email-Failure Resilience ───────────────────────────────────────────

@@ -262,23 +262,31 @@ export default function AdminYogiDetailPage() {
         enrolled_from_unit: fromUnit, enrolled_until_unit: untilUnit,
       })
 
-      const { data: credit } = await supabase.from('credits').insert({
+      // Sarah-Befund 2026-05-25: Bug-Fix — frueher gab's '|| null' Fallback, was bei
+      // fehlgeschlagenem Credit-INSERT zu Bookings ohne credit_id fuehrte. Jetzt:
+      // wenn Credit nicht angelegt werden konnte, brechen wir sauber ab.
+      const { data: credit, error: creditErr } = await supabase.from('credits').insert({
         user_id: id, course_id: selectedCourseId, model: 'course',
         total: rangeCount, used: 0, expires_at: expiry.toISOString(),
       }).select().single()
+
+      if (creditErr || !credit?.id) {
+        alert(`Credit-Anlage fehlgeschlagen — Buchung wurde abgebrochen.\n\nDetails: ${creditErr?.message || 'Unbekannter Fehler'}\n\nBitte versuche es erneut.`)
+        return
+      }
 
       for (const s of targetSessions) {
         const { data: existing } = await supabase.from('bookings')
           .select('id').eq('session_id', s.id).eq('user_id', id).maybeSingle()
         if (existing) {
           await supabase.from('bookings').update({
-            status: 'active', credit_id: credit?.id || null,
+            status: 'active', credit_id: credit.id,
             cancelled_at: null, cancel_late: false, type: 'course',
           }).eq('id', existing.id)
         } else {
           await supabase.from('bookings').insert({
             user_id: id, session_id: s.id,
-            credit_id: credit?.id || null, type: 'course', status: 'active',
+            credit_id: credit.id, type: 'course', status: 'active',
           })
         }
       }

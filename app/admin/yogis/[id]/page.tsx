@@ -1131,7 +1131,7 @@ export default function AdminYogiDetailPage() {
               const isExpired = new Date(c.expires_at) < new Date()
               return (
                 <div key={c.id} className={`card mb-2 ${isExpired ? 'opacity-50' : ''}`}>
-                  {editingCredit?.id === c.id && c.model === 'tenpack' ? (
+                  {editingCredit?.id === c.id && (c.model === 'tenpack' || c.model === 'quarterly') ? (
                     <div>
                       <p className="text-sm font-semibold mb-2">Credits anpassen</p>
                       <p className="text-xs text-yoga-text/50 mb-2">Bereits verbraucht: {c.used}</p>
@@ -1156,10 +1156,37 @@ export default function AdminYogiDetailPage() {
                             ? `${c.used} / ${c.total} genutzt · ${Math.max(0, c.total - c.used)} frei`
                             : `${free} von ${c.total} Credits frei`}
                         </div>
-                        <div className="text-xs text-yoga-text/50 mt-0.5">
-                          {c.model === 'course' ? `Credits aus Kurs: ${c.course?.name || '—'}` : c.model === 'guthaben' ? 'Guthaben aus Kursabbruch' : c.model === 'single' ? 'Credits aus Punktekarte' : c.model === 'tenpack' ? 'Punktekarte' : 'Quartal'} ·
-                          {isExpired ? ' Abgelaufen' : ` verfällt ${new Date(c.expires_at).getFullYear() > 2090 ? 'nie' : new Date(c.expires_at).toLocaleDateString('de-DE')}`}
-                        </div>
+                        {/* Sarah-Wunsch 2026-05-25: Quartal-Label "Quartals-Credits · Q[X] [Jahr]" mit Datumsrange (analog zu /meine) */}
+                        {(() => {
+                          const isQuarterly = c.model === 'quarterly'
+                          const exp = new Date(c.expires_at)
+                          const fmtDay = (d: Date) => d.toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })
+                          const fmtShort = (d: Date) => d.toLocaleDateString('de-DE', { day:'numeric', month:'long' })
+                          if (isQuarterly) {
+                            const qNumber = Math.floor(exp.getMonth() / 3) + 1
+                            const qYear = exp.getFullYear()
+                            const qStart = c.valid_from ? new Date(c.valid_from) : new Date(qYear, (qNumber - 1) * 3, 1)
+                            return <>
+                              <div className="text-xs text-yoga-text/50 mt-0.5">
+                                Quartals-Credits · Q{qNumber} {qYear}
+                              </div>
+                              <div className="text-xs text-yoga-text/55 mt-0.5">
+                                Gültig vom {fmtShort(qStart)} bis {fmtDay(exp)}
+                              </div>
+                              {c.valid_from && new Date(c.valid_from) > new Date() && (
+                                <div className="text-xs text-yoga-amber-text font-semibold mt-1">
+                                  Nutzbar ab {fmtDay(new Date(c.valid_from))}
+                                </div>
+                              )}
+                            </>
+                          }
+                          return (
+                            <div className="text-xs text-yoga-text/50 mt-0.5">
+                              {c.model === 'course' ? `Credits aus Kurs: ${c.course?.name || '—'}` : c.model === 'guthaben' ? (c.source === 'illness' ? 'Krankheits-Guthaben' : 'Guthaben aus Kursabbruch') : c.model === 'single' ? 'Credits aus Punktekarte' : c.model === 'tenpack' ? 'Punktekarte' : 'Credits'} ·
+                              {isExpired ? ' Abgelaufen' : ` verfällt ${exp.getFullYear() > 2090 ? 'nie' : exp.toLocaleDateString('de-DE')}`}
+                            </div>
+                          )
+                        })()}
                         {c.model === 'course' && (
                           <div className="text-xs text-yoga-text/30 mt-0.5">Nur Lesezugriff</div>
                         )}
@@ -1167,7 +1194,7 @@ export default function AdminYogiDetailPage() {
                           <div className="text-xs text-yoga-text/30 mt-0.5">Löschbar (für Auszahlung)</div>
                         )}
                       </div>
-                      {c.model === 'tenpack' && (
+                      {(c.model === 'tenpack' || c.model === 'quarterly') && (
                         <div className="flex gap-2">
                           <button onClick={() => { setEditingCredit(c); setEditCreditAmount(c.total) }}
                             className="text-xs border border-yoga-border2 rounded-full px-2 py-1 hover:opacity-80">

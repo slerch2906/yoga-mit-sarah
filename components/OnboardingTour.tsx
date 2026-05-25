@@ -17,15 +17,15 @@ import { createClient } from '@/lib/supabase/client'
 const slides = [
   {
     icon: 'ti-calendar-week',
-    title: 'Deine Yoga-Woche',
+    title: 'Wochenübersicht',
     tabHint: 'Tab „Kurse" — unten links',
-    body: 'Hier siehst du alle Stunden dieser Woche. Mit den Pfeilen oder dem Datum oben wechselst du die Woche. Stunden in denen du angemeldet bist haben einen grünen Rahmen.',
+    body: 'Hier siehst du alle Stunden in einer Wochenübersicht. Mit den Pfeilen oder dem Datum oben wechselst du die Woche. Stunden in denen du angemeldet bist haben einen grünen Rahmen.',
   },
   {
     icon: 'ti-heart',
-    title: 'Deine Stunden — und wie Credits entstehen',
+    title: 'Deine Buchungen — und wie Credits entstehen',
     tabHint: 'Tab „Meine" — dritter Tab unten',
-    body: 'Unter „Meine" findest du alle Stunden auf die Sarah dich eingetragen hat. Wenn du eine rechtzeitig (bis 3h vorher) absagst, bekommst du einen Credit zum Nachholen — den kannst du dann für eine andere Stunde nutzen.',
+    body: 'Unter „Meine" findest du alle deine Kurse auf die Sarah dich eingetragen hat und deine Einzelstunden die du gebucht hast. Wenn du eine rechtzeitig (bis 3h vorher) absagst, bekommst du einen Credit zum Nachholen — den kannst du dann für eine andere Stunde nutzen.',
   },
   {
     icon: 'ti-circle-plus',
@@ -117,11 +117,12 @@ export default function OnboardingTour({ onComplete }: Props) {
           </p>
         </div>
 
-        {/* Buttons */}
+        {/* Buttons — Sarah-Wunsch 2026-05-25: ab Schritt 2 sollen Zurueck/Weiter
+            (und auf der letzten Seite Zurueck/Los-geht's) gleich breit sein. */}
         <div className="px-5 pb-5 flex gap-2">
           {step > 0 && (
             <button onClick={() => setStep(s => s - 1)} disabled={saving}
-              className="btn-secondary text-sm py-2.5 px-4">
+              className="flex-1 btn-secondary text-sm py-2.5">
               Zurück
             </button>
           )}

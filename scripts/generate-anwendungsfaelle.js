@@ -195,7 +195,7 @@ content.push(new Paragraph({
 content.push(new Paragraph({
   alignment: AlignmentType.CENTER,
   spacing: { after: 80 },
-  children: [new TextRun({ text: 'Version 1.0 (initiale Erfassung — Stand der App nach Welle Charity / Mai 2026)', font: FONT, size: 22 })],
+  children: [new TextRun({ text: 'Version 2.0 — Stand der App nach Welle A bis F (UI-Refresh, Credit-Banner, 3h-Modal, Quick-Credit-Form)', font: FONT, size: 22 })],
 }))
 content.push(pageBreak())
 
@@ -349,9 +349,11 @@ content.push(...ucase({
   ],
   texte: [
     'Anmelden',
+    'Passwort vergessen?',
+    'Email vergessen? Wende dich an Sarah.',
   ],
-  klaren: [
-    'Genauer Wortlaut der Fehlermeldung bei falschem Passwort.',
+  sonder: [
+    'Welle A: Unterhalb des „Passwort vergessen?"-Links steht der Hinweis „Email vergessen? Wende dich an Sarah." — falls Yogi auch nicht mehr weiss, mit welcher Adresse er registriert ist.',
   ],
 }))
 
@@ -755,23 +757,39 @@ content.push(...ucase({
 }))
 
 content.push(...ucase({
-  titel: 'Credit-Anzeige auf „Meine"-Seite',
-  was: 'Yogi sieht eine Übersicht seiner verfügbaren Credits, gruppiert nach Kurs/Quelle.',
+  titel: 'Credit-Anzeige auf „Meine"-Seite — Welle D: getrennte Sektionen',
+  was: 'Yogi sieht eine Übersicht seiner verfügbaren Credits. Freie Credits (Kurs / Punktekarte / Quartal) und „Guthaben" stehen seit Welle D in zwei getrennten Sektionen.',
   wer: 'Yogi (eingeloggt)',
   ablauf: [
     'Yogi öffnet „Meine".',
-    'Oberhalb der Buchungen sieht er eine Card mit allen Credits.',
-    'Pro Credit wird angezeigt: Anzahl frei (von Gesamt), Quelle/Kurs, Ablaufdatum.',
+    'Sektion 1 „Deine freien Credits": alle Credits außer „guthaben" — Kurs-Credits, Punktekarten, Quartals-Credits.',
+    'Sektion 2 „Guthaben" (nur sichtbar wenn vorhanden): Credits aus abgesagten Kursen, NICHT für Einzelstunden verwendbar.',
+    'Pro Credit: Anzahl frei, Label je nach Typ, Verfallsdatum, Genutzt-Fortschrittsbalken (X / Y genutzt).',
+    'Quartal-Credits: Label „Quartals-Credits · Q[Nummer] [Jahr]" mit Zusatz „Gültig vom [Start] bis [Ende]".',
+    'Kurs-Credits: Label „aus Kurs: [Name]".',
+    'Punktekarten: Label „Einzelstunden-Credit" / „Einzelstunden-Credits".',
+    'Wenn ein Credit valid_from in der Zukunft hat: amber Hinweis „Nutzbar ab [Datum]" (z.B. bei Quartal-Abo für nächstes Quartal).',
   ],
   regeln: [
     'Abgelaufene Credits (expires_at < heute) werden NICHT angezeigt.',
     'Voll verbrauchte Credits (0 frei) werden NICHT angezeigt.',
-    'Bei Kurs-Credits steht zusätzlich „aus Kurs: [Name]".',
+    'Guthaben-Hinweistexte erklären den Yogi: „Aus abgesagtem Kurs · Nicht für Einzelstunden, nur verrechenbar mit neuem Kurs".',
+    'Wenn der Yogi GAR keine Credits hat: leere Card mit „Keine Credits".',
   ],
   texte: [
-    'Du hast keine freien Credits.',
+    'Deine freien Credits',
+    'Guthaben',
     'aus Kurs: [Name]',
+    'Quartals-Credits · Q[X] [Jahr]',
+    'Einzelstunden-Credits',
+    'Gültig vom [Start] bis [Ende]',
     'Verfallen am [Datum]',
+    'Nutzbar ab [Datum]',
+    'Aus abgesagtem Kurs',
+    'Nicht für Einzelstunden, nur verrechenbar mit neuem Kurs',
+    'Gültig bis [Datum]',
+    '[X] / [Y] genutzt',
+    'Keine Credits',
   ],
 }))
 
@@ -835,15 +853,20 @@ content.push(...ucase({
   wer: 'Yogi',
   ablauf: [
     'Yogi öffnet „Profil".',
-    'Angezeigt: Vorname, Nachname, E-Mail (nicht änderbar), Geburtsdatum, Telefon, Notfallkontakt.',
+    'Angezeigt: Vorname, Nachname, E-Mail (nicht änderbar), Geburtsdatum (Welle A), Telefon, Notfallkontakt.',
     'Felder können direkt bearbeitet werden, „Speichern" sichert die Änderung.',
+    'Nach erfolgreichem Speichern: kleiner grüner Toast „Profil gespeichert" unten in der Mitte für ca. 3 Sekunden (Welle A).',
   ],
   regeln: [
     'E-Mail-Adresse kann der Yogi NICHT selbst ändern (Sicherheit + Brevo-Versand).',
     'Notfallkontakt ist optional, aber empfohlen.',
+    'Geburtsdatum: Pflichtprüfung — nicht in der Zukunft, keine unsinnigen Werte (über 120 Jahre).',
   ],
-  klaren: [
-    'Genauer Wortlaut der Speicher-Bestätigung („Profil gespeichert" o.ä.) bitte verifizieren.',
+  texte: [
+    'Profil gespeichert',
+    'Geburtsdatum ist ungültig.',
+    'Geburtsdatum darf nicht in der Zukunft liegen.',
+    'Geburtsdatum scheint nicht zu stimmen.',
   ],
 }))
 
@@ -877,25 +900,69 @@ content.push(...ucase({
 content.push(h1('9. Kontolöschung & Datenschutz (DSGVO)'))
 
 content.push(...ucase({
-  titel: 'Account löschen (DSGVO-konform)',
-  was: 'Yogi löscht sein Konto endgültig. Persönliche Daten werden anonymisiert, Buchungs-Historie bleibt aus rechtlichen Gründen anonym erhalten.',
-  wer: 'Yogi',
+  titel: 'Account löschen (DSGVO-konform) — Welle B: Plätze sofort freigeben',
+  was: 'Yogi löscht sein Konto endgültig. Persönliche Daten werden anonymisiert, alle zukünftigen Plätze werden sofort für Wartelisten-Yogis freigegeben, Buchungs-Historie bleibt anonym erhalten.',
+  wer: 'Yogi (eingeloggt)',
   ablauf: [
-    'Profil → ganz unten: „Account löschen".',
-    'Bestätigungs-Dialog mit klarem Hinweis auf Endgültigkeit.',
-    'Nach Bestätigung: Vor-/Nachname werden auf „Gelöscht" gesetzt, E-Mail auf eine Anonym-Form, Telefon entfernt.',
-    'Buchungen, Audit-Logs etc. bleiben anonymisiert für Statistik und Steuer.',
-    'Sarah erhält eine separate E-Mail, dass die AGB-PDF im Drive manuell gelöscht werden soll.',
+    'Profil → ganz unten: roter Button „Account löschen".',
+    'Roter Bestätigungs-Block erscheint mit Überschrift „Account endgültig löschen?".',
+    'Erklärtext: „Alle deine Buchungen werden storniert und deine Plätze freigegeben. Diese Aktion ist nicht rückgängig zu machen."',
+    'Zusatz-Hinweis (klein): „Dein Konto wird DSGVO-konform anonymisiert: Name und E-Mail werden entfernt, die anonymisierte Buchungshistorie bleibt aus rechtlichen Gründen erhalten."',
+    'Pflicht-Häkchen: „Ich verstehe, dass ich danach nicht mehr in meine Kurse zurückkehren kann."',
+    'Erst dann ist der rote Button „Ja, Account löschen" aktiv. Zweiter Button: „Abbrechen".',
+    'Nach Bestätigung läuft folgende Cascade automatisch durch: Vor-/Nachname auf „Gelöschter Nutzer", E-Mail entfernt, Notfallkontakt entfernt. Warteliste-Einträge entfernt. Alle zukünftigen aktiven Buchungen werden storniert. Enrollments (Kurs-Teilnahmen) werden gelöscht — auch für ganze Kurse. Audit-Log-Einträge anonymisiert.',
+    'Für jede so freigewordene Stunde wird automatisch der nächste Wartelisten-Yogi nachgerückt (Auto-Promote bzw. Late-Offer je nach Zeit bis Start).',
+    'Sarah bekommt eine Dashboard-Benachrichtigung „Account DSGVO-gelöscht" und eine E-Mail mit Hinweis auf die manuelle PDF-Löschung im Drive.',
+    'Yogi wird sofort ausgeloggt und kann sich nicht mehr einloggen.',
+  ],
+  regeln: [
+    'Plätze werden sofort frei — nicht erst bei tatsächlicher Auth-User-Löschung. Falls die API-Löschung fehlschlägt, sind die Daten trotzdem schon anonymisiert und die Plätze frei.',
+    'Admin (Sarah) kann diesen Button NICHT sehen — er erscheint nur für nicht-Admin-Konten.',
+    'Credits werden bei Yogi-Selbstlöschung NICHT explizit gelöscht — sie verlieren beim Anonymisieren ihren Bezug.',
+  ],
+  texte: [
+    'Account löschen',
+    'Account endgültig löschen?',
+    'Alle deine Buchungen werden storniert und deine Plätze freigegeben. Diese Aktion ist nicht rückgängig zu machen.',
+    'Dein Konto wird DSGVO-konform anonymisiert: Name und E-Mail werden entfernt, die anonymisierte Buchungshistorie bleibt aus rechtlichen Gründen erhalten.',
+    'Ich verstehe, dass ich danach nicht mehr in meine Kurse zurückkehren kann.',
+    'Ja, Account löschen',
+    'Abbrechen',
   ],
   emails: [
     {
       betreff: 'DSGVO: Account gelöscht – PDF bitte manuell löschen',
       an: 'Admin',
-      kern: 'Hallo Sarah, folgender Account wurde DSGVO-konform gelöscht: [Name], [E-Mail]. Bitte lösche die AGB-PDF im Google Drive manuell. Suche nach: "[Name]"',
+      kern: 'Hallo Sarah, folgender Account wurde DSGVO-konform gelöscht: [Name], [E-Mail]. Bitte lösche die AGB-PDF im Google Drive manuell.',
     },
   ],
-  klaren: [
-    'Genauer Wortlaut des Bestätigungs-Dialogs vor Löschung („Bist du sicher? ..." etc.) ist noch nicht final, bitte einmal festlegen.',
+  sonder: [
+    'Wartelisten-Promote der freigewordenen Plätze läuft im Hintergrund parallel — die Anonymisierung wartet nicht darauf.',
+    'Die Buchungs-Datenbank-Abfrage nutzt den Foreign-Key-Hint sessions!bookings_session_id_fkey, damit das Session-Datum eindeutig geladen werden kann.',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Admin löscht einen Yogi-Account — Welle B',
+  was: 'Sarah löscht einen Yogi-Account aus dem Admin-Bereich. Plätze werden sofort frei, alle Daten anonymisiert.',
+  wer: 'Admin (Sarah)',
+  ablauf: [
+    'Admin → Yogis → einzelnen Yogi öffnen.',
+    'Ganz unten: roter Button „Yogi-Account löschen (DSGVO-konform)".',
+    'Erster Bestätigungs-Dialog mit Aufzählung: Plätze werden frei, aktive Buchungen + Guthaben werden gelöscht, persönliche Daten werden anonymisiert, Buchungshistorie bleibt anonym im Protokoll.',
+    'Zweiter Sicherheits-Dialog: „Bist du sicher? Diese Aktion kann nicht rückgängig gemacht werden!"',
+    'Nach Bestätigung läuft die gleiche Cascade wie bei Yogi-Selbstlöschung: zukünftige Plätze frei, Enrollments weg, Wartelisten der freigewordenen Stunden nachrücken, PII anonymisiert, Email an Sarah.',
+    'Im Unterschied zur Selbst-Löschung werden hier auch Credits explizit gelöscht (Admin-Pfad ist robuster, falls Auth-Delete später fehlschlägt).',
+    'Nach Erfolg landet Sarah zurück in der Yogi-Übersicht.',
+  ],
+  texte: [
+    'Yogi-Account löschen (DSGVO-konform)',
+    'Account von [Vorname Nachname] DSGVO-konform löschen?',
+    '• Plätze in allen Kursen + Stunden werden sofort frei',
+    '• Aktive Buchungen + Guthaben werden gelöscht',
+    '• Persönliche Daten werden anonymisiert',
+    '• Buchungshistorie bleibt anonym im Protokoll',
+    'Bist du sicher? Diese Aktion kann nicht rückgängig gemacht werden!',
   ],
 }))
 
@@ -1203,16 +1270,44 @@ content.push(...ucase({
 }))
 
 content.push(...ucase({
-  titel: 'Quick-Credit vergeben',
-  was: 'Sarah gibt einem Yogi schnell zusätzliche Einzelstunden-Credits (z.B. nach Bar-Zahlung einer Punktekarte).',
-  wer: 'Admin',
+  titel: 'Quick-Credit-Form (Punktekarte / Quartal-Abo) — Welle C',
+  was: 'Sarah vergibt einem Yogi schnell freie Credits. Die Form ist auf zwei Modelle reduziert: Punktekarte oder Quartal-Abo. Kurs-Credits und „Guthaben" werden NICHT mehr hier vergeben — sie entstehen nur noch automatisch durch Kursbuchung bzw. Kursabbruch.',
+  wer: 'Admin (Bereich /admin/credits)',
   ablauf: [
-    'Yogi-Detail → Bereich „Credits" → „Credit hinzufügen".',
-    'Anzahl und Modell (single / tenpack / guthaben) wählen, Ablaufdatum setzen.',
-    'Speichern → Credit ist sofort sichtbar in Yogi-Übersicht.',
+    'Sarah öffnet die Seite „Credits vergeben".',
+    'Hinweis-Text: „Tipp: Wenn du einen Yogi in einen Kurs einbuchen willst, nutze stattdessen den Button „In Kurs einbuchen" auf dem Yogi-Profil. Diese Seite ist für freie Credits (Punktekarte oder Quartal-Abo)."',
+    'Schritt 1 — Credit-Modell: zwei Radio-Buttons. „Punktekarte" (flexibel, kursübergreifend) oder „Quartal-Abo" (gültig im gewählten Quartal).',
+    'Schritt 2 — Anzahl Credits: Zahleneingabe 1 bis 50.',
+    'Schritt 3a — bei Punktekarte: Verfallsdatum-Auswahl mit 3 Optionen: „90 Tage ab heute (Standard)", „Individuelles Datum wählen" (öffnet Datumsfeld), „Kein Ablaufdatum" (= 2099-12-31).',
+    'Schritt 3b — bei Quartal-Abo: Quartals-Auswahl. „Aktuelles Quartal" (Sofort nutzbar · gültig bis [letzter Tag Quartal]) oder „Nächstes Quartal" (Nutzbar ab [erster Tag] · gültig bis [letzter Tag]).',
+    'Bei „Nächstes Quartal" erscheint ein amber-Hinweis: „Der Yogi sieht die Credits in seiner Übersicht, kann sie aber erst ab [Datum] einsetzen."',
+    'Grüne Preview-Box zeigt Zusammenfassung: „[X] Credits für [Quartal-Label] · Verfall: [Datum]".',
+    'Klick auf „[X] Credits vergeben" → Credit wird angelegt. Bei Quartal-Wahl „Nächstes Quartal" wird die DB-Spalte credits.valid_from auf den ersten Tag des Quartals gesetzt.',
   ],
-  klaren: [
-    'Genaues UI dieser Funktion (Button-Beschriftung, Standardwerte) bitte vor Live-Gang prüfen.',
+  regeln: [
+    'Punktekarte-Default: 90 Tage. „Kein Ablaufdatum" speichert intern den 31.12.2099.',
+    'Quartal-Abo: Verfall = letzter Tag des gewählten Quartals (23:59:59). valid_from = NULL bei aktuellem Quartal, = erster Tag des Quartals bei nächstem.',
+    'Die Modelle „guthaben" und „course" wurden bewusst aus dieser Form entfernt — sie entstehen nur über Kursabbruch (Yogi-Wahl) bzw. automatische Kurs-Einbuchung.',
+    'Credit-Selector (lib/credit-selector.ts) filtert beim Buchen alle Credits heraus, deren valid_from in der Zukunft liegt — der Yogi sieht sie zwar, kann sie aber erst ab valid_from einsetzen.',
+  ],
+  texte: [
+    'Credit-Modell',
+    'Punktekarte',
+    'Flexibel, kursübergreifend',
+    'Quartal-Abo',
+    'Gültig im gewählten Quartal',
+    'Anzahl Credits',
+    'Verfallsdatum',
+    '90 Tage ab heute (Standard)',
+    'Individuelles Datum wählen',
+    'Kein Ablaufdatum',
+    'Quartal',
+    'Aktuelles Quartal ([Quartal-Label])',
+    'Nächstes Quartal ([Quartal-Label])',
+    'Sofort nutzbar · gültig bis [Datum]',
+    'Nutzbar ab [Datum] · gültig bis [Datum]',
+    'Der Yogi sieht die Credits in seiner Übersicht, kann sie aber erst ab [Datum] einsetzen.',
+    '[X] Credits vergeben',
   ],
 }))
 
@@ -1264,18 +1359,36 @@ content.push(...ucase({
 }))
 
 content.push(...ucase({
-  titel: 'Yogi aus Stunde austragen',
-  was: 'Sarah meldet einen Yogi nachträglich von einer Stunde ab (z.B. Yogi kann nicht, hat aber selbst nicht abgesagt).',
+  titel: 'Yogi aus Stunde austragen — Welle C/F: 3h-Frist-Modal mit Credit-Wahl',
+  was: 'Sarah meldet einen Yogi nachträglich von einer Stunde ab. Je nachdem, wie nah der Stundenbeginn ist, hat Sarah eine Wahl, was mit dem Credit passiert.',
   wer: 'Admin',
   ablauf: [
-    'Stunde verwalten → bei Yogi „Austragen".',
-    'Bestätigungs-Dialog erscheint.',
-    'Buchung wird storniert, Credit wird zurückgebucht (auch innerhalb 3-Stunden-Frist — Admin überstimmt die Frist).',
-    'Yogi bekommt E-Mail „Abmeldung bestätigt — Credit gutgeschrieben".',
-    'Automatischer Auto-Promote der Warteliste, falls Platz frei.',
+    'Stunde verwalten (im Bereich /admin/sessions oder im Admin-Dashboard-Session-Detail-Modal) → bei Yogi „Austragen".',
+    'System lädt das Session-Datum + die Uhrzeit FRISCH aus der DB und rechnet aus, ob es ≤ 3 Stunden bis Stundenbeginn sind.',
+    'FALL A — mehr als 3 Stunden bis Start: einfaches Modal erscheint mit Überschrift „Yogi austragen?" und Text „Der Credit wird zurückgebucht. Platz wird der Warteliste angeboten." Buttons: „Abbrechen" / „Austragen".',
+    'FALL B — weniger als 3 Stunden bis Start: spezielles 3-Knopf-Modal erscheint mit Überschrift „Stunde beginnt in weniger als 3 Stunden". Text: „Der Platz wird in beiden Fällen freigegeben und der Warteliste angeboten. Wähle, was mit dem Credit passieren soll:" Drei Buttons: „Credit zurückbuchen" (primary, weiß-auf-braun), „Credit verfällt (z.B. WhatsApp-Abmeldung)" (gelb-amber), „Abbrechen" (grau).',
+    'Sarah klickt eine Option. Buchung wird storniert. Bei „Credit verfällt" wird cancel_late=true gesetzt — der Trigger trg_sync_credit_used wird dadurch unterdrückt und der Credit kommt NICHT zurück.',
+    'Audit-Log wird geschrieben (mit Flag credit_returned + within_3h).',
+    'Yogi bekommt E-Mail „Abmeldung bestätigt" — abhängig vom Credit-Status.',
+    'Automatischer Auto-Promote der Warteliste.',
   ],
-  klaren: [
-    'Soll der Admin einen Hinweis bekommen, dass der Credit IMMER zurückgebucht wird (auch < 3h), oder ist das selbsterklärend?',
+  regeln: [
+    'Das 3h-Modal ist ein echtes React-Modal (kein confirm() mehr) — sowohl in /admin/sessions/[id] als auch im Admin-Dashboard-Session-Detail-Modal identisch (Welle F, gleicher Tag).',
+    'Die Frist wird IMMER frisch aus der DB ermittelt, nicht aus dem Client-State (verhindert veraltete Anzeigen nach Refresh).',
+    'cancel_late=true verhindert das automatische Credit-Zurückbuchen über den DB-Trigger.',
+  ],
+  texte: [
+    'Stunde beginnt in weniger als 3 Stunden',
+    'Der Platz wird in beiden Fällen freigegeben und der Warteliste angeboten. Wähle, was mit dem Credit passieren soll:',
+    'Credit zurückbuchen',
+    'Credit verfällt (z.B. WhatsApp-Abmeldung)',
+    'Abbrechen',
+    'Yogi austragen?',
+    'Der Credit wird zurückgebucht. Platz wird der Warteliste angeboten.',
+    'Austragen',
+  ],
+  sonder: [
+    'Use-Case „WhatsApp-Abmeldung": Yogi hat sich kurzfristig per WhatsApp abgemeldet — Sarah soll keinen Credit zurückgeben müssen, weil die App-Frist ohnehin abgelaufen wäre.',
   ],
 }))
 
@@ -1492,6 +1605,279 @@ content.push(new Table({
 content.push(p(''))
 content.push(p('Hinweis: Alle E-Mails haben einen einheitlichen Header (Logo + „Yoga mit Sarah") und Footer (Sarah Lerch · Fuldaer Str. 7 · 63628 Bad Soden-Salmünster + AGB- und Datenschutz-Link).', { italic: true, size: 20 }))
 
+// ════════════════════════════════════════════════════════════════════════════
+// 18. NEUERUNGEN WELLE A–F (Mai 2026) — Detail-Ergänzungen
+// ════════════════════════════════════════════════════════════════════════════
+content.push(pageBreak())
+content.push(h1('18. Neuerungen Welle A–F (Mai 2026)'))
+content.push(p('Diese Sektion bündelt alle Änderungen aus den Entwicklungs-Wellen Anfang Mai 2026. Sie ergänzt die bereits oben aktualisierten Workflows um Themen, die quer durch die App neue Logiken oder Texte einführen.'))
+
+// ── Welle A: Quick-Wins ─────────────────────────────────────────────
+content.push(h2('Welle A — Quick-Wins (kleine Verbesserungen)'))
+content.push(p('Welle A bringt mehrere kleine Änderungen, die einzeln klein wirken, in Summe aber die App freundlicher und alltagstauglicher machen.'))
+
+content.push(...ucase({
+  titel: 'AGB-Re-Akzeptanz-Banner — neue freundliche Variante',
+  was: 'Wenn die AGB-Version aktualisiert wurde, sieht der Yogi beim nächsten Login einen kompakten, freundlichen Hinweisbanner statt einer harten Sperre.',
+  wer: 'Yogi (eingeloggt, AGB-Version veraltet)',
+  ablauf: [
+    'Yogi öffnet die App.',
+    'Auf der Rechtliches-Seite erscheint oben ein gelber Banner (Header der Seite zeigt „AGB wurden aktualisiert").',
+    'Banner-Text: freundliche, persönliche Ansprache mit Link zur vollen AGB und einer Auflistung dessen, was sich geändert hat.',
+    'Yogi liest, scrollt durch und bestätigt mit Häkchen + Klick.',
+  ],
+  texte: [
+    'AGB wurden aktualisiert',
+    'Hallo! Es gibt eine aktualisierte AGB-Version „[Label]". Bitte lies dir die Änderungen kurz durch und bestätige sie, damit du weiter buchen kannst.',
+    'Was hat sich geändert:',
+    'Vollständige AGB: yogamitsarah.me/agb',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Geburtsdatum im Profil',
+  was: 'Yogi kann sein Geburtsdatum im Profil hinterlegen. DB-Spalte profiles.birthdate ist neu.',
+  wer: 'Yogi',
+  ablauf: [
+    'Profil öffnen → bei „Geburtsdatum" auf „Hinzufügen" oder „Ändern" tippen.',
+    'Datumsfeld erscheint (max = heute), Yogi wählt sein Geburtsdatum.',
+    'Validierung: nicht in Zukunft, nicht älter als 120 Jahre, gültiges Datum.',
+    'Speichern → grüner Toast „Profil gespeichert".',
+    'Anzeige im Profil: deutsches Datumsformat (z.B. „14. März 1985"). Wenn leer: Strichplatzhalter.',
+  ],
+  regeln: [
+    'Geburtsdatum ist optional, aber sobald gesetzt: nicht löschbar mehr (nur änderbar).',
+    'Wird vom Dashboard für die Benachrichtigung „Yogi hat Geburtstag" verwendet.',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Profil-Toast „Profil gespeichert"',
+  was: 'Bei jedem erfolgreichen Speichern im Profil-Bereich erscheint kurz ein grüner Toast als Bestätigung.',
+  wer: 'Yogi / Admin',
+  ablauf: [
+    'Yogi/Admin ändert ein Feld im Profil und speichert.',
+    'Unten in der Mitte erscheint für ca. 3 Sekunden ein grüner Toast mit Häkchen-Icon: „Profil gespeichert".',
+    'Toast verschwindet automatisch nach 3 Sekunden.',
+  ],
+  texte: [
+    'Profil gespeichert',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Login: Email-vergessen-Hinweis',
+  was: 'Auf der Login-Seite steht unter „Passwort vergessen?" jetzt ein freundlicher Hinweis, was zu tun ist, wenn der Yogi auch seine E-Mail-Adresse vergessen hat.',
+  wer: 'Yogi (nicht eingeloggt)',
+  ablauf: [
+    'Yogi auf der Login-Seite.',
+    'Unterhalb des Anmelden-Buttons stehen zwei Hinweise: „Passwort vergessen?" (klickbar) und darunter klein „Email vergessen? Wende dich an Sarah.".',
+  ],
+  texte: [
+    'Passwort vergessen?',
+    'Email vergessen? Wende dich an Sarah.',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'E-Mail-Templates: „Einzelstunde" statt „Kurs"',
+  was: 'In allen System-E-Mails wird bei Einzelstunden-Buchungen (Drop-In, Charity) jetzt der Begriff „Einzelstunde" statt „Kurs" verwendet — passt zur Situation und ist freundlicher.',
+  wer: 'System (alle E-Mail-Templates)',
+  ablauf: [
+    'Beim Triggern einer Buchungs-/Abmelde-/Warteliste-E-Mail wird der Flag isSingle ermittelt.',
+    'Helper kursLabel(data) entscheidet basierend auf isSingle, ob „Einzelstunde:" oder „Kurs:" in der E-Mail steht.',
+    'Edge Function send-email v54 nutzt diesen Helper überall.',
+  ],
+  regeln: [
+    'Betroffene Templates: bookingConfirmed, bookingCancelled, waitlistJoined, waitlistPromoted, waitlistOfferLate, waitlistRemovedCreditUsedElsewhere, notifyPlaceFree, sessionCancelled, sessionAdded, sessionReminder.',
+    'Drop-In-Buchung oder Charity-Stunde → „Einzelstunde:". Kurs-Stunde aus eigener Kurs-Buchung → „Kurs:".',
+  ],
+}))
+
+// ── Welle B: Account-Lösch-Cascade ────────────────────────────────
+content.push(h2('Welle B — Account-Lösch-Cascade'))
+content.push(p('Welle B führt eine vollständige Cascade ein, wenn ein Yogi gelöscht wird — egal ob durch sich selbst oder durch Sarah. Die wichtigste Neuerung: Plätze in Stunden werden SOFORT für andere Yogis frei, und die Warteliste rückt automatisch nach.'))
+content.push(bullet('Details siehe Bereich „9. Kontolöschung & Datenschutz" (oben) — Workflow „Account löschen (DSGVO-konform) — Welle B" und „Admin löscht einen Yogi-Account — Welle B".'))
+content.push(bullet('Technisch wichtig (Sarah muss das nicht im Detail kennen, aber zur Kontrolle): Datenbank-Abfrage nutzt FK-Hint sessions!bookings_session_id_fkey, damit eindeutig ist, welcher Session-Fremdschlüssel gemeint ist.'))
+
+// ── Welle C: 3h-Modal + Quick-Credit-Form ──────────────────────────
+content.push(h2('Welle C — 3h-Frist-Modal + Quick-Credit-Form'))
+content.push(p('Welle C bringt zwei zusammenhängende Änderungen rund um „Was passiert mit Credits in Grenzfällen?".'))
+content.push(bullet('Details „3h-Frist-Modal" siehe Bereich „14. Admin: Einzelstunden verwalten" → „Yogi aus Stunde austragen — Welle C/F".'))
+content.push(bullet('Details „Quick-Credit-Form" siehe Bereich „13. Admin: Yogis verwalten" → „Quick-Credit-Form (Punktekarte / Quartal-Abo) — Welle C".'))
+content.push(bullet('Datenbank-Änderung: credits-Tabelle hat eine neue Spalte „valid_from" (DATE, optional). Sie ist gesetzt, wenn der Credit erst ab einem späteren Datum nutzbar werden soll (z.B. Quartal-Abo für das nächste Quartal). Vom credit-selector werden Credits mit valid_from > Session-Datum automatisch übersprungen.'))
+
+// ── Welle D: Dedup + max_spots-Promote + Guthaben-Split ──────────
+content.push(h2('Welle D — Notification-Dedup, max_spots-Promote, Guthaben getrennt'))
+
+content.push(...ucase({
+  titel: 'Notification-Dedup-Fix (fn_notify_refund_pending)',
+  was: 'Bei Kursabbrüchen wird die Dashboard-Benachrichtigung „Erstattung steht aus" jetzt zuverlässig nur EINMAL pro Yogi erzeugt — kein Doppel-Eintrag mehr, auch wenn Sarah eine Notification bereits gelesen hatte.',
+  wer: 'System / Trigger',
+  ablauf: [
+    'Beim Kursabbruch (Yogi-Wahl: Erstattung) wird die DB-Funktion fn_notify_refund_pending aufgerufen.',
+    'Die Funktion prüft jetzt ALLE bestehenden admin_notifications für diesen Yogi+Kurs — egal ob read=true oder read=false.',
+    'Wenn schon ein Eintrag existiert (auch ein gelesener): wird KEIN neuer angelegt.',
+    'Vorher wurde nur auf read=false geprüft, sodass nach Lesen + erneutem Trigger ein zweiter Eintrag entstand.',
+  ],
+  regeln: [
+    'Sarah sieht jede Aufgabe nur einmal — auch nach Re-Trigger eines Workflows.',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Max-Spots eines Kurses erhöhen → Wartelisten-Auto-Promote',
+  was: 'Wenn Sarah die Maximal-Teilnehmerzahl eines laufenden Kurses erhöht, rückt die Warteliste in allen zukünftigen Sessions automatisch nach — ohne dass Sarah manuell etwas anstoßen muss.',
+  wer: 'Admin',
+  ablauf: [
+    'Sarah öffnet die Kurs-Bearbeitung und erhöht „Max. Teilnehmer" z.B. von 12 auf 15.',
+    'Beim Speichern erkennt das System: max_spots > vorheriger Wert.',
+    'Für jede zukünftige Session des Kurses wird promoteWaitlistOrOfferLate aufgerufen — in einer Loop, sodass auch mehrere Plätze pro Session füllbar sind.',
+    'Wartelisten-Yogis werden automatisch eingebucht und bekommen die normale „Du bist dabei"-E-Mail.',
+  ],
+  regeln: [
+    'Nur Sessions in der Zukunft werden berücksichtigt (vergangene werden ignoriert).',
+    'Loop läuft pro Session, bis kein Promote mehr möglich ist (Liste leer ODER kein Credit-Yogi mehr).',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Guthaben-Sektion auf /meine getrennt',
+  was: 'Auf der „Meine"-Seite werden „Guthaben" (aus Kursabbruch) und „freie Credits" (Punktekarte, Quartal, Kurs) seit Welle D in zwei separaten Sektionen angezeigt.',
+  wer: 'Yogi',
+  ablauf: [
+    'Yogi öffnet „Meine".',
+    'Sektion 1: „Deine freien Credits".',
+    'Sektion 2: „Guthaben" (nur falls vorhanden). Mit Erklärung „Aus abgesagtem Kurs · Nicht für Einzelstunden, nur verrechenbar mit neuem Kurs".',
+  ],
+  regeln: [
+    'Quartal-Credits in Sektion 1 haben jetzt das Label „Quartals-Credits · Q[Nummer] [Jahr]" (statt „Einzelstunden-Credits") inkl. Gültigkeits-Zeitraum.',
+    'Wenn ein Credit valid_from in der Zukunft hat: amber-Hinweis „Nutzbar ab [Datum]".',
+  ],
+  texte: [
+    'Deine freien Credits',
+    'Guthaben',
+    'Quartals-Credits · Q[X] [Jahr]',
+    'Gültig vom [Start] bis [Ende]',
+    'Nutzbar ab [Datum]',
+    'Aus abgesagtem Kurs',
+    'Nicht für Einzelstunden, nur verrechenbar mit neuem Kurs',
+  ],
+}))
+
+// ── Welle E: Credit-Ablauf-Banner + Dashboard-Aufgabe ──────────
+content.push(h2('Welle E — Credit-Ablauf-Banner & Dashboard-Aufgabe'))
+
+content.push(...ucase({
+  titel: 'Credit-Ablauf-Banner auf der Yogi-Wochenübersicht',
+  was: 'Yogi sieht oben auf der „Kurse"-Seite (Wochenübersicht) Hinweisboxen, wenn Credits bald verfallen. Banner sind wegklickbar.',
+  wer: 'Yogi (NICHT für Admin — wenn is_admin, wird das Banner nicht gerendert)',
+  ablauf: [
+    'Yogi öffnet die Wochenübersicht /kurse.',
+    'Component YogiCreditExpiryBanner lädt alle aktiven Credits + zugehörige Kurse.',
+    'Pro Credit wird geprüft: liegt der Verfall innerhalb der Vorwarn-Frist?',
+    'Wenn ja: Banner-Card erscheint oben (zwischen Sprechblase und Wochen-Inhalt). Pro Banner ein kleines X oben rechts zum Schließen.',
+    'Status pro Reminder-ID wird in localStorage gespeichert — einmal weggeklickt, bleibt es weg (auch nach Reload).',
+  ],
+  regeln: [
+    'Vorwarn-Fristen je Credit-Modell: Kurs-Credit (course) = 7 Tage. Punktekarte (single/tenpack) = 7 Tage. Quartal-Abo (quarterly) = 14 Tage.',
+    'Tag-0-Alert (am Verfalls-Tag selbst): rote Card mit Überschrift „Achtung — heute".',
+    'Vor-Warnung: gelbe (amber) Card mit Überschrift „Hinweis".',
+    'Credits mit valid_from in der Zukunft werden übersprungen — der Verfall ist noch nicht relevant.',
+    'Voll verbrauchte Credits (0 frei) werden NICHT angezeigt.',
+    'Welle F: Admin sieht das Banner explizit NICHT (Component prüft profile.is_admin).',
+  ],
+  texte: [
+    'Achtung — heute',
+    'Hinweis',
+    'Dein Kurs „[Name]" endet am [Datum]. Deine freien Credits sind noch bis zum [Datum] gültig (8 Tage nach Kursende).',
+    'Deine Credits aus Kurs „[Name]" verfallen heute.',
+    'Deine Punktekarte läuft in 1 Woche ab (gültig bis [Datum]).',
+    'Deine Punktekarte läuft in [N] Tagen ab (gültig bis [Datum]).',
+    'Deine Punktekarte verfällt heute.',
+    'Deine Quartals-Credits laufen in [N] Tagen ab (gültig bis [Datum]).',
+    'Deine Quartals-Credits verfallen heute.',
+  ],
+  sonder: [
+    'Welle F: Banner-Design vereinfacht — kein linker farbiger Streifen, kein Icon mehr, nur sauberer Text. X-Button rechts oben zum Schließen.',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Dashboard-Aufgabe „Guthaben verrechnet"',
+  was: 'Neue Aufgaben-Kachel im Admin-Dashboard zeigt Sarah, wenn ein Yogi mit Guthaben in einen neuen Kurs eingebucht wurde — sie weiss damit sofort, dass die Buchhaltung aktualisiert werden muss.',
+  wer: 'Admin',
+  ablauf: [
+    'Beim Einbuchen eines Yogis mit Restguthaben in einen neuen Kurs wird automatisch eine admin_notifications-Zeile mit type=guthaben_verrechnet angelegt.',
+    'Auf dem Dashboard erscheint die Kachel mit den nötigen Details (Yogi, Kurs, Anzahl Credits, Differenz die neu bezahlt werden muss, Restguthaben).',
+    'Sarah haakt sie ab, sobald die Buchhaltung aktualisiert ist.',
+    'Parallel geht die E-Mail „Guthaben verrechnet: [Yogi] ([X]/[Y] Credits)" an Sarah.',
+  ],
+}))
+
+// ── Welle F: heutige UI-Fixes ─────────────────────────────────
+content.push(h2('Welle F — UI/UX-Fixes (heutiger Tag, 25.05.2026)'))
+
+content.push(...ucase({
+  titel: '3h-Frist-Modal als echtes React-Modal',
+  was: 'Das 3h-Frist-Modal beim „Yogi austragen" ist jetzt überall ein vollwertiges React-Modal mit 3 sauber gestylten Buttons — sowohl in /admin/sessions/[id] als auch im Admin-Dashboard-Session-Detail-Modal.',
+  wer: 'Admin',
+  ablauf: [
+    'Sarah klickt „Austragen" beim Yogi.',
+    'Vorher gab es teilweise nur ein Browser-confirm() (iOS-untauglich, kein Custom-Design).',
+    'Jetzt: einheitliches Bottom-Sheet-Modal mit den 3 Optionen oder den 2 Optionen (je nach Frist), an beiden Stellen identisch.',
+  ],
+  regeln: [
+    'Workflow + Texte siehe oben „Yogi aus Stunde austragen — Welle C/F".',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Banner-Design auf der Wochenübersicht vereinfacht',
+  was: 'Das Credit-Ablauf-Banner (YogiCreditExpiryBanner) zeigt jetzt nur noch sauberen Text + X-Button — ohne linken farbigen Streifen und ohne Icon.',
+  wer: 'Yogi (UI-Detail)',
+  ablauf: [
+    'Yogi sieht den Banner.',
+    'Aufbau: Überschrift („Achtung — heute" oder „Hinweis") in der Akzent-Farbe (rot / amber), darunter der Erklärtext.',
+    'Oben rechts ein kleines X-Icon — Klick blendet diesen einen Hinweis dauerhaft aus.',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Dummy-Pille — einheitliches Design',
+  was: 'Die Kennzeichnung „Dummy" (für offline-Teilnehmer ohne Login) wird in der ganzen App jetzt einheitlich als kleine dunkelbraune Pille mit weißer Schrift dargestellt.',
+  wer: 'Admin (UI-Detail)',
+  ablauf: [
+    'Überall, wo ein Dummy-User in der Liste auftaucht, erscheint neben dem Namen eine kleine abgerundete Pille mit dem Text „Dummy".',
+    'Design: bg-yoga-text (dunkelbraun) + text-white. Klein, dezent, sofort erkennbar.',
+    'Stellen: /admin/yogis (Liste), /admin/yogis/[id] (Detail-Header), /admin/kurse (zwei Stellen: Teilnehmerliste + Folgekurs-Übernahme), /admin/sessions/[id] (Buchungs-Liste).',
+  ],
+  texte: [
+    'Dummy',
+    'Dummy-User (kein Login)',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Sarah-Sprechblase: Avatar auf 73×73 px',
+  was: 'Der Avatar in der Sprechblase auf der Yogi-Wochenübersicht ist jetzt exakt 73×73 Pixel — identisch zum Logo im Header. Wirkt visuell ruhiger.',
+  wer: 'Yogi / Admin (UI-Detail)',
+  ablauf: [
+    'Wenn Sarah eine Ankündigung gesetzt hat: Yogi sieht oben auf /kurse eine Sprechblase mit Sarahs Foto.',
+    'Foto-Größe: 73×73 px, rund, mit Border-2 in der Hintergrundfarbe und einem leichten Schatten.',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Banner & Sprechblase: nur für Yogis, nicht für Admin',
+  was: 'Sowohl die Sarah-Sprechblase als auch der Credit-Ablauf-Banner werden für Admin-Nutzer NICHT gerendert — Sarah sieht nicht sich selbst und auch keine Ablauf-Warnungen für ihre eigenen, theoretisch existierenden Credits.',
+  wer: 'Admin (Sarah)',
+  ablauf: [
+    'Component-Render prüft profile.is_admin.',
+    'Wenn true → Banner-Component gibt null zurück.',
+  ],
+}))
+
 content.push(pageBreak())
 content.push(h1('Anhang: Begriffsklärung'))
 content.push(...[
@@ -1510,6 +1896,12 @@ content.push(...[
   ['Ausgeschlossene Stunde', 'Termin, den Sarah aus dem Kurs gestrichen hat (z.B. Feiertag). Wird Yogi NICHT angezeigt. Zählt nicht zur Kursdauer.'],
   ['Abgesagte Stunde', 'Termin, den Sarah einzeln abgesagt hat. Bleibt für Yogis sichtbar (mit Hinweis + ggf. Ersatztermin).'],
   ['Kursabbruch', 'Sarah beendet einen Kurs vorzeitig. Alle zukünftigen Stunden entfallen, Yogis bekommen Erstattung oder Guthaben.'],
+  ['Punktekarte', 'Credit-Modell „tenpack" — Yogi kauft mehrere Einzelstunden-Credits. Default 90 Tage gültig (Welle C). Kursübergreifend einsetzbar.'],
+  ['Quartal-Abo', 'Credit-Modell „quarterly" — Credits gelten für ein ganzes Quartal (Q1–Q4). Verfall = letzter Tag des Quartals. Bei „nächstes Quartal" wird valid_from gesetzt, Yogi sieht die Credits sofort, kann sie aber erst ab Quartalsstart einsetzen.'],
+  ['valid_from', 'DB-Spalte auf credits-Tabelle (Welle C). Optional. Wenn gesetzt, ist der Credit erst ab diesem Datum nutzbar — der credit-selector überspringt ihn vorher. Yogi sieht den Hinweis „Nutzbar ab [Datum]".'],
+  ['cancel_late', 'Flag auf Bookings. Wenn true beim Stornieren, wird der DB-Trigger trg_sync_credit_used unterdrückt → Credit kommt NICHT zurück. Wird im 3h-Frist-Modal genutzt, wenn Sarah „Credit verfällt" wählt.'],
+  ['3h-Frist', 'Stornierungs-Frist: bis 3 Stunden vor Stundenbeginn kostenlos abmelden. Darunter verfällt der Credit (bei Yogi-Abmeldung immer; beim Admin-Austrag wählbar über das 3h-Modal seit Welle C).'],
+  ['Late-Offer-Frist', '90 Minuten vor Stundenbeginn — bis dahin läuft Auto-Promote, danach kommt der Late-Offer-Workflow (Mail an alle Wartelisten-Yogis).'],
 ].map(([term, def]) => pRich([
   { text: term + ': ', bold: true },
   { text: def },

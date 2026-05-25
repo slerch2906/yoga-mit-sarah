@@ -193,25 +193,35 @@ export default function MeinePage() {
                 <div key={c.id} className="card mb-2">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-2xl font-bold ${free === 0 ? 'text-yoga-text/30' : ''}`}>{free}</span>
-                        <span className="text-sm text-yoga-text/60">
-                          {c.model === 'course'
-                            ? (c.course?.name ? `aus Kurs: ${c.course?.name}` : 'aus Kurs-Credits')
-                            : c.model === 'guthaben' ? 'Guthaben'
-                            : `Einzelstunden-${c.total === 1 ? 'Credit' : 'Credits'}`}
-                        </span>
-                      </div>
-                      {c.model === 'guthaben' && (
-                        <>
-                          <div className="text-xs text-yoga-amber-text mt-1">Guthaben aus abgesagtem Kurs</div>
-                          <div className="text-xs text-yoga-text/50 mt-0.5">Nicht für Einzelstunden, nur verrechenbar mit neuem Kurs</div>
+                      {/* Sarah-Wunsch 2026-05-25: Quartal-Credits eigenes Label "Quartals-Credits Q[X] [Jahr]" */}
+                      {(() => {
+                        const isQuarterly = c.model === 'quarterly'
+                        const exp = new Date(c.expires_at)
+                        const qNumber = Math.floor(exp.getMonth() / 3) + 1
+                        const qYear = exp.getFullYear()
+                        const qStart = c.valid_from ? new Date(c.valid_from) : new Date(qYear, (qNumber - 1) * 3, 1)
+                        const fmtDay = (d: Date) => d.toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })
+                        const fmtShort = (d: Date) => d.toLocaleDateString('de-DE', { day:'numeric', month:'long' })
+                        const labelText = c.model === 'course'
+                          ? (c.course?.name ? `aus Kurs: ${c.course?.name}` : 'aus Kurs-Credits')
+                          : isQuarterly
+                            ? `Quartals-Credits · Q${qNumber} ${qYear}`
+                            : `Einzelstunden-${c.total === 1 ? 'Credit' : 'Credits'}`
+                        return <>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-2xl font-bold ${free === 0 ? 'text-yoga-text/30' : ''}`}>{free}</span>
+                            <span className="text-sm text-yoga-text/60">{labelText}</span>
+                          </div>
+                          {isQuarterly && (
+                            <div className="text-xs text-yoga-text/55 mt-1">
+                              Gültig vom {fmtShort(qStart)} bis {fmtDay(exp)}
+                            </div>
+                          )}
+                          {!isQuarterly && (
+                            <div className="text-xs text-yoga-text/40 mt-1">Verfallen am {fmtDay(exp)}</div>
+                          )}
                         </>
-                      )}
-                      {c.model === 'guthaben'
-                        ? <div className="text-xs text-yoga-text/40 mt-1">Gültig bis {new Date(c.expires_at).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })}</div>
-                        : <div className="text-xs text-yoga-text/40 mt-1">Verfallen am {new Date(c.expires_at).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })}</div>
-                      }
+                      })()}
                       {/* Sarah-Wunsch 2026-05-25: valid_from in der Zukunft (z.B. Quartal-Abo für nächstes Quartal) */}
                       {c.valid_from && new Date(c.valid_from) > new Date() && (
                         <div className="text-xs text-yoga-amber-text font-semibold mt-1">

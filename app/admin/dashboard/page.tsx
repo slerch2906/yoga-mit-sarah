@@ -781,10 +781,19 @@ export default function AdminDashboard() {
             <p className="section-label">Benachrichtigungen</p>
             {notifications.map(n => {
               // Notification-Type-Mapping
-              type NMeta = { label: string; icon: string; tone: 'action' | 'warn' | 'info'; href?: string }
+              // href kann statisch (string) oder dynamisch (function aus details) sein —
+              // dynamisch z.B. um direkt zur Yogi-Seite zu linken.
+              type NMeta = { label: string; icon: string; tone: 'action' | 'warn' | 'info'; href?: string | ((n: any) => string) }
               const META: Record<string, NMeta> = {
                 // 🔴 ACTION-REQUIRED (du musst handeln)
                 refund_pending:        { label: 'Erstattung überweisen', icon: 'ti-cash',           tone: 'action', href: '/admin/kursabbruch' },
+                // 2026-05-25: 2-Jahre-Auto-Refund Guthaben aus Kursabbruch
+                refund_pending_auto_2y: {
+                  label: 'Guthaben nach 2 Jahren abgelaufen — Geldbetrag erstatten',
+                  icon: 'ti-cash-banknote',
+                  tone: 'action',
+                  href: (n: any) => n.details?.user_id ? `/admin/yogis/${n.details.user_id}` : '/admin/yogis',
+                },
                 cron_silent_24h:       { label: 'Reminder-Cron seit 24h still', icon: 'ti-alert-octagon', tone: 'action' },
                 brevo_quota_warning:   { label: 'Brevo-Kontingent fast aufgebraucht', icon: 'ti-mail-exclamation', tone: 'action' },
                 email_failed:          { label: 'E-Mail konnte nicht zugestellt werden', icon: 'ti-mail-x', tone: 'action' },
@@ -801,6 +810,7 @@ export default function AdminDashboard() {
                 guthaben_verrechnet:   { label: 'Guthaben verrechnet — bitte abhaken', icon: 'ti-receipt', tone: 'action' },
               }
               const meta = META[n.type] || { label: n.type, icon: 'ti-bell', tone: 'info' as const }
+              const resolvedHref = typeof meta.href === 'function' ? meta.href(n) : meta.href
               // Sarah-Wunsch 2026-05-25: kein bunter Streifen + kein Icon im Titel,
               // gleiches Design wie der Yogi-Banner — nur farbige Headline.
               const headlineCls = {
@@ -819,8 +829,8 @@ export default function AdminDashboard() {
                       <p className="text-xs text-yoga-text/40 mt-1">
                         {new Date(n.created_at).toLocaleDateString('de-DE', { day:'numeric', month:'short' })} · {new Date(n.created_at).toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' })}
                       </p>
-                      {meta.href && (
-                        <button onClick={() => router.push(meta.href!)}
+                      {resolvedHref && (
+                        <button onClick={() => router.push(resolvedHref)}
                           className="text-xs mt-1.5 text-yoga-text underline cursor-pointer bg-transparent border-0 p-0">
                           → Jetzt erledigen
                         </button>

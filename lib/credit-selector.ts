@@ -58,8 +58,15 @@ export async function selectCreditForBooking(
     .select('id, model, total, used, expires_at').eq('user_id', userId)
     .gt('expires_at', nowIso)
 
+  // Sarah-Wunsch 2026-05-25: Credits mit valid_from in der Zukunft
+  // sind noch nicht nutzbar (z.B. Quartal-Abo für nächstes Quartal).
+  // Wir vergleichen valid_from mit dem SESSION-Datum: Credit ist gültig
+  // wenn er bis zur Session-Zeit aktiviert wurde.
+  const sessionDateOnly = sessionDate // YYYY-MM-DD
   const candidates = (allCredits || []).filter((c: any) =>
-    c.total > c.used && c.model !== 'guthaben'
+    c.total > c.used
+    && c.model !== 'guthaben'
+    && (!c.valid_from || c.valid_from <= sessionDateOnly)
   )
   if (candidates.length === 0) {
     // Spezifischere Meldung: Credit existiert, läuft aber vor der Session ab

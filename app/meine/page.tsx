@@ -211,6 +211,12 @@ export default function MeinePage() {
                         ? <div className="text-xs text-yoga-text/40 mt-1">Gültig bis {new Date(c.expires_at).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })}</div>
                         : <div className="text-xs text-yoga-text/40 mt-1">Verfallen am {new Date(c.expires_at).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })}</div>
                       }
+                      {/* Sarah-Wunsch 2026-05-25: valid_from in der Zukunft (z.B. Quartal-Abo für nächstes Quartal) */}
+                      {c.valid_from && new Date(c.valid_from) > new Date() && (
+                        <div className="text-xs text-yoga-amber-text font-semibold mt-1">
+                          Nutzbar ab {new Date(c.valid_from).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })}
+                        </div>
+                      )}
                     </div>
                     {c.model !== 'guthaben' && (
                       <div className="text-right">

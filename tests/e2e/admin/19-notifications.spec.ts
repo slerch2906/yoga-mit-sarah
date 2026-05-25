@@ -355,6 +355,63 @@ test.describe('[E2E] Kursabbruch-Workflow: complete-Notification', () => {
   })
 })
 
+// ── 10a-3) Welle C: Admin-Austragen Modal + Quick-Credit-Form ─────────────
+// Sarah-Wunsch 2026-05-25: Admin kann beim Yogi-Austragen innerhalb 3h-Frist
+// entscheiden ob Credit zurueckgebucht wird oder verfaellt. Quick-Credit
+// komplett ueberarbeitet (nur Punktekarte + Quartal-Abo, Guthaben raus, Kurs raus).
+test.describe('[E2E] Welle C: Admin-Austragen + Quick-Credit-Form', () => {
+  test('Admin-Austragen: Modal bei 3h-Frist mit Credit-Wahl', async () => {
+    const src = read('app/admin/sessions/[id]/page.tsx')
+    expect(src).toMatch(/within3h\s*=\s*\(?sessionStart\s*-\s*Date\.now\(\)\)\s*<=\s*3\s*\*\s*60\s*\*\s*60\s*\*\s*1000/)
+    expect(src).toMatch(/Credit wird ZURUECKGEBUCHT/)
+    expect(src).toMatch(/Credit VERFAELLT/)
+    expect(src).toMatch(/cancel_late:\s*cancelLate/)
+  })
+
+  test('credits.valid_from Spalte existiert (DB)', async () => {
+    const db = getServiceClient()
+    const { data, error } = await db.from('credits').select('valid_from').limit(1)
+    expect(error?.message || '').toBe('')
+    expect(data).toBeDefined()
+  })
+
+  test('Credit-Selector beruecksichtigt valid_from (Credits in der Zukunft skippen)', async () => {
+    const src = read('lib/credit-selector.ts')
+    expect(src).toMatch(/c\.valid_from/)
+    expect(src).toMatch(/valid_from\s*<=\s*sessionDateOnly/)
+  })
+
+  test('Quick-Credit-Form: nur Punktekarte + Quartal-Abo (kein Guthaben, kein Kurs)', async () => {
+    const src = read('app/admin/credits/page.tsx')
+    expect(src).toMatch(/Punktekarte/)
+    expect(src).toMatch(/Quartal-Abo/)
+    // Kein "course"-Option im Model-Type
+    expect(src).not.toMatch(/type Model\s*=\s*['"]course['"]/)
+    expect(src).toMatch(/type Model\s*=\s*['"]tenpack['"]\s*\|\s*['"]quarterly['"]/)
+  })
+
+  test('Quick-Credit Punktekarte: 90 Tage / individuell / kein Ablauf', async () => {
+    const src = read('app/admin/credits/page.tsx')
+    expect(src).toMatch(/90 Tage ab heute/)
+    expect(src).toMatch(/Individuelles Datum/)
+    expect(src).toMatch(/Kein Ablaufdatum/)
+  })
+
+  test('Quick-Credit Quartal-Abo: aktuelles ODER naechstes Quartal mit valid_from', async () => {
+    const src = read('app/admin/credits/page.tsx')
+    expect(src).toMatch(/Aktuelles Quartal/)
+    expect(src).toMatch(/N[äa]chstes Quartal/)
+    expect(src).toMatch(/quarterDates/)
+    expect(src).toMatch(/valid_from:\s*quarterChoice\s*===\s*['"]next['"]/)
+  })
+
+  test('/meine zeigt "Nutzbar ab"-Hinweis bei Credits mit valid_from in der Zukunft', async () => {
+    const src = read('app/meine/page.tsx')
+    expect(src).toMatch(/c\.valid_from\s*&&\s*new Date\(c\.valid_from\)\s*>\s*new Date\(\)/)
+    expect(src).toMatch(/Nutzbar ab/)
+  })
+})
+
 // ── 10a-2) Account-Löschen: Cascade auf Buchungen + Enrollments ───────────
 // Sarah-Wunsch 2026-05-25: Sobald Yogi seinen Account loescht, werden
 // alle zukuenftigen Buchungen storniert + Enrollments entfernt + die

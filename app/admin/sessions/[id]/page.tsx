@@ -76,17 +76,41 @@ export default function AdminSessionPage() {
   }
 
   async function cancelBookingForYogi(bookingId: string, creditId: string | null, sessionId: string) {
-    if (!confirm('Yogi aus dieser Stunde austragen und Credit zurückgeben?')) return
+    // Sarah-Wunsch 2026-05-25: Innerhalb 3h vor Stundenbeginn muss Admin
+    // bewusst entscheiden, ob der Credit zurueckgebucht wird (Yogi hat sich
+    // z.B. per WhatsApp abgemeldet, Admin will Platz fuer Warteliste freigeben,
+    // aber Credit verfaellt regulaer). Ausserhalb 3h-Frist: Standard wie bisher.
+    let creditReturned = true
+    let cancelLate = false
+    if (session) {
+      const sessionStart = new Date(`${session.date}T${session.time_start}`).getTime()
+      const within3h = (sessionStart - Date.now()) <= 3 * 60 * 60 * 1000 && sessionStart > Date.now()
+      if (within3h) {
+        const choice = confirm(
+          'Stunde beginnt in weniger als 3 Stunden.\n\n' +
+          'OK = Credit wird ZURUECKGEBUCHT (Yogi bekommt seinen Credit zurueck).\n' +
+          'Abbrechen = Credit VERFAELLT (z.B. wenn Yogi sich kurzfristig per WhatsApp abgemeldet hat).\n\n' +
+          'Platz wird in beiden Faellen freigegeben und der Warteliste angeboten.'
+        )
+        creditReturned = choice
+        cancelLate = !choice
+      } else {
+        if (!confirm('Yogi aus dieser Stunde austragen und Credit zurückgeben?')) return
+      }
+    } else {
+      if (!confirm('Yogi aus dieser Stunde austragen und Credit zurückgeben?')) return
+    }
 
     await supabase.from('bookings').update({
-      status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false
+      status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: cancelLate,
     }).eq('id', bookingId)
 
-    // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
+    // Wenn Credit NICHT zurueckgebucht werden soll: cancel_late=true verhindert
+    // den trg_sync_credit_used Trigger (alte Sarah-Regel: cancel_late=true = Credit verfaellt).
 
     await supabase.from('audit_log').insert({
       action: 'booking_cancelled_by_admin',
-      details: { booking_id: bookingId, session_id: sessionId }
+      details: { booking_id: bookingId, session_id: sessionId, credit_returned: creditReturned, within_3h: cancelLate }
     })
 
     // Sarah-Regel 2026-05-23: zentraler Promote-Helper mit 90-Min-Cutoff-Logic.

@@ -35,6 +35,8 @@ export default function AdminSessionPage() {
   const [selectedYogi, setSelectedYogi] = useState<any>(null)
   const [addingYogi, setAddingYogi] = useState(false)
   const [quickCreditYogi, setQuickCreditYogi] = useState<any>(null)
+  // Sarah-Wunsch 2026-05-25: Robustes Modal statt confirm() — Cache-bust + iOS-tauglich
+  const [cancelChoice, setCancelChoice] = useState<{ bookingId: string; sessionId: string; within3h: boolean } | null>(null)
 
   useEffect(() => { loadData() }, [id])
 
@@ -76,41 +78,43 @@ export default function AdminSessionPage() {
   }
 
   async function cancelBookingForYogi(bookingId: string, creditId: string | null, sessionId: string) {
-    // Sarah-Wunsch 2026-05-25: Innerhalb 3h vor Stundenbeginn muss Admin
-    // bewusst entscheiden, ob der Credit zurueckgebucht wird (Yogi hat sich
-    // z.B. per WhatsApp abgemeldet, Admin will Platz fuer Warteliste freigeben,
-    // aber Credit verfaellt regulaer). Ausserhalb 3h-Frist: Standard wie bisher.
-    let creditReturned = true
-    let cancelLate = false
-    if (session) {
-      const sessionStart = new Date(`${session.date}T${session.time_start}`).getTime()
-      const within3h = (sessionStart - Date.now()) <= 3 * 60 * 60 * 1000 && sessionStart > Date.now()
-      if (within3h) {
-        const choice = confirm(
-          'Stunde beginnt in weniger als 3 Stunden.\n\n' +
-          'OK = Credit wird ZURUECKGEBUCHT (Yogi bekommt seinen Credit zurueck).\n' +
-          'Abbrechen = Credit VERFAELLT (z.B. wenn Yogi sich kurzfristig per WhatsApp abgemeldet hat).\n\n' +
-          'Platz wird in beiden Faellen freigegeben und der Warteliste angeboten.'
-        )
-        creditReturned = choice
-        cancelLate = !choice
-      } else {
-        if (!confirm('Yogi aus dieser Stunde austragen und Credit zurückgeben?')) return
-      }
-    } else {
-      if (!confirm('Yogi aus dieser Stunde austragen und Credit zurückgeben?')) return
+    // Sarah-Wunsch 2026-05-25: Robustes Modal statt confirm() — innerhalb 3h
+    // vor Stundenbeginn muss Admin bewusst entscheiden, ob der Credit
+    // zurueckgebucht wird. Re-load der Session-Zeit aus DB (statt React-State),
+    // damit der Check auch funktioniert, wenn state aus irgendwelchen Gruenden
+    // stale ist.
+    const { data: freshSession } = await supabase.from('sessions')
+      .select('date, time_start').eq('id', sessionId).single()
+    let within3h = false
+    if (freshSession) {
+      const sessionStart = new Date(`${freshSession.date}T${freshSession.time_start}`).getTime()
+      within3h = (sessionStart - Date.now()) <= 3 * 60 * 60 * 1000 && sessionStart > Date.now()
     }
+    // Modal oeffnen — eigentliche Cancellation passiert in confirmCancelBooking(...)
+    setCancelChoice({ bookingId, sessionId, within3h })
+  }
+
+  // Sarah-Wunsch 2026-05-25: Eigentliche Cancellation, getrennt vom UI-Trigger.
+  // creditReturned=true → Credit zurueck (Trigger sync_credit_used aktualisiert).
+  // creditReturned=false → cancel_late=true, Credit verfaellt.
+  async function confirmCancelBooking(creditReturned: boolean) {
+    if (!cancelChoice) return
+    const { bookingId, sessionId, within3h } = cancelChoice
+    const cancelLate = !creditReturned
+    setCancelChoice(null)
 
     await supabase.from('bookings').update({
       status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: cancelLate,
     }).eq('id', bookingId)
+
+    void within3h // (audit_log unten enthaelt den Flag)
 
     // Wenn Credit NICHT zurueckgebucht werden soll: cancel_late=true verhindert
     // den trg_sync_credit_used Trigger (alte Sarah-Regel: cancel_late=true = Credit verfaellt).
 
     await supabase.from('audit_log').insert({
       action: 'booking_cancelled_by_admin',
-      details: { booking_id: bookingId, session_id: sessionId, credit_returned: creditReturned, within_3h: cancelLate }
+      details: { booking_id: bookingId, session_id: sessionId, credit_returned: creditReturned, within_3h: within3h }
     })
 
     // Sarah-Regel 2026-05-23: zentraler Promote-Helper mit 90-Min-Cutoff-Logic.
@@ -777,6 +781,48 @@ export default function AdminSessionPage() {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Cancel-Booking Modal — Sarah-Wunsch 2026-05-25: 3h-Frist Auswahl als echtes Modal */}
+      {cancelChoice && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay">
+          <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10">
+            {cancelChoice.within3h ? (
+              <>
+                <h3 className="text-base font-bold mb-2">Stunde beginnt in weniger als 3 Stunden</h3>
+                <p className="text-sm text-yoga-text/70 mb-3 leading-snug">
+                  Der Platz wird in beiden Fällen freigegeben und der Warteliste angeboten.
+                  Wähle, was mit dem Credit passieren soll:
+                </p>
+                <div className="space-y-2">
+                  <button onClick={() => confirmCancelBooking(true)}
+                    className="w-full btn-primary text-sm">
+                    Credit zurückbuchen
+                  </button>
+                  <button onClick={() => confirmCancelBooking(false)}
+                    className="w-full text-sm bg-yoga-amber-bg text-yoga-amber-text border-0 rounded-full px-4 py-2.5 font-semibold cursor-pointer">
+                    Credit verfällt (z.B. WhatsApp-Abmeldung)
+                  </button>
+                  <button onClick={() => setCancelChoice(null)}
+                    className="w-full btn-secondary text-sm">Abbrechen</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="text-base font-bold mb-2">Yogi austragen?</h3>
+                <p className="text-sm text-yoga-text/70 mb-4 leading-snug">
+                  Der Credit wird zurückgebucht. Platz wird der Warteliste angeboten.
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={() => setCancelChoice(null)}
+                    className="flex-1 btn-secondary text-sm">Abbrechen</button>
+                  <button onClick={() => confirmCancelBooking(true)}
+                    className="flex-1 btn-primary text-sm">Austragen</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

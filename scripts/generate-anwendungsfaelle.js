@@ -1175,7 +1175,7 @@ content.push(...ucase({
     {
       betreff: 'Du wurdest in den Kurs [Kursname] eingetragen',
       an: 'Jeder übernommene Yogi',
-      kern: 'Hallo [Vorname], ich habe dich in einen Kurs eingetragen. Kurs: [Name]. 📅 [Wochentag] um [Uhrzeit]. [Dauer] Minuten pro Einheit. ✅ Du nimmst an allen [X] Stunden teil — du hast dafür [X] Credits in deinem Profil. Wichtige Regeln: Abmeldung kostenlos bis 3 Stunden vorher, Nachholen bis 8 Tage nach Kursende, Vorholen max. 10 Tage im Voraus, Rücktritt vom Kurs bis 7 Tage vor Beginn.',
+      kern: 'Hallo [Vorname], ich habe dich in einen Kurs eingetragen. Kurs: [Name]. 📅 [Wochentag] um [Uhrzeit]. [Dauer] Minuten pro Einheit. ✅ Du nimmst an allen [X] Stunden teil — du hast dafür [X] Credits in deinem Profil. Wichtige Regeln: Abmeldung kostenlos bis 3 Stunden vorher, Nachholen bis 8 Tage nach Kursende, Vorholen max. 10 Tage im Voraus, Rücktritt vom gesamten Kurs kostenlos bis 14 Tage vor Kursbeginn — danach Gebühr (30 € bis 7 Tage vorher, ab 6 Tagen volle Gebühr); Ersatzteilnehmer jederzeit möglich.',
     },
   ],
 }))

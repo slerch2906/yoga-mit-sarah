@@ -275,9 +275,10 @@ export default function RechtlichesPage() {
             <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• Vorholen: Stunden dürfen <strong>maximal 10 Tage im Voraus</strong> vorgezogen werden.</p>
             <p className="text-sm text-yoga-text/80 leading-relaxed mb-4">• Ein Anspruch auf einen freien Platz in einer bestimmten Stunde oder zu einem bestimmten Zeitpunkt besteht nicht. Das Nachholen erfolgt ausschließlich im Rahmen freier Kapazitäten.</p>
             <h3 className="text-sm font-bold mb-2">Rücktritt vom Kurs</h3>
-            <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• Bis 7 Tage vor Kursbeginn: kostenfreier Rücktritt möglich.</p>
-            <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• Ab dem 7. Tag vor Kursbeginn: Stornogebühr <strong>30 €</strong>.</p>
-            <p className="text-sm text-yoga-text/80 leading-relaxed mb-4">• Ab dem 1. Kurstag: Volle Kursgebühr fällig, auch bei Nichterscheinen.</p>
+            <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• Bis <strong>14 Tage</strong> vor Kursbeginn: kostenfreier Rücktritt möglich.</p>
+            <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• <strong>13–7 Tage</strong> vor Kursbeginn: Bearbeitungsgebühr <strong>30 €</strong>.</p>
+            <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• <strong>Ab 6 Tagen</strong> vor Kursbeginn: Die volle Kursgebühr fällig, auch bei Nichterscheinen.</p>
+            <p className="text-sm text-yoga-text/80 leading-relaxed mb-4">• <strong>Option:</strong> Du kannst einen Ersatzteilnehmer benennen — auch innerhalb der Stornofrist.</p>
             <a href="https://www.yogamitsarah.me/agb" target="_blank" rel="noopener noreferrer"
               className="text-sm font-bold underline text-yoga-text">
               Vollständige AGB lesen →

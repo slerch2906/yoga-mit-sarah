@@ -120,6 +120,17 @@ export default function AdminYogiDetailPage() {
     const fullName = `${yogi?.first_name || ''} ${yogi?.last_name || ''}`.trim()
     const email = yogi?.email || ''
 
+    // Sarah-Wunsch 2026-05-25: Wartelisten der freigewordenen Stunden
+    // automatisch nachruecken. Zuerst session_ids der zukuenftigen
+    // Buchungen sammeln, BEVOR sie geloescht werden.
+    const today = new Date().toISOString().split('T')[0]
+    const { data: futureActiveBookings } = await supabase.from('bookings')
+      .select('session_id, session:sessions!bookings_session_id_fkey(date)')
+      .eq('user_id', id).eq('status', 'active')
+    const sessionsToPromote: string[] = (futureActiveBookings || [])
+      .filter((b: any) => b.session?.date && b.session.date >= today)
+      .map((b: any) => b.session_id)
+
     // 1. PLÄTZE FREIGEBEN — alle Yogi-Ressourcen explizit löschen
     //    (auch wenn Auth-Delete cascadet, hier robust falls API fehlschlägt)
     await supabase.from('bookings').delete().eq('user_id', id)
@@ -127,6 +138,12 @@ export default function AdminYogiDetailPage() {
     await supabase.from('credits').delete().eq('user_id', id)
     await supabase.from('waitlist').delete().eq('user_id', id)
     await supabase.from('notification_log').delete().eq('user_id', id)
+
+    // 1b. Wartelisten der freigewordenen Stunden automatisch nachruecken
+    //     (Sarah-Wunsch 2026-05-25, gleiches Verhalten wie bei Yogi-Selbst-Loeschung)
+    for (const sId of sessionsToPromote) {
+      promoteWaitlistOrOfferLate(supabase, sId).catch(e => console.error('promote on admin-delete:', e))
+    }
 
     // 2. PII anonymisieren — Profile + legal_acceptances
     await supabase.from('profiles').update({

@@ -347,7 +347,7 @@ export default function ProfilPage() {
     //     Sessions filtern. PostgREST kann nicht direkt auf nested session.date filtern.
     const today = new Date().toISOString().split('T')[0]
     const { data: allActiveBookings } = await supabase.from('bookings')
-      .select('id, session_id, session:sessions(date, time_start)')
+      .select('id, session_id, session:sessions!bookings_session_id_fkey(date, time_start)')
       .eq('user_id', user.id).eq('status', 'active')
     const sessionsToPromote: string[] = (allActiveBookings || [])
       .filter((b: any) => b.session?.date && b.session.date >= today)

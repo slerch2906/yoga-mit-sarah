@@ -29,6 +29,16 @@ export default function AdminYogiDetailPage() {
   const [selectedCourseUnits, setSelectedCourseUnits] = useState(0)
   const [editingCredit, setEditingCredit] = useState<any>(null)
   const [editCreditAmount, setEditCreditAmount] = useState(0)
+  // Welle G (2026-05-25): Krankheits-Austragung mit Guthaben.
+  // cancelIllnessFor enthaelt das aktive Enrollment, gegen das das Modal laeuft.
+  // attestDate = Datum ab dem das Attest gilt (Default: heute).
+  // attestConfirmed = Pflicht-Checkbox "Yogi hat Attest vorgelegt".
+  // illnessPreview = Live-Berechnung (Reststunden + Vorhol-Anzahl + Termine).
+  const [cancelIllnessFor, setCancelIllnessFor] = useState<{ courseId: string; courseName: string; enrollmentId: string } | null>(null)
+  const [attestDate, setAttestDate] = useState<string>(new Date().toISOString().split('T')[0])
+  const [attestConfirmed, setAttestConfirmed] = useState(false)
+  const [illnessPreview, setIllnessPreview] = useState<{ hoursCredited: number; sessions: { date: string; time_start: string }[]; vorholCount: number } | null>(null)
+  const [illnessSubmitting, setIllnessSubmitting] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -438,6 +448,184 @@ export default function AdminYogiDetailPage() {
     loadData(); setEnrolling(false)
   }
 
+  // Welle G (2026-05-25): Live-Preview fuer Krankheits-Austragung.
+  // Sobald cancelIllnessFor + attestDate gesetzt: zukuenftige Kurs-Sessions
+  // (ab Attest-Datum, nicht cancelled, nicht excluded) zaehlen + offene
+  // Vorhol/Nachhol-Buchungen des Yogis (origin_session_id NOT NULL, future).
+  useEffect(() => {
+    if (!cancelIllnessFor || !attestDate) { setIllnessPreview(null); return }
+    let cancelled = false
+    ;(async () => {
+      // 1) Zukuenftige aktive Kurs-Sessions ab Attest-Datum
+      const { data: allSessions } = await supabase.from('sessions')
+        .select('id, date, time_start, is_cancelled, cancel_reason')
+        .eq('course_id', cancelIllnessFor.courseId)
+        .gte('date', attestDate)
+        .order('date')
+      const activeSessions = (allSessions || []).filter((s: any) =>
+        !s.is_cancelled && s.cancel_reason !== 'excluded'
+      )
+      // Yogi-Bookings in diesen Sessions (nur die zaehlen — nicht alle Kurs-Sessions)
+      const sIds = activeSessions.map((s: any) => s.id)
+      let bookedSessions: any[] = []
+      if (sIds.length > 0) {
+        const { data: bks } = await supabase.from('bookings')
+          .select('session_id').eq('user_id', id).in('session_id', sIds).eq('status', 'active')
+        const bookedIds = new Set((bks || []).map((b: any) => b.session_id))
+        bookedSessions = activeSessions.filter((s: any) => bookedIds.has(s.id))
+      }
+      // 2) Offene Vorhol-/Nachhol-Buchungen des Yogis ab Attest-Datum
+      //    (origin_session_id NOT NULL = Vorhol/Nachhol, status='active', Datum >= Attest)
+      const { data: allBookings } = await supabase.from('bookings')
+        .select('id, origin_session_id, session:sessions!bookings_session_id_fkey(date)')
+        .eq('user_id', id).eq('status', 'active').not('origin_session_id', 'is', null)
+      const vorholCount = (allBookings || []).filter((b: any) =>
+        b.session?.date && b.session.date >= attestDate
+      ).length
+      if (cancelled) return
+      setIllnessPreview({
+        hoursCredited: bookedSessions.length,
+        sessions: bookedSessions.map((s: any) => ({ date: s.date, time_start: s.time_start })),
+        vorholCount,
+      })
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cancelIllnessFor, attestDate])
+
+  // Welle G (2026-05-25): Admin trägt Yogi krankheitsbedingt aus dem Kurs.
+  // - storniert alle zukuenftigen Kurs-Bookings ab Attest-Datum (cancel_late=false → Credit zurueck)
+  // - storniert alle offenen Vorhol/Nachhol-Buchungen des Yogis ab Attest-Datum (ersatzlos)
+  // - promoted Wartelisten fuer alle freigewordenen Sessions
+  // - setzt enrollment.end_date + end_reason='illness'
+  // - legt Guthaben an (source='illness', expires_at = attestDate + 10 Monate)
+  // - Audit-Log + Email an Yogi (illness_credit)
+  async function cancelEnrollmentDueToIllness(courseId: string, attestDateStr: string) {
+    setIllnessSubmitting(true)
+    try {
+      // Zukuenftige aktive Sessions im Kurs ab Attest-Datum
+      const { data: allSessions } = await supabase.from('sessions')
+        .select('id, date, time_start, is_cancelled, cancel_reason')
+        .eq('course_id', courseId)
+        .gte('date', attestDateStr)
+        .order('date')
+      const activeSessions = (allSessions || []).filter((s: any) =>
+        !s.is_cancelled && s.cancel_reason !== 'excluded'
+      )
+      const sessionIds = activeSessions.map((s: any) => s.id)
+
+      // 1) Storniere Bookings dieses Yogis in zukuenftigen Kurs-Sessions
+      let cancelledCourseBookings = 0
+      if (sessionIds.length > 0) {
+        const { data: bksToCancel } = await supabase.from('bookings')
+          .select('id').eq('user_id', id).in('session_id', sessionIds).eq('status', 'active')
+        cancelledCourseBookings = (bksToCancel || []).length
+        if (cancelledCourseBookings > 0) {
+          // cancel_late=false → DB-Trigger gibt Credit zurueck (used--).
+          // Wir vergeben das Guthaben separat als neuen Credit; die Kurs-Credits
+          // bleiben technisch im alten Credit, aber das ist ok da der Yogi via
+          // Guthaben (neuer Credit, source='illness') Stunden in einem neuen
+          // Kurs verrechnen kann.
+          await supabase.from('bookings').update({
+            status: 'cancelled',
+            cancelled_at: new Date().toISOString(),
+            cancel_late: false,
+          }).eq('user_id', id).in('session_id', sessionIds).eq('status', 'active')
+        }
+      }
+
+      // 2) Storniere offene Vorhol/Nachhol-Buchungen des Yogis ab Attest-Datum
+      //    (origin_session_id NOT NULL = Vorhol/Nachhol). Ersatzlos: cancel_late=true,
+      //    damit kein Credit zurueckgebucht wird (Sarah-Spec).
+      const { data: vorholBks } = await supabase.from('bookings')
+        .select('id, session_id, session:sessions!bookings_session_id_fkey(date)')
+        .eq('user_id', id).eq('status', 'active').not('origin_session_id', 'is', null)
+      const vorholToCancel = (vorholBks || []).filter((b: any) =>
+        b.session?.date && b.session.date >= attestDateStr
+      )
+      const vorholCancelled = vorholToCancel.length
+      const vorholSessionIds: string[] = []
+      for (const b of vorholToCancel) {
+        await supabase.from('bookings').update({
+          status: 'cancelled',
+          cancelled_at: new Date().toISOString(),
+          cancel_late: true, // ersatzlos → kein Credit-Rueckfluss
+        }).eq('id', b.id)
+        if (b.session_id) vorholSessionIds.push(b.session_id)
+      }
+
+      // 3) Waitlist promoten fuer alle freigewordenen Sessions
+      const allFreedSessions = [...sessionIds, ...vorholSessionIds]
+      for (const sId of allFreedSessions) {
+        promoteWaitlistOrOfferLate(supabase, sId).catch(e => console.error('promote on illness:', e))
+      }
+
+      // 4) Enrollment-Ende setzen (end_date + end_reason)
+      await supabase.from('enrollments')
+        .update({ end_date: attestDateStr, end_reason: 'illness' })
+        .eq('user_id', id).eq('course_id', courseId)
+
+      // 5) Neues Guthaben anlegen (10 Monate gueltig, source='illness')
+      const hoursCredited = cancelledCourseBookings
+      const expiresAt = new Date(attestDateStr)
+      expiresAt.setMonth(expiresAt.getMonth() + 10) // 10 Monate (Welle G Sarah-Spec)
+      let newCreditId: string | null = null
+      if (hoursCredited > 0) {
+        const { data: newCredit } = await supabase.from('credits').insert({
+          user_id: id,
+          model: 'guthaben',
+          total: hoursCredited,
+          used: 0,
+          expires_at: expiresAt.toISOString(),
+          source: 'illness',
+        } as any).select().single()
+        newCreditId = newCredit?.id || null
+      }
+
+      // 6) Audit-Log
+      await supabase.from('audit_log').insert({
+        action: 'admin_illness_credit',
+        details: {
+          target_user_id: id,
+          course_id: courseId,
+          attest_date: attestDateStr,
+          hours_credited: hoursCredited,
+          vorhol_cancelled_count: vorholCancelled,
+          credit_id: newCreditId,
+          expires_at: expiresAt.toISOString(),
+        },
+      })
+
+      // 7) Email an Yogi (illness_credit) — nur wenn echte Email (kein Dummy)
+      try {
+        const { data: yProf } = await supabase.from('profiles').select('email, first_name, is_dummy').eq('id', id).single()
+        const courseName = cancelIllnessFor?.courseName || ''
+        if (yProf?.email && !yProf.is_dummy && hoursCredited > 0) {
+          await Email.illnessCredit({
+            email: yProf.email,
+            firstName: yProf.first_name || 'Yogi',
+            courseName,
+            hoursCredited,
+            expiresAt: expiresAt.toISOString(),
+          })
+        }
+      } catch (e) { console.error('illness email:', e) }
+
+      // Modal schliessen + State reset + neu laden
+      setCancelIllnessFor(null)
+      setAttestConfirmed(false)
+      setIllnessPreview(null)
+      setAttestDate(new Date().toISOString().split('T')[0])
+      loadData()
+      alert(`Yogi krankheitsbedingt ausgetragen.\n${hoursCredited} Stunden Guthaben gutgeschrieben (gültig 10 Monate).${vorholCancelled > 0 ? `\n${vorholCancelled} Vorhol-/Nachholbuchung${vorholCancelled === 1 ? '' : 'en'} storniert.` : ''}`)
+    } catch (e: any) {
+      console.error('cancelEnrollmentDueToIllness:', e)
+      alert('Fehler bei der Krankheits-Austragung. Bitte Console prüfen.')
+    } finally {
+      setIllnessSubmitting(false)
+    }
+  }
+
   async function removeFromCourse(enrollmentId: string, courseId: string) {
     // Nur Kurs-Credits löschen (nach course_id) – Punktekarte IMMER behalten
     const { data: sessions } = await supabase.from('sessions').select('id').eq('course_id', courseId)
@@ -833,10 +1021,28 @@ export default function AdminYogiDetailPage() {
                     </div>
                   </div>
                 ) : (
-                  <button onClick={() => setRemoving(e.course_id)}
-                    className="w-full text-sm text-yoga-red-text bg-yoga-red-bg border-0 rounded-yoga py-2 cursor-pointer font-semibold hover:opacity-80">
-                    Aus Kurs austragen
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    <button onClick={() => setRemoving(e.course_id)}
+                      className="w-full text-sm text-yoga-red-text bg-yoga-red-bg border-0 rounded-yoga py-2 cursor-pointer font-semibold hover:opacity-80">
+                      Aus Kurs austragen
+                    </button>
+                    {/* Welle G (2026-05-25): Krankheits-Austragung mit Guthaben.
+                        Eigener Pfad, da Yogi Reststunden ab Attest-Datum als
+                        Guthaben (10 Mo gueltig) bekommt — nicht wie bei der
+                        regulaeren Austragung, wo Credits geloescht werden. */}
+                    <button onClick={() => {
+                      setCancelIllnessFor({
+                        courseId: e.course_id,
+                        courseName: e.course?.name || '',
+                        enrollmentId: e.id,
+                      })
+                      setAttestDate(new Date().toISOString().split('T')[0])
+                      setAttestConfirmed(false)
+                    }}
+                      className="w-full text-xs text-yoga-amber-text bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga py-2 cursor-pointer font-semibold hover:opacity-80">
+                      <i className="ti ti-medical-cross mr-1" /> Wegen Krankheit austragen
+                    </button>
+                  </div>
                 )}
               </div>
               )
@@ -1035,6 +1241,92 @@ export default function AdminYogiDetailPage() {
           </>
         )}
       </div>
+
+      {/* Welle G (2026-05-25): Modal Krankheits-Austragung mit Guthaben. */}
+      {cancelIllnessFor && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => { if (!illnessSubmitting) { setCancelIllnessFor(null); setAttestConfirmed(false) } }}>
+          <div className="bg-yoga-bg w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 max-h-[90vh] overflow-y-auto"
+            onClick={ev => ev.stopPropagation()}>
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <p className="text-base font-bold">Wegen Krankheit austragen</p>
+                <p className="text-xs text-yoga-text/60 mt-0.5">{cancelIllnessFor.courseName}</p>
+              </div>
+              {!illnessSubmitting && (
+                <button onClick={() => { setCancelIllnessFor(null); setAttestConfirmed(false) }}
+                  className="text-yoga-text/40 bg-transparent border-0 cursor-pointer text-xl leading-none">×</button>
+              )}
+            </div>
+
+            <div className="mb-3">
+              <label className="text-xs font-semibold text-yoga-text/70 block mb-1">
+                Ab welchem Datum gilt das Attest?
+              </label>
+              <input type="date" value={attestDate}
+                onChange={ev => setAttestDate(ev.target.value)}
+                className="field-input w-full" />
+            </div>
+
+            {illnessPreview && (
+              <div className="card mb-3" style={{ background: '#e8ede6', borderColor: 'rgba(58,90,48,0.2)' }}>
+                <p className="text-sm font-bold mb-1" style={{ color: '#3a5a30' }}>
+                  Es werden {illnessPreview.hoursCredited} {illnessPreview.hoursCredited === 1 ? 'Reststunde' : 'Reststunden'} gutgeschrieben
+                </p>
+                {illnessPreview.sessions.length > 0 && (
+                  <p className="text-xs mb-1" style={{ color: '#3a5a30', opacity: 0.85 }}>
+                    Termine:{' '}
+                    {illnessPreview.sessions.slice(0, 5).map(s =>
+                      new Date(s.date).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })
+                    ).join(', ')}
+                    {illnessPreview.sessions.length > 5 && ` … (+${illnessPreview.sessions.length - 5} weitere)`}
+                  </p>
+                )}
+                <p className="text-xs" style={{ color: '#3a5a30', opacity: 0.85 }}>
+                  Guthaben gültig 10 Monate.
+                </p>
+                {illnessPreview.vorholCount > 0 && (
+                  <p className="text-xs mt-2 text-yoga-amber-text">
+                    {illnessPreview.vorholCount} offene Vorhol-/Nachholbuchung{illnessPreview.vorholCount === 1 ? ' wird' : 'en werden'} storniert und verfallen ersatzlos.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {illnessPreview && illnessPreview.hoursCredited < 4 && illnessPreview.hoursCredited > 0 && (
+              <div className="card mb-3" style={{ background: 'var(--yoga-amber-bg)', borderColor: 'var(--yoga-amber-text)' }}>
+                <p className="text-xs font-semibold text-yoga-amber-text">
+                  Achtung: weniger als 4 Stunden — AGB sieht 4-Stunden-Mindestgrenze vor. Trotzdem ausführen?
+                </p>
+              </div>
+            )}
+
+            <label className="flex items-start gap-2 mb-4 cursor-pointer">
+              <input type="checkbox" checked={attestConfirmed}
+                onChange={ev => setAttestConfirmed(ev.target.checked)}
+                className="mt-0.5" />
+              <span className="text-sm text-yoga-text">
+                Yogi hat Attest vorgelegt (ich habe es gesehen)
+              </span>
+            </label>
+
+            <div className="flex gap-2">
+              <button onClick={() => { setCancelIllnessFor(null); setAttestConfirmed(false) }}
+                disabled={illnessSubmitting}
+                className="flex-1 btn-ghost text-sm py-2.5">
+                Abbrechen
+              </button>
+              <button onClick={() => cancelEnrollmentDueToIllness(cancelIllnessFor.courseId, attestDate)}
+                disabled={!attestConfirmed || illnessSubmitting || !illnessPreview}
+                className={`flex-1 text-sm font-bold py-2.5 rounded-yoga border-0 cursor-pointer ${(!attestConfirmed || illnessSubmitting || !illnessPreview) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                style={{ background: '#8a6020', color: 'white' }}>
+                {illnessSubmitting ? 'Wird verarbeitet…' : 'Austragen + Guthaben vergeben'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <BottomNav isAdmin />
     </div>
   )

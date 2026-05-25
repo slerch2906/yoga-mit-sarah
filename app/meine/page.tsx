@@ -253,22 +253,33 @@ export default function MeinePage() {
         )}
 
         {/* Sarah-Wunsch 2026-05-25: Guthaben in eigener Sektion unterhalb der freien Credits */}
+        {/* Welle G (2026-05-25): source-spezifische Labels — Krankheits-Guthaben
+            ('illness', 10 Monate gueltig) vs Kurs-Guthaben (cancellation_choice
+            oder NULL, 2 Jahre gueltig). Restzeit/Verfallsdatum immer anzeigen. */}
         {visibleCredits.filter(c => c.model === 'guthaben').length > 0 && (
           <div className="mb-4">
             <p className="section-label">Guthaben</p>
             {visibleCredits.filter(c => c.model === 'guthaben').map(c => {
               const free = computeFreeMeine(c)
+              const isIllness = c.source === 'illness'
+              const expiryFormatted = new Date(c.expires_at).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })
+              // Restzeit in Tagen — immer anzeigen (Welle G Sarah-Wunsch)
+              const daysLeft = Math.max(0, Math.ceil((new Date(c.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
               return (
                 <div key={c.id} className="card mb-2">
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2">
                         <span className={`text-2xl font-bold ${free === 0 ? 'text-yoga-text/30' : ''}`}>{free}</span>
-                        <span className="text-sm text-yoga-text/60">Guthaben</span>
+                        <span className="text-sm text-yoga-text/60">
+                          {isIllness ? 'Krankheits-Guthaben' : 'Kurs-Guthaben'}
+                        </span>
                       </div>
-                      <div className="text-xs text-yoga-amber-text mt-1">Aus abgesagtem Kurs</div>
+                      <div className="text-xs text-yoga-amber-text mt-1">
+                        {isIllness ? 'Aus Krankheits-Austragung — gültig bis ' + expiryFormatted : 'Kurs-Guthaben — gültig bis ' + expiryFormatted}
+                      </div>
                       <div className="text-xs text-yoga-text/50 mt-0.5">Nicht für Einzelstunden, nur verrechenbar mit neuem Kurs</div>
-                      <div className="text-xs text-yoga-text/40 mt-1">Gültig bis {new Date(c.expires_at).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })}</div>
+                      <div className="text-xs text-yoga-text/40 mt-1">Noch {daysLeft} {daysLeft === 1 ? 'Tag' : 'Tage'} gültig</div>
                     </div>
                   </div>
                 </div>

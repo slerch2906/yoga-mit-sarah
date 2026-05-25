@@ -1914,6 +1914,63 @@ content.push(...ucase({
   ],
 }))
 
+// ════════════════════════════════════════════════════════════════════════════
+// Welle G (2026-05-25): Krankheits-Austragung mit Guthaben
+// ════════════════════════════════════════════════════════════════════════════
+content.push(pageBreak())
+content.push(h1('Welle G: Krankheits-Austragung mit Guthaben'))
+
+content.push(...ucase({
+  titel: 'Krankheits-Austragung: Yogi mit Attest aus Kurs nehmen',
+  was: 'Sarah trägt einen Yogi krankheitsbedingt aus einem laufenden Kurs aus und vergibt ihm Guthaben über die noch ausstehenden Stunden ab dem Attest-Datum. Beispiel: Anna im Kurs „Body & Mind" (10 Stunden), bringt Attest am 25.05. — ab dann werden ihr 5 Reststunden gutgeschrieben.',
+  wer: 'Admin (Sarah)',
+  ablauf: [
+    'Sarah öffnet /admin/yogis/[id] und sieht im Block „Eingebuchte Kurse" pro aktivem Enrollment den Button „Wegen Krankheit austragen" (amber/medizinisches Kreuz-Icon).',
+    'Klick öffnet ein Modal mit Datum-Picker („Ab welchem Datum gilt das Attest?", Default: heute).',
+    'Sobald das Datum gewählt ist, wird live berechnet: „Es werden N Reststunden gutgeschrieben (Termine: …). Plus M offene Vorhol-/Nachholbuchungen werden storniert und verfallen ersatzlos."',
+    'Wenn Reststunden < 4: weicher Warnhinweis „Achtung: weniger als 4 Stunden — AGB sieht 4-Stunden-Mindestgrenze vor. Trotzdem ausführen?" (lässt aber durch).',
+    'Pflicht-Checkbox: „Yogi hat Attest vorgelegt (ich habe es gesehen)" — sonst ist der Submit-Button deaktiviert.',
+    'Klick auf „Austragen + Guthaben vergeben" → System storniert alle zukünftigen Kurs-Bookings ab Attest-Datum (cancel_late=false), storniert alle offenen Vorhol-/Nachhol-Buchungen (cancel_late=true, ersatzlos), promotet Wartelisten für freigewordene Sessions, setzt enrollments.end_date + end_reason=„illness", legt neuen Credit an (model=„guthaben", source=„illness", total=N Reststunden, expires_at=Attest-Datum+10 Monate).',
+    'Audit-Log mit action=„admin_illness_credit" wird angelegt.',
+    'Email an Yogi (Template „illness_credit") wird versandt — keine separate Admin-Notification (nur Audit-Log).',
+  ],
+  regeln: [
+    'Krankheits-Guthaben (source=„illness") ist 10 Monate ab Vergabe gültig.',
+    'Kursabbruch-Guthaben (source=„cancellation_choice" oder NULL) bleibt bei 2 Jahren — unverändert.',
+    'Bestehende Guthaben in der DB werden NICHT angefasst (Bestandsschutz).',
+    'Das Guthaben kann NUR mit der Buchung eines neuen Kurses verrechnet werden — keine Auszahlung in Geld, keine Verwendung für Einzelstunden.',
+    'Vorhol-/Nachholbuchungen werden ersatzlos beendet (cancel_late=true → kein Credit-Rückfluss).',
+    'AGB sieht eine 4-Stunden-Mindestgrenze vor. Der Workflow warnt darunter, blockiert aber nicht (Sarah entscheidet im Einzelfall).',
+  ],
+  emails: [
+    {
+      betreff: 'Krankheits-Austragung: [Kursname]',
+      an: 'Yogi (echte Email, keine Dummy-User)',
+      kern: 'Gemäß deinem Attest habe ich dich aus dem Kurs ausgetragen. Du erhältst ein Guthaben über N Stunden (gültig bis [Datum + 10 Monate]). Vorhol-/Nachholbuchungen sind ersatzlos beendet. Guthaben nur für neuen Kurs einlösbar — keine Auszahlung.',
+    },
+  ],
+  sonder: [
+    'Wenn keine Reststunden ab Attest-Datum existieren (z.B. Yogi hat alles schon abgesagt oder Kurs ist bereits zu Ende), wird kein Guthaben angelegt — die Operation läuft trotzdem durch (enrollment wird beendet, Audit-Log geschrieben). Modal-Submit erfordert aber illnessPreview vorhanden.',
+    'Dummy-Yogis bekommen keine Email (wie überall sonst auch).',
+    'Wenn nur Vorhol/Nachhol storniert werden (keine Kurs-Reststunden), gibt es trotzdem kein Guthaben — nur die Stornierungen + Audit-Log.',
+  ],
+  klaren: [
+    'Folge-TODO (Sarah): AGB-Versionierung muss separat aktualisiert werden — Krankheits-Klausel mit 10-Monats-Frist und „nur für neuen Kurs verrechenbar, keine Geld-Auszahlung" sollte explizit dokumentiert sein.',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Anzeige in /meine: Krankheits-Guthaben vs. Kurs-Guthaben',
+  was: 'In der Yogi-Übersicht /meine werden Guthaben jetzt nach Herkunft unterschiedlich beschriftet — Krankheits-Guthaben mit eigenem Label und der korrekten 10-Monats-Frist, Kursabbruch-Guthaben weiterhin mit 2-Jahres-Frist.',
+  wer: 'Yogi',
+  ablauf: [
+    'Yogi öffnet /meine — sieht im Block „Guthaben" pro Credit eine Karte.',
+    'Wenn credits.source=„illness": Label „Krankheits-Guthaben — gültig bis [Datum]".',
+    'Wenn credits.source=„cancellation_choice" oder NULL: Label „Kurs-Guthaben — gültig bis [Datum]".',
+    'Zusätzlich wird immer die Restzeit in Tagen angezeigt („Noch X Tage gültig").',
+  ],
+}))
+
 content.push(pageBreak())
 content.push(h1('Anhang: Begriffsklärung'))
 content.push(...[
@@ -1938,6 +1995,9 @@ content.push(...[
   ['cancel_late', 'Flag auf Bookings. Wenn true beim Stornieren, wird der DB-Trigger trg_sync_credit_used unterdrückt → Credit kommt NICHT zurück. Wird im 3h-Frist-Modal genutzt, wenn Sarah „Credit verfällt" wählt.'],
   ['3h-Frist', 'Stornierungs-Frist: bis 3 Stunden vor Stundenbeginn kostenlos abmelden. Darunter verfällt der Credit (bei Yogi-Abmeldung immer; beim Admin-Austrag wählbar über das 3h-Modal seit Welle C).'],
   ['Late-Offer-Frist', '90 Minuten vor Stundenbeginn — bis dahin läuft Auto-Promote, danach kommt der Late-Offer-Workflow (Mail an alle Wartelisten-Yogis).'],
+  ['Krankheits-Guthaben (Welle G)', 'Guthaben mit credits.source=„illness", angelegt bei Krankheits-Austragung. 10 Monate ab Attest-Datum gültig. Nur verrechenbar mit neuem Kurs, keine Auszahlung in Geld.'],
+  ['credits.source', 'Spalte auf der credits-Tabelle (Welle G). Werte: NULL (Standard), „illness" (Krankheits-Austragung, 10 Mo), „cancellation_choice" (Kursabbruch-Wahl, 2 Jahre).'],
+  ['enrollments.end_date / end_reason', 'Spalten auf enrollments (Welle G). end_date = Tag, an dem die Teilnahme endet (z.B. Attest-Datum). end_reason = „illness" / „course_cancelled" / „admin_removed".'],
 ].map(([term, def]) => pRich([
   { text: term + ': ', bold: true },
   { text: def },

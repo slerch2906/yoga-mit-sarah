@@ -90,4 +90,11 @@ export const Email = {
 
   passwordResetRequest: (data: { email: string }) =>
     sendEmail('password_reset_request', data),
+
+  // Welle G (2026-05-25): Krankheits-Austragung mit Guthaben.
+  // Yogi wurde krankheitsbedingt aus dem Kurs ausgetragen, bekommt Guthaben
+  // ueber die Reststunden (10 Monate gueltig — eigene Frist, weicht von
+  // den 2 Jahren des Kursabbruch-Guthabens ab).
+  illnessCredit: (data: { email: string; firstName: string; courseName: string; hoursCredited: number; expiresAt: string }) =>
+    sendEmail('illness_credit', data),
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import { Email } from '@/lib/email'
+import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import { createClient } from '@/lib/supabase/client'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
@@ -196,8 +197,12 @@ export default function AdminKursePage() {
 
       if (enrollments && enrollments.length > 0) {
         const oldTime = editCourse.time_start
+        const oldMaxSpots = editCourse.max_spots
         const timeChanged = oldTime !== courseData.time_start
-        
+        // Sarah-Wunsch 2026-05-25: Wenn max_spots erhoeht wird, Wartelisten-Yogis
+        // der ZUKUENFTIGEN Sessions automatisch nachruecken.
+        const spotsIncreased = courseData.max_spots > (oldMaxSpots || 0)
+
         // User im Kurs → Metadaten + Uhrzeit/Dauer aktualisieren
         await supabase.from('courses').update({
           name: courseData.name,
@@ -237,6 +242,26 @@ export default function AdminKursePage() {
               oldTime: oldTime || '',
               newTime: courseData.time_start || '',
             })
+          }
+        }
+
+        // Sarah-Wunsch 2026-05-25: Wenn max_spots erhoeht wurde, Wartelisten
+        // der ZUKUENFTIGEN Sessions automatisch nachruecken (so viele wie
+        // jetzt Platz ist). promoteWaitlistOrOfferLate macht das pro Session.
+        if (spotsIncreased) {
+          const today = new Date().toISOString().split('T')[0]
+          const { data: futureSessions } = await supabase.from('sessions')
+            .select('id').eq('course_id', editCourse.id)
+            .eq('is_cancelled', false).gte('date', today)
+          // promoteWaitlistOrOfferLate fuellt pro Session genau EINEN Platz.
+          // Mehrere neue Plaetze pro Session → mehrfach aufrufen (loop bis Promote=noop).
+          for (const s of (futureSessions || []) as any[]) {
+            // Pro Session: so oft promoten bis kein Yogi mehr nachrueckt
+            let safetyMax = 50 // gegen Endlos-Schleife
+            while (safetyMax-- > 0) {
+              const result = await promoteWaitlistOrOfferLate(supabase, s.id)
+              if (result.mode === 'noop' || result.mode === 'late-offer-sent') break
+            }
           }
         }
       } else {

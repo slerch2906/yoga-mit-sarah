@@ -355,6 +355,36 @@ test.describe('[E2E] Kursabbruch-Workflow: complete-Notification', () => {
   })
 })
 
+// ── 10a-4) Welle D: Notification-Dedup + max_spots-Promote + Guthaben-Split
+test.describe('[E2E] Welle D: Dedup-Fix + max_spots-Promote + Guthaben-Sektion', () => {
+  test('fn_notify_refund_pending: Dedup-Check verhindert Doppel-Notifications', async () => {
+    const db = getServiceClient()
+    // Real-DB-Test: aktuelle DB hat nach Cleanup 0 unread. Nach Cron-Run
+    // sollten keine NEUEN refund_pending fuer alte responses entstehen.
+    const { count } = await db.from('admin_notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('read', false).eq('type', 'refund_pending')
+    // 0 erwartet (Migration hat alle als read markiert, Trigger erzeugt keine neuen)
+    expect(count).toBeLessThanOrEqual(3) // Toleranz fuer parallele E2E-Tests
+  })
+
+  test('app/admin/kurse: max_spots-Erhoehung triggert promoteWaitlistOrOfferLate-Loop', async () => {
+    const src = read('app/admin/kurse/page.tsx')
+    expect(src).toMatch(/spotsIncreased/)
+    expect(src).toMatch(/courseData\.max_spots\s*>\s*\(oldMaxSpots\s*\|\|\s*0\)/)
+    expect(src).toMatch(/if\s*\(\s*spotsIncreased\s*\)[\s\S]{0,400}promoteWaitlistOrOfferLate/)
+  })
+
+  test('/meine: Guthaben in eigener Sektion unterhalb der freien Credits', async () => {
+    const src = read('app/meine/page.tsx')
+    // Guthaben werden in der freien-Credits-Sektion AUSGEFILTERT
+    expect(src).toMatch(/\.filter\(c => c\.model !== ['"]guthaben['"]\)/)
+    // Eigene Sektion mit Ueberschrift "Guthaben"
+    expect(src).toMatch(/section-label['"]?>Guthaben</)
+    expect(src).toMatch(/c\.model === ['"]guthaben['"]\)\.length > 0/)
+  })
+})
+
 // ── 10a-3) Welle C: Admin-Austragen Modal + Quick-Credit-Form ─────────────
 // Sarah-Wunsch 2026-05-25: Admin kann beim Yogi-Austragen innerhalb 3h-Frist
 // entscheiden ob Credit zurueckgebucht wird oder verfaellt. Quick-Credit

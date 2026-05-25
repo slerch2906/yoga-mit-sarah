@@ -279,6 +279,10 @@ export default function RechtlichesPage() {
             <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• <strong>13–7 Tage</strong> vor Kursbeginn: Bearbeitungsgebühr <strong>30 €</strong>.</p>
             <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• <strong>Ab 6 Tagen</strong> vor Kursbeginn: Die volle Kursgebühr fällig, auch bei Nichterscheinen.</p>
             <p className="text-sm text-yoga-text/80 leading-relaxed mb-4">• <strong>Option:</strong> Du kannst einen Ersatzteilnehmer benennen — auch innerhalb der Stornofrist.</p>
+            <h3 className="text-sm font-bold mb-2">Allgemeine Regeln</h3>
+            <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• Bitte sei pünktlich auf der Matte. Bei Verspätung — kein Eintritt während der Anfangsentspannung.</p>
+            <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• Schalte dein Handy immer stumm oder aus.</p>
+            <p className="text-sm text-yoga-text/80 leading-relaxed mb-4">• Aus Rücksicht auf die Gruppe bitte bei ansteckenden Erkrankungen / Erkältungssymptomen nicht am Unterricht teilnehmen.</p>
             <a href="https://www.yogamitsarah.me/agb" target="_blank" rel="noopener noreferrer"
               className="text-sm font-bold underline text-yoga-text">
               Vollständige AGB lesen →

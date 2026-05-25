@@ -87,7 +87,16 @@ export default function AdminYogiDetailPage() {
   // den Credit einlöst — auch für Drop-Ins). Cancelled Sessions und cancelled
   // Bookings sind automatisch raus.
   function computeFree(c: any) { return Math.max(0, c.total - c.used) }
+  // Sarah-Wunsch 2026-05-26: Guthaben (model='guthaben') separat anzeigen —
+  // war vorher in "Freie Credits" eingerechnet → irrefuehrend, weil Admin
+  // dachte der Yogi habe noch buchbare Stunden.
   const freeCredits = credits.reduce((sum, c) => {
+    if (c.model === 'guthaben') return sum
+    if (new Date(c.expires_at) > new Date()) return sum + computeFree(c)
+    return sum
+  }, 0)
+  const guthabenCredits = credits.reduce((sum, c) => {
+    if (c.model !== 'guthaben') return sum
     if (new Date(c.expires_at) > new Date()) return sum + computeFree(c)
     return sum
   }, 0)
@@ -726,6 +735,114 @@ export default function AdminYogiDetailPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" /></div>
   if (!yogi) return null
 
+  // Sarah-Wunsch 2026-05-26: "Credits verwalten" wandert nach oben (zwischen
+  // Action-Buttons und "Eingebuchte Kurse"). Block in Render-Funktion
+  // extrahiert, damit er an einer Stelle gerendert und an der alten Stelle
+  // (unter Letzte Buchungen) entfernt werden kann.
+  const renderCreditsManageSection = () => {
+    const visibleCredits = credits.filter((c: any) =>
+      c.model === 'course' || Math.max(0, c.total - c.used) > 0
+    )
+    if (visibleCredits.length === 0) return null
+    return (
+      <>
+        <p className="section-label mt-2">Credits verwalten</p>
+        {visibleCredits.map(c => {
+          const free = computeFree(c)
+          const isExpired = new Date(c.expires_at) < new Date()
+          return (
+            <div key={c.id} className={`card mb-2 ${isExpired ? 'opacity-50' : ''}`}>
+              {editingCredit?.id === c.id && (c.model === 'tenpack' || c.model === 'quarterly' || c.model === 'single') ? (
+                <div>
+                  <p className="text-sm font-semibold mb-2">Credits anpassen</p>
+                  <p className="text-xs text-yoga-text/50 mb-2">Bereits verbraucht: {c.used}</p>
+                  <div className="flex items-center gap-2 mb-2">
+                    <label className="text-xs text-yoga-text/60">Neue Gesamtzahl:</label>
+                    <input type="number" min={c.used} max={100} value={editCreditAmount}
+                      onChange={e => setEditCreditAmount(parseInt(e.target.value))}
+                      className="field-input w-20 text-center py-1" />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => handleEditCredit(c, editCreditAmount)}
+                      className="flex-1 btn-primary text-sm py-2">Speichern</button>
+                    <button onClick={() => setEditingCredit(null)}
+                      className="flex-1 btn-ghost text-sm py-2">Abbrechen</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="text-sm font-semibold">
+                      {c.model === 'course'
+                        ? `${c.used} / ${c.total} genutzt · ${Math.max(0, c.total - c.used)} frei`
+                        : `${free} von ${c.total} Credits frei`}
+                    </div>
+                    {(() => {
+                      const isQuarterly = c.model === 'quarterly'
+                      const exp = new Date(c.expires_at)
+                      const fmtDay = (d: Date) => d.toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })
+                      const fmtShort = (d: Date) => d.toLocaleDateString('de-DE', { day:'numeric', month:'long' })
+                      if (isQuarterly) {
+                        const qNumber = Math.floor(exp.getMonth() / 3) + 1
+                        const qYear = exp.getFullYear()
+                        const qStart = c.valid_from ? new Date(c.valid_from) : new Date(qYear, (qNumber - 1) * 3, 1)
+                        return <>
+                          <div className="text-xs text-yoga-text/50 mt-0.5">
+                            Quartals-Credits · Q{qNumber} {qYear}
+                          </div>
+                          <div className="text-xs text-yoga-text/55 mt-0.5">
+                            Gültig vom {fmtShort(qStart)} bis {fmtDay(exp)}
+                          </div>
+                          {c.valid_from && new Date(c.valid_from) > new Date() && (
+                            <div className="text-xs text-yoga-amber-text font-semibold mt-1">
+                              Nutzbar ab {fmtDay(new Date(c.valid_from))}
+                            </div>
+                          )}
+                        </>
+                      }
+                      return (
+                        <div className="text-xs text-yoga-text/50 mt-0.5">
+                          {c.model === 'course' ? `Credits aus Kurs: ${c.course?.name || '—'}` : c.model === 'guthaben' ? (c.source === 'illness' ? 'Krankheits-Guthaben' : 'Guthaben aus Kursabbruch') : c.model === 'single' ? 'Credits aus Punktekarte' : c.model === 'tenpack' ? 'Punktekarte' : 'Credits'} ·
+                          {isExpired ? ' Abgelaufen' : ` verfällt ${exp.getFullYear() > 2090 ? 'nie' : exp.toLocaleDateString('de-DE')}`}
+                        </div>
+                      )
+                    })()}
+                    {c.model === 'course' && (
+                      <div className="text-xs text-yoga-text/30 mt-0.5">Nur Lesezugriff</div>
+                    )}
+                    {c.model === 'guthaben' && (
+                      <div className="text-xs text-yoga-text/30 mt-0.5">Löschbar (für Auszahlung)</div>
+                    )}
+                  </div>
+                  {(c.model === 'tenpack' || c.model === 'quarterly' || c.model === 'single') && (
+                    <div className="flex gap-2">
+                      <button onClick={() => { setEditingCredit(c); setEditCreditAmount(c.total) }}
+                        className="text-xs border border-yoga-border2 rounded-full px-2 py-1 hover:opacity-80">
+                        <i className="ti ti-edit" />
+                      </button>
+                      <button onClick={() => handleDeleteCredit(c.id)}
+                        className="text-xs bg-yoga-red-bg text-yoga-red-text border-0 rounded-full px-2 py-1 cursor-pointer hover:opacity-80">
+                        <i className="ti ti-trash" />
+                      </button>
+                    </div>
+                  )}
+                  {c.model === 'guthaben' && (
+                    <button onClick={() => {
+                      if (!confirm(`Guthaben (${c.total - c.used} Credits) löschen?\n\nNutze das nur, wenn du dem Yogi den Betrag stattdessen in Geld erstattest.`)) return
+                      handleDeleteCredit(c.id)
+                    }} className="text-xs bg-yoga-red-bg text-yoga-red-text border-0 rounded-full px-2 py-1 cursor-pointer hover:opacity-80">
+                      <i className="ti ti-trash" />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </>
+    )
+  }
+
   return (
     <div className="max-w-md mx-auto min-h-screen">
       <AppHeader title={`${yogi.first_name} ${yogi.last_name}`} isAdmin />
@@ -800,7 +917,11 @@ export default function AdminYogiDetailPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 mb-4">
+        {/* Sarah-Wunsch 2026-05-26: 3. Kachel "Guthaben" erscheint nur wenn vorhanden.
+            Sonst 2-Spalten wie bisher. Guthaben separat damit Admin auf einen
+            Blick sieht: Yogi hat z.B. 0 buchbare Credits aber 6 Guthaben aus
+            Kursabbruch. */}
+        <div className={`grid gap-2 mb-4 ${guthabenCredits > 0 ? 'grid-cols-3' : 'grid-cols-2'}`}>
           <div className="card text-center">
             <div className="text-2xl font-bold">{freeCredits}</div>
             <div className="text-xs text-yoga-text/50">Freie Credits</div>
@@ -811,6 +932,12 @@ export default function AdminYogiDetailPage() {
             </div>
             <div className="text-xs text-yoga-text/50">Absolvierte Stunden</div>
           </div>
+          {guthabenCredits > 0 && (
+            <div className="card text-center">
+              <div className="text-2xl font-bold">{guthabenCredits}</div>
+              <div className="text-xs text-yoga-text/50">Guthaben</div>
+            </div>
+          )}
         </div>
 
         {/* Aktionen */}
@@ -906,6 +1033,12 @@ export default function AdminYogiDetailPage() {
             </div>
           </div>
         )}
+
+        {/* Credits verwalten — Sarah-Wunsch 2026-05-26: hochgezogen, zwischen
+            Action-Buttons (In Kurs einbuchen / Credits vergeben) und
+            "Eingebuchte Kurse". Block-Definition in renderCreditsManageSection
+            (oberhalb des return). */}
+        {renderCreditsManageSection()}
 
         {/* Eingebuchte Kurse — NUR aktive (nicht archivierte/abgesagte) Kurse.
             Archivierte Kurse verschwinden hier; ihre Credits bleiben aber im
@@ -1143,116 +1276,9 @@ export default function AdminYogiDetailPage() {
           )
         })()}
 
-        {/* Credits */}
-        {/* Sichtbare Credits: course-credits IMMER (zeigen Fortschritt + Verfallsdatum),
-            andere Modelle nur wenn noch Guthaben übrig ist. Verbrauchte Guthaben (0/0)
-            werden ausgeblendet — konsistent zur /meine-Ansicht. */}
-        {(() => {
-          const visibleCredits = credits.filter((c: any) =>
-            c.model === 'course' || Math.max(0, c.total - c.used) > 0
-          )
-          if (visibleCredits.length === 0) return null
-          return (
-          <>
-            <p className="section-label mt-2">Credits verwalten</p>
-            {visibleCredits.map(c => {
-              const free = computeFree(c)
-              const isExpired = new Date(c.expires_at) < new Date()
-              return (
-                <div key={c.id} className={`card mb-2 ${isExpired ? 'opacity-50' : ''}`}>
-                  {editingCredit?.id === c.id && (c.model === 'tenpack' || c.model === 'quarterly' || c.model === 'single') ? (
-                    <div>
-                      <p className="text-sm font-semibold mb-2">Credits anpassen</p>
-                      <p className="text-xs text-yoga-text/50 mb-2">Bereits verbraucht: {c.used}</p>
-                      <div className="flex items-center gap-2 mb-2">
-                        <label className="text-xs text-yoga-text/60">Neue Gesamtzahl:</label>
-                        <input type="number" min={c.used} max={100} value={editCreditAmount}
-                          onChange={e => setEditCreditAmount(parseInt(e.target.value))}
-                          className="field-input w-20 text-center py-1" />
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => handleEditCredit(c, editCreditAmount)}
-                          className="flex-1 btn-primary text-sm py-2">Speichern</button>
-                        <button onClick={() => setEditingCredit(null)}
-                          className="flex-1 btn-ghost text-sm py-2">Abbrechen</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="text-sm font-semibold">
-                          {c.model === 'course'
-                            ? `${c.used} / ${c.total} genutzt · ${Math.max(0, c.total - c.used)} frei`
-                            : `${free} von ${c.total} Credits frei`}
-                        </div>
-                        {/* Sarah-Wunsch 2026-05-25: Quartal-Label "Quartals-Credits · Q[X] [Jahr]" mit Datumsrange (analog zu /meine) */}
-                        {(() => {
-                          const isQuarterly = c.model === 'quarterly'
-                          const exp = new Date(c.expires_at)
-                          const fmtDay = (d: Date) => d.toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })
-                          const fmtShort = (d: Date) => d.toLocaleDateString('de-DE', { day:'numeric', month:'long' })
-                          if (isQuarterly) {
-                            const qNumber = Math.floor(exp.getMonth() / 3) + 1
-                            const qYear = exp.getFullYear()
-                            const qStart = c.valid_from ? new Date(c.valid_from) : new Date(qYear, (qNumber - 1) * 3, 1)
-                            return <>
-                              <div className="text-xs text-yoga-text/50 mt-0.5">
-                                Quartals-Credits · Q{qNumber} {qYear}
-                              </div>
-                              <div className="text-xs text-yoga-text/55 mt-0.5">
-                                Gültig vom {fmtShort(qStart)} bis {fmtDay(exp)}
-                              </div>
-                              {c.valid_from && new Date(c.valid_from) > new Date() && (
-                                <div className="text-xs text-yoga-amber-text font-semibold mt-1">
-                                  Nutzbar ab {fmtDay(new Date(c.valid_from))}
-                                </div>
-                              )}
-                            </>
-                          }
-                          return (
-                            <div className="text-xs text-yoga-text/50 mt-0.5">
-                              {c.model === 'course' ? `Credits aus Kurs: ${c.course?.name || '—'}` : c.model === 'guthaben' ? (c.source === 'illness' ? 'Krankheits-Guthaben' : 'Guthaben aus Kursabbruch') : c.model === 'single' ? 'Credits aus Punktekarte' : c.model === 'tenpack' ? 'Punktekarte' : 'Credits'} ·
-                              {isExpired ? ' Abgelaufen' : ` verfällt ${exp.getFullYear() > 2090 ? 'nie' : exp.toLocaleDateString('de-DE')}`}
-                            </div>
-                          )
-                        })()}
-                        {c.model === 'course' && (
-                          <div className="text-xs text-yoga-text/30 mt-0.5">Nur Lesezugriff</div>
-                        )}
-                        {c.model === 'guthaben' && (
-                          <div className="text-xs text-yoga-text/30 mt-0.5">Löschbar (für Auszahlung)</div>
-                        )}
-                      </div>
-                      {(c.model === 'tenpack' || c.model === 'quarterly' || c.model === 'single') && (
-                        <div className="flex gap-2">
-                          <button onClick={() => { setEditingCredit(c); setEditCreditAmount(c.total) }}
-                            className="text-xs border border-yoga-border2 rounded-full px-2 py-1 hover:opacity-80">
-                            <i className="ti ti-edit" />
-                          </button>
-                          <button onClick={() => handleDeleteCredit(c.id)}
-                            className="text-xs bg-yoga-red-bg text-yoga-red-text border-0 rounded-full px-2 py-1 cursor-pointer hover:opacity-80">
-                            <i className="ti ti-trash" />
-                          </button>
-                        </div>
-                      )}
-                      {c.model === 'guthaben' && (
-                        // Sarah-Wunsch 2026-05-23: Guthaben löschbar für den Fall
-                        // "Yogi will nach 8 Tagen doch Geld zurück statt Guthaben"
-                        <button onClick={() => {
-                          if (!confirm(`Guthaben (${c.total - c.used} Credits) löschen?\n\nNutze das nur, wenn du dem Yogi den Betrag stattdessen in Geld erstattest.`)) return
-                          handleDeleteCredit(c.id)
-                        }} className="text-xs bg-yoga-red-bg text-yoga-red-text border-0 rounded-full px-2 py-1 cursor-pointer hover:opacity-80">
-                          <i className="ti ti-trash" />
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </>
-          )
-        })()}
+        {/* Credits verwalten ist nach OBEN gewandert (siehe renderCreditsManageSection
+            vor dem return; gerendert zwischen Action-Buttons und "Eingebuchte Kurse").
+            Sarah-Wunsch 2026-05-26. */}
 
         {/* Yogi-Account DSGVO-konform löschen. Sarah-Wunsch 2026-05-23 v6:
             Alle Plätze (Bookings, Enrollments, Credits, Waitlist) sofort frei.

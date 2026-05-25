@@ -1131,7 +1131,7 @@ export default function AdminYogiDetailPage() {
               const isExpired = new Date(c.expires_at) < new Date()
               return (
                 <div key={c.id} className={`card mb-2 ${isExpired ? 'opacity-50' : ''}`}>
-                  {editingCredit?.id === c.id && (c.model === 'tenpack' || c.model === 'quarterly') ? (
+                  {editingCredit?.id === c.id && (c.model === 'tenpack' || c.model === 'quarterly' || c.model === 'single') ? (
                     <div>
                       <p className="text-sm font-semibold mb-2">Credits anpassen</p>
                       <p className="text-xs text-yoga-text/50 mb-2">Bereits verbraucht: {c.used}</p>
@@ -1194,7 +1194,7 @@ export default function AdminYogiDetailPage() {
                           <div className="text-xs text-yoga-text/30 mt-0.5">Löschbar (für Auszahlung)</div>
                         )}
                       </div>
-                      {(c.model === 'tenpack' || c.model === 'quarterly') && (
+                      {(c.model === 'tenpack' || c.model === 'quarterly' || c.model === 'single') && (
                         <div className="flex gap-2">
                           <button onClick={() => { setEditingCredit(c); setEditCreditAmount(c.total) }}
                             className="text-xs border border-yoga-border2 rounded-full px-2 py-1 hover:opacity-80">

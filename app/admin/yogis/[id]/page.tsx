@@ -679,10 +679,28 @@ export default function AdminYogiDetailPage() {
 
   async function handleDeleteCredit(creditId: string) {
     if (!confirm('Diese Credits komplett löschen?')) return
-    await supabase.from('credits').delete().eq('id', creditId)
+    // Sarah-Befund 2026-05-25: FK bookings.credit_id blockt sonst den DELETE,
+    // wenn historische (auch cancelled) Buchungen den Credit noch referenzieren.
+    // Aktive Buchungen: refusen mit klarer Meldung. Cancelled: entlinken.
+    const { data: refBookings } = await supabase.from('bookings')
+      .select('id, status').eq('credit_id', creditId)
+    const activeRefs = (refBookings || []).filter((b: any) => b.status === 'active')
+    if (activeRefs.length > 0) {
+      alert(`Loeschung nicht moeglich: ${activeRefs.length} aktive Buchung(en) nutzen diesen Credit noch.\n\nBuche den Yogi zuerst aus diesen Stunden aus, dann kann der Credit geloescht werden.`)
+      return
+    }
+    // Cancelled / stale Bookings: credit_id entlinken (Booking-Historie bleibt erhalten)
+    if ((refBookings || []).length > 0) {
+      await supabase.from('bookings').update({ credit_id: null }).eq('credit_id', creditId)
+    }
+    const { error: delErr } = await supabase.from('credits').delete().eq('id', creditId)
+    if (delErr) {
+      alert(`Loeschung fehlgeschlagen: ${delErr.message}`)
+      return
+    }
     await supabase.from('audit_log').insert({
       action: 'credit_deleted',
-      details: { target_user_id: id, credit_id: creditId }
+      details: { target_user_id: id, credit_id: creditId, unlinked_bookings: (refBookings || []).length }
     })
     loadData()
   }

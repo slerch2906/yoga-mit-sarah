@@ -55,6 +55,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           // Banner NICHT zeigen auf Auth- und Onboarding-Pages (AGB, Login etc.)
           // sondern erst wenn der Yogi in der App "angekommen" ist.
           var INSTALL_BLOCKED_PATHS = ['/rechtliches', '/login', '/register', '/profil/passwort', '/'];
+          // Sarah-Wunsch 2026-05-25: Banner erst NACH der Welcome-Tour zeigen,
+          // sonst überlagert es die Tour-Modals. Flag wird vom OnboardingTour
+          // gesetzt (finish/Überspringen) oder direkt in /kurse wenn der Yogi
+          // die Tour bereits absolviert hat (onboarding_completed=true).
+          function onboardingDone() {
+            try { return localStorage.getItem('onboarding_completed') === '1'; } catch(e) { return false; }
+          }
           var installPrompt = null;
           window.addEventListener('beforeinstallprompt', function(e) {
             e.preventDefault();
@@ -64,6 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               if (!installPrompt) return;
               if (window.matchMedia('(display-mode: standalone)').matches) return;
               if (INSTALL_BLOCKED_PATHS.indexOf(window.location.pathname) !== -1) return;
+              if (!onboardingDone()) return;
               showInstallBanner();
             }, 3000);
           });
@@ -74,15 +82,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             if (!installPrompt) return;
             if (document.getElementById('pwa-install-banner')) { clearInterval(bannerCheckInterval); return; }
             if (window.matchMedia('(display-mode: standalone)').matches) { clearInterval(bannerCheckInterval); return; }
-            if (INSTALL_BLOCKED_PATHS.indexOf(window.location.pathname) === -1) {
-              showInstallBanner();
-              clearInterval(bannerCheckInterval);
-            }
+            if (INSTALL_BLOCKED_PATHS.indexOf(window.location.pathname) !== -1) return;
+            if (!onboardingDone()) return;
+            showInstallBanner();
+            clearInterval(bannerCheckInterval);
           }, 2000);
 
           function showInstallBanner() {
             if (document.getElementById('pwa-install-banner')) return;
             if (INSTALL_BLOCKED_PATHS.indexOf(window.location.pathname) !== -1) return;
+            if (!onboardingDone()) return;
             var banner = document.createElement('div');
             banner.id = 'pwa-install-banner';
             banner.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#3d3a39;color:#f5f2f0;padding:12px 16px;border-radius:12px;z-index:9999;display:flex;align-items:center;gap:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);max-width:340px;width:calc(100%-32px);font-family:Mulish,sans-serif;';

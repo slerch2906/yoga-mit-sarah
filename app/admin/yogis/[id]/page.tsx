@@ -1006,7 +1006,14 @@ export default function AdminYogiDetailPage() {
         {bookings.length > 0 && (
           <>
             <p className="section-label mt-2">Letzte Buchungen</p>
-            {bookings.slice(0, 10).map(b => (
+            {/* Sarah-Wunsch 2026-05-25: ZULETZT passiertes Event ganz oben — also
+                sortieren nach "last activity": cancelled_at falls vorhanden, sonst
+                created_at. So steht eine Abmeldung über einer früheren Einbuchung. */}
+            {[...bookings].sort((a: any, b: any) => {
+              const ta = new Date(a.cancelled_at || a.created_at || 0).getTime()
+              const tb = new Date(b.cancelled_at || b.created_at || 0).getTime()
+              return tb - ta
+            }).slice(0, 10).map(b => (
               <div key={b.id} className="card mb-2 flex items-center gap-2.5">
                 {/* Sarah-Wunsch 2026-05-24: Wochentag vorne groß (analog Yogi-Ansicht) */}
                 <div className="text-center flex-shrink-0 w-12">

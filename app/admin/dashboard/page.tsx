@@ -801,18 +801,18 @@ export default function AdminDashboard() {
                 guthaben_verrechnet:   { label: 'Guthaben verrechnet — bitte abhaken', icon: 'ti-receipt', tone: 'action' },
               }
               const meta = META[n.type] || { label: n.type, icon: 'ti-bell', tone: 'info' as const }
-              const tones = {
-                action: 'border-l-yoga-red-text  text-yoga-red-text',
-                warn:   'border-l-yoga-amber-text text-yoga-amber-text',
-                info:   'border-l-yoga-text/40    text-yoga-text/80',
-              }
-              const toneCls = tones[meta.tone]
+              // Sarah-Wunsch 2026-05-25: kein bunter Streifen + kein Icon im Titel,
+              // gleiches Design wie der Yogi-Banner — nur farbige Headline.
+              const headlineCls = {
+                action: 'text-yoga-red-text',
+                warn:   'text-yoga-amber-text',
+                info:   'text-yoga-text/80',
+              }[meta.tone]
               return (
-                <div key={n.id} className={`card mb-2 border-l-4 ${toneCls.split(' ')[0]}`}>
+                <div key={n.id} className="card mb-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-semibold flex items-center gap-1.5 ${toneCls.split(' ')[1]}`}>
-                        <i className={`ti ${meta.icon}`} />
+                      <p className={`text-sm font-semibold ${headlineCls}`}>
                         {meta.label}
                       </p>
                       <p className="text-sm text-yoga-text/70 mt-0.5">{n.message}</p>

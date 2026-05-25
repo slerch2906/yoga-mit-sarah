@@ -85,6 +85,12 @@ export default function KursePage() {
         if (!prof?.is_admin && prof?.onboarding_completed === false) {
           setShowOnboarding(true)
         }
+        // Sarah-Wunsch 2026-05-25: PWA-Install-Banner darf erst NACH der Tour
+        // erscheinen. Für Bestandsuser (Tour bereits absolviert) UND Admins
+        // Flag direkt setzen, sonst sehen sie das Banner nie.
+        if (prof?.is_admin || prof?.onboarding_completed === true) {
+          try { localStorage.setItem('onboarding_completed', '1') } catch {}
+        }
 
         // Sarah-Wunsch 2026-05-23: Neu-Yogi-Hinweis. Wenn Yogi noch NIE eine Buchung
         // hatte (auch keine stornierte) → Banner "Sarah trägt dich nach der
@@ -268,11 +274,11 @@ export default function KursePage() {
             </p>
             {daySessions.map(s => (
               <button key={s.id}
-                onClick={() => { if (!s.is_past) router.push(`/kurse/${s.id}`) }}
-                disabled={s.is_past}
+                onClick={() => { if (!s.is_past && !s.is_cancelled) router.push(`/kurse/${s.id}`) }}
+                disabled={s.is_past || s.is_cancelled}
                 className={`w-full flex items-center gap-3 mb-2 text-left transition-colors rounded-yoga border p-3
-                  ${s.is_past ? 'opacity-40 cursor-default' : 'hover:border-yoga-border2 active:scale-[0.98]'}
-                  ${s.my_booking && !s.is_past ? 'border-2 border-yoga-green-text bg-white' : 'border-yoga-border bg-white'}`}>
+                  ${(s.is_past || s.is_cancelled) ? 'opacity-40 cursor-default pointer-events-none' : 'hover:border-yoga-border2 active:scale-[0.98]'}
+                  ${s.my_booking && !s.is_past && !s.is_cancelled ? 'border-2 border-yoga-green-text bg-white' : 'border-yoga-border bg-white'}`}>
                 <div className="text-center flex-shrink-0 w-12">
                   <div className={`text-base font-bold ${s.is_past ? 'line-through' : ''}`}>
                     {s.time_start?.slice(0,5)}

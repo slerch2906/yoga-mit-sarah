@@ -68,6 +68,9 @@ export default function OnboardingTour({ onComplete }: Props) {
           .eq('id', user.id)
       }
     } catch {}
+    // Sarah-Wunsch 2026-05-25: PWA-Install-Banner darf erst NACH der Tour erscheinen.
+    // Flag wird vom Inline-Script in app/layout.tsx geprüft (onboardingDone()).
+    try { localStorage.setItem('onboarding_completed', '1') } catch {}
     setSaving(false)
     onComplete()
   }

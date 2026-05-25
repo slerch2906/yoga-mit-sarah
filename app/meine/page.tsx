@@ -357,8 +357,9 @@ export default function MeinePage() {
                 const isCancelled = s.is_cancelled
                 return (
                   <button key={s.id}
-                    onClick={() => router.push(`/kurse/${s.id}`)}
-                    className={`w-full card flex items-center gap-2.5 mb-1.5 text-left ${isCancelled ? 'opacity-50 cursor-default' : ''}`}>
+                    onClick={() => { if (!isCancelled) router.push(`/kurse/${s.id}`) }}
+                    disabled={isCancelled}
+                    className={`w-full card flex items-center gap-2.5 mb-1.5 text-left ${isCancelled ? 'opacity-50 cursor-default pointer-events-none' : ''}`}>
                     <div className="flex-shrink-0 w-20">
                       <div className="text-sm font-bold">{new Date(s.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })}</div>
                       <div className="text-xs text-yoga-text/50">{s.time_start?.slice(0,5)} Uhr</div>

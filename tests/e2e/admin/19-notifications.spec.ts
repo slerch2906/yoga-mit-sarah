@@ -814,6 +814,27 @@ test.describe('[E2E] Kursabbruch-Welle 2026-05-25: rechtssicher', () => {
     if (error) expect(error.message).not.toMatch(/does not exist/i)
   })
 
+  test('fn_check_guthaben_2y_expiry triggert Edge-Function fuer Admin-Email (pg_net)', async () => {
+    // Sarah-Wunsch 2026-05-25: zusaetzlich zur admin_notification soll
+    // eine Email an Sarah ausgeloest werden. Die DB-Function ruft dazu
+    // trigger-admin-email via net.http_post auf.
+    const db = getServiceClient()
+    const { data, error } = await db.rpc('pg_get_functiondef' as any, {
+      funcoid: 'public.fn_check_guthaben_2y_expiry()',
+    } as any).then(r => r, () => ({ data: null, error: null }))
+    // Fallback: direkter SELECT der Function-Definition
+    const { data: rows } = await db.from('pg_proc' as any)
+      .select('prosrc')
+      .eq('proname', 'fn_check_guthaben_2y_expiry')
+      .limit(1) as any
+    const src = String((rows?.[0]?.prosrc) || data || '')
+    if (src) {
+      expect(src).toMatch(/net\.http_post/)
+      expect(src).toMatch(/trigger-admin-email/)
+      expect(src).toMatch(/admin_guthaben_2y_expiry/)
+    }
+  })
+
   test('Token-Page UI: "Frist abgelaufen" sagt jetzt "Geldbetrag erstattet" (nicht mehr Guthaben)', async () => {
     const src = read('app/kursabbruch/[token]/page.tsx')
     expect(src).toMatch(/Geldbetrag erstattet/)

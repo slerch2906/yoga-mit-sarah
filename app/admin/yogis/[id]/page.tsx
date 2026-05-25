@@ -522,7 +522,7 @@ export default function AdminYogiDetailPage() {
 
         <div className="card mb-4">
           {yogi.is_dummy && (
-            <span className="badge bg-yoga-amber-bg text-yoga-amber-text mb-2 inline-block">
+            <span className="badge bg-yoga-text text-white mb-2 inline-block">
               <i className="ti ti-user-question mr-1" />Dummy-User (kein Login)
             </span>
           )}

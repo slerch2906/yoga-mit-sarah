@@ -760,7 +760,7 @@ export default function AdminSessionPage() {
                   <div>
                     <div className="text-sm font-semibold">
                       {yogi.first_name} {yogi.last_name}
-                      {yogi.is_dummy && <span className="ml-2 text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">Dummy</span>}
+                      {yogi.is_dummy && <span className="ml-2 text-xs bg-yoga-text text-white rounded-full px-2 py-0.5">Dummy</span>}
                     </div>
                     <div className="text-xs text-yoga-text/50">{yogi.email || 'Kein Login'}</div>
                     {guthaben > 0 && free === 0 && (

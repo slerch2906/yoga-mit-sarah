@@ -119,7 +119,7 @@ export default function AdminYogisPage() {
                 <div className="text-base font-semibold flex items-center gap-2">
                   {getDisplayName(yogi)}
                   {yogi.is_dummy && (
-                    <span className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">
+                    <span className="text-xs bg-yoga-text text-white rounded-full px-2 py-0.5 font-normal">
                       Dummy
                     </span>
                   )}

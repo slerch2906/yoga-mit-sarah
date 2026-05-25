@@ -1696,7 +1696,7 @@ export default function AdminKursePage() {
                     <div className="text-sm font-semibold flex items-center gap-2">
                       {p.first_name} {p.last_name}
                       {p.is_dummy && (
-                        <span className="text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-normal">Dummy</span>
+                        <span className="text-xs bg-yoga-text text-white rounded-full px-2 py-0.5 font-normal">Dummy</span>
                       )}
                     </div>
                     <div className="text-xs text-yoga-text/50 mt-0.5">
@@ -1746,7 +1746,7 @@ export default function AdminKursePage() {
                   <div>
                     <div className="text-sm font-semibold">
                       {yogi.first_name} {yogi.last_name}
-                      {yogi.is_dummy && <span className="ml-2 text-xs bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">Dummy</span>}
+                      {yogi.is_dummy && <span className="ml-2 text-xs bg-yoga-text text-white rounded-full px-2 py-0.5">Dummy</span>}
                     </div>
                     <div className="text-xs text-yoga-text/50">{yogi.email || 'Kein Login'}</div>
                     {guthaben > 0 && (

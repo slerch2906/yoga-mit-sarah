@@ -55,7 +55,7 @@ export default function AdminAnnouncementBubble() {
           src={avatarSrc}
           alt="Sarah"
           onError={() => setAvatarSrc(FALLBACK_AVATAR)}
-          className="w-14 h-14 rounded-full object-cover flex-shrink-0 border-2 border-yoga-bg shadow-sm"
+          className="w-20 h-20 rounded-full object-cover flex-shrink-0 border-2 border-yoga-bg shadow-sm"
         />
         {/* Sprechblase — bg-white + yoga-border, Text mittig zentriert */}
         <div className="relative flex-1 min-w-0">

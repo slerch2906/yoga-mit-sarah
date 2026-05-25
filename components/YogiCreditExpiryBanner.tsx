@@ -73,25 +73,33 @@ export default function YogiCreditExpiryBanner() {
             })
           }
         } else if (c.model === 'quarterly') {
+          // Sarah-Regel 2026-05-25: Quartal = 14 Tage Vorwarnung
           if (daysToExpire === 0) {
             list.push({
               id: `q-alert-${c.id}`,
               kind: 'alert',
               text: `Deine Quartals-Credits verfallen heute.`,
             })
-          } else if (daysToExpire <= 7 && daysToExpire > 0) {
+          } else if (daysToExpire <= 14 && daysToExpire > 0) {
             list.push({
               id: `q-warn-${c.id}`,
               kind: 'warn',
-              text: `Deine Quartals-Credits sind nur noch bis zum ${fmtDay(expDate)} gültig.`,
+              text: `Deine Quartals-Credits laufen in ${daysToExpire} ${daysToExpire === 1 ? 'Tag' : 'Tagen'} ab (gültig bis ${fmtDay(expDate)}).`,
             })
           }
         } else if (c.model === 'single' || c.model === 'tenpack') {
+          // Sarah-Regel 2026-05-25: Punktekarte = 7 Tage Vorwarnung
           if (daysToExpire === 0) {
             list.push({
               id: `pk-alert-${c.id}`,
               kind: 'alert',
               text: `Deine Punktekarte verfällt heute.`,
+            })
+          } else if (daysToExpire <= 7 && daysToExpire > 0) {
+            list.push({
+              id: `pk-warn-${c.id}`,
+              kind: 'warn',
+              text: `Deine Punktekarte läuft in ${daysToExpire === 7 ? '1 Woche' : `${daysToExpire} ${daysToExpire === 1 ? 'Tag' : 'Tagen'}`} ab (gültig bis ${fmtDay(expDate)}).`,
             })
           }
         }

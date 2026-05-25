@@ -138,7 +138,7 @@ export default function LoginPage() {
                   Passwort vergessen?
                 </button>
                 <p className="text-xs text-yoga-text/40 text-center mt-3 leading-snug">
-                  E-Mail-Adresse vergessen? Wende dich an Sarah.
+                  Email vergessen? Wende dich an Sarah.
                 </p>
               </>
             )}

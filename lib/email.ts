@@ -24,34 +24,37 @@ export const Email = {
   welcome: (data: { email: string; firstName: string; courseName?: string }) =>
     sendEmail('welcome', data),
 
-  bookingConfirmed: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number }) =>
+  // Sarah-Wunsch 2026-05-25: bei is_single Stunden wird im Email-Text
+  // "Einzelstunde:" statt "Kurs:" angezeigt. Optional, Default = Kurs.
+  bookingConfirmed: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number; isSingle?: boolean }) =>
     sendEmail('booking_confirmed', data),
 
-  bookingCancelled: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; creditReturned: boolean }) =>
+  bookingCancelled: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; creditReturned: boolean; durationMin?: number; isSingle?: boolean }) =>
     sendEmail('booking_cancelled', data),
 
-  waitlistJoined: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; position: number; unsubscribeToken?: string }) =>
+  waitlistJoined: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; position: number; unsubscribeToken?: string; isSingle?: boolean }) =>
     sendEmail('waitlist_joined', data),
 
-  waitlistPromoted: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string }) =>
+  waitlistPromoted: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; isSingle?: boolean }) =>
     sendEmail('waitlist_promoted', data),
 
-  // Sarah-Wunsch 2026-05-23: 90-Min-Cutoff → alle Waitlist-Yogis kriegen gleichzeitig
-  // diese Mail mit magic-Link. Wer zuerst klickt, kriegt den Platz.
-  waitlistOfferLate: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; offerToken: string }) =>
+  waitlistOfferLate: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; offerToken: string; isSingle?: boolean }) =>
     sendEmail('waitlist_offer_late', data),
 
-  sessionCancelled: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; reason?: string; replacementDate?: string; replacementTime?: string }) =>
+  sessionCancelled: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; reason?: string; replacementDate?: string; replacementTime?: string; isSingle?: boolean }) =>
     sendEmail('session_cancelled', data),
 
-  sessionAdded: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number; originalDate?: string; originalTime?: string }) =>
+  sessionAdded: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number; originalDate?: string; originalTime?: string; isSingle?: boolean }) =>
     sendEmail('session_added', data),
 
-  sessionReminder: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number; hoursBefore: number }) =>
+  sessionReminder: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number; hoursBefore: number; isSingle?: boolean }) =>
     sendEmail('session_reminder', data),
 
-  waitlistRemovedCreditUsedElsewhere: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string }) =>
+  waitlistRemovedCreditUsedElsewhere: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; isSingle?: boolean }) =>
     sendEmail('waitlist_removed_credit_used_elsewhere', data),
+
+  notifyPlaceFree: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; sessionId: string; isSingle?: boolean }) =>
+    sendEmail('notify_place_free', data),
 
   adminNewYogi: (data: { fullName: string; email: string; courseName?: string }) =>
     sendEmail('admin_new_yogi', data),
@@ -65,8 +68,7 @@ export const Email = {
   yogiEnrolledByAdmin: (data: { email: string; firstName: string; courseName: string; weekday: string; timeStart: string; durationMin: number; totalUnits?: number; remainingUnits?: number; dateStart?: string; firstSessionDate?: string }) =>
     sendEmail('yogi_enrolled_by_admin', data),
 
-  notifyPlaceFree: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; sessionId: string }) =>
-    sendEmail('notify_place_free', data),
+  // (notifyPlaceFree wurde 2026-05-25 nach oben verschoben mit isSingle-Support)
 
   courseTimeChanged: (data: { email: string; firstName: string; courseName: string; oldTime: string; newTime: string }) =>
     sendEmail('course_time_changed', data),

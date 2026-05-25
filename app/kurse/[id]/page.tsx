@@ -228,6 +228,7 @@ export default function SessionDetailPage() {
           date: session?.date || '',
           timeStart: session?.time_start || '',
           durationMin: session?.duration_min || 60,
+          isSingle: !!(session as any)?.course?.is_single,
         })
       } catch(e) {}
       router.push(`/kurse/${id}/bestaetigung`)
@@ -281,6 +282,7 @@ export default function SessionDetailPage() {
           timeStart: session?.time_start || '',
           durationMin: session?.duration_min || 75,
           creditReturned: !late,
+          isSingle: !!(session as any)?.course?.is_single,
         })
       }
     } catch (e) { console.error('Cancel email error:', e) }
@@ -366,6 +368,7 @@ export default function SessionDetailPage() {
           timeStart: session?.time_start || '',
           position,
           unsubscribeToken,
+          isSingle: !!(session as any)?.course?.is_single,
         })
       } catch(e) {}
     }

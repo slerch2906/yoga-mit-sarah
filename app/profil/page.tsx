@@ -264,6 +264,9 @@ export default function ProfilPage() {
     }
     setProfile((prev: any) => ({ ...prev, [field]: value }))
     setEditing(null)
+    // Sarah-Wunsch 2026-05-25: Toast "Profil gespeichert" (3 Sek)
+    setSavedToast(true)
+    setTimeout(() => setSavedToast(false), 3000)
   }
 
   async function handleLogout() {
@@ -272,6 +275,7 @@ export default function ProfilPage() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteConfirmed, setDeleteConfirmed] = useState(false)
+  const [savedToast, setSavedToast] = useState(false) // Sarah-Wunsch 2026-05-25: Toast "Profil gespeichert"
   const [editingEmergency, setEditingEmergency] = useState(false)
   const [emergencyForm, setEmergencyForm] = useState({ name: '', phone: '' })
   // Sarah-Wunsch 2026-05-23: Admin-AGB-Verwaltung
@@ -1085,6 +1089,12 @@ export default function ProfilPage() {
         ))}
       </div>
       <BottomNav isAdmin={profile?.is_admin} />
+      {/* Toast: "Profil gespeichert" — Sarah-Wunsch 2026-05-25 */}
+      {savedToast && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-yoga-green-text text-white text-sm font-semibold px-4 py-2.5 rounded-full shadow-lg animate-fade-in pointer-events-none">
+          <i className="ti ti-check mr-1" /> Profil gespeichert
+        </div>
+      )}
     </div>
   )
 }

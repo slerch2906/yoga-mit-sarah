@@ -190,7 +190,7 @@ export default function RechtlichesPage() {
         {isReAcceptance && currentAgb && (
           <div className="bg-yoga-amber-bg/60 border border-yoga-amber-text/30 rounded-yoga p-3 mb-3">
             <p className="text-xs font-semibold text-yoga-amber-text mb-1">
-              Neue AGB-Version „{currentAgb.label}" — bitte erneut bestätigen
+              Hallo! Es gibt eine aktualisierte AGB-Version „{currentAgb.label}". Bitte lies dir die Änderungen kurz durch und bestätige sie, damit du weiter buchen kannst.
             </p>
             <p className="text-xs text-yoga-text/70 mb-1">Was hat sich geändert:</p>
             <ul className="text-xs text-yoga-text/70 list-disc list-inside space-y-1">

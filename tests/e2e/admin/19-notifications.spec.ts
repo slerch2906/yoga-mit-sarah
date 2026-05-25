@@ -355,6 +355,34 @@ test.describe('[E2E] Kursabbruch-Workflow: complete-Notification', () => {
   })
 })
 
+// ── 10a-5) Welle E: Yogi-Credit-Banner + guthaben_verrechnet-Notification
+test.describe('[E2E] Welle E: Yogi-Banner + Dashboard-Guthaben-Aufgabe', () => {
+  test('YogiCreditExpiryBanner Component existiert + ist eingebunden', async () => {
+    const banner = read('components/YogiCreditExpiryBanner.tsx')
+    expect(banner).toMatch(/export default function YogiCreditExpiryBanner/)
+    expect(banner).toMatch(/daysToExpire/)
+    expect(banner).toMatch(/Kurs-Credit|c\.model\s*===\s*['"]course['"]/)
+    const kurseSrc = read('app/kurse/page.tsx')
+    expect(kurseSrc).toMatch(/import YogiCreditExpiryBanner/)
+    expect(kurseSrc).toMatch(/<YogiCreditExpiryBanner/)
+  })
+
+  test('Banner zeigt: 7-Tage-Warnung + Verfalls-Tag-Alert', async () => {
+    const banner = read('components/YogiCreditExpiryBanner.tsx')
+    expect(banner).toMatch(/daysToCourseEnd\s*<=\s*7/)
+    expect(banner).toMatch(/8 Tage nach Kursende/)
+    expect(banner).toMatch(/verfallen heute/)
+  })
+
+  test('admin_notifications guthaben_verrechnet wird erzeugt + Dashboard-META kennt es', async () => {
+    const yogiPage = read('app/admin/yogis/[id]/page.tsx')
+    expect(yogiPage).toMatch(/type:\s*['"]guthaben_verrechnet['"]/)
+    expect(yogiPage).toMatch(/guthaben_used/)
+    const dash = read('app/admin/dashboard/page.tsx')
+    expect(dash).toMatch(/guthaben_verrechnet:[\s\S]{0,80}Guthaben verrechnet/)
+  })
+})
+
 // ── 10a-4) Welle D: Notification-Dedup + max_spots-Promote + Guthaben-Split
 test.describe('[E2E] Welle D: Dedup-Fix + max_spots-Promote + Guthaben-Sektion', () => {
   test('fn_notify_refund_pending: Dedup-Check verhindert Doppel-Notifications', async () => {

@@ -403,6 +403,22 @@ export default function AdminYogiDetailPage() {
           guthabenRemaining: totalGuthaben - guthabenUsable, // Rest-Guthaben
         })
       } catch(e) {}
+      // Sarah-Wunsch 2026-05-25: zusaetzlich als abhakbare Dashboard-Aufgabe
+      const yogiName = `${yogi?.first_name || ''} ${yogi?.last_name || ''}`.trim()
+      await supabase.from('admin_notifications').insert({
+        type: 'guthaben_verrechnet',
+        message: `${yogiName}: ${guthabenUsable}/${actualCount} Credits aus Guthaben verrechnet, ${newCreditsNeeded} muss neu bezahlt werden.`,
+        details: {
+          user_id: id,
+          yogi_name: yogiName,
+          course_name: course?.name || '',
+          guthaben_used: guthabenUsable,
+          course_total: actualCount,
+          must_pay: newCreditsNeeded,
+          guthaben_remaining: totalGuthaben - guthabenUsable,
+        },
+        read: false,
+      })
     }
 
     await supabase.from('audit_log').insert({

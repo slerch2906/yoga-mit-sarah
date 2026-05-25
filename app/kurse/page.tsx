@@ -10,6 +10,7 @@ import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import WeekPickerPopover from '@/components/WeekPickerPopover'
 import AdminAnnouncementBubble from '@/components/AdminAnnouncementBubble'
+import YogiCreditExpiryBanner from '@/components/YogiCreditExpiryBanner'
 import OnboardingTour from '@/components/OnboardingTour'
 
 const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
@@ -188,6 +189,9 @@ export default function KursePage() {
 
       {/* Sarah-Nachricht (nur sichtbar wenn Admin sie aktiviert hat) */}
       <AdminAnnouncementBubble />
+
+      {/* Sarah-Wunsch 2026-05-25: Credit-Ablauf-Warnungen */}
+      <YogiCreditExpiryBanner />
 
       {/* Neu-Yogi-Hinweis: noch keine einzige Buchung in der Historie */}
       {isNewYogi && (

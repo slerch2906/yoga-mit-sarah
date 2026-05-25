@@ -715,6 +715,62 @@ test.describe('[E2E] Welle F: heutige UI-Fixes', () => {
   })
 })
 
+// ── 10a-7) Onboarding-Tour (Sarah-Wuensche 2026-05-25) ────────────────────
+// Sarah-Wunsch 2026-05-25: Tour-Texte nachgeschaerft — Slide 1 "Wochenuebersicht"
+// (vorher "Deine Yoga-Woche"), Slide 2 "Deine Buchungen — und wie Credits
+// entstehen" (vorher "Deine Stunden — ..."). Buttons gleich breit (flex-1).
+test.describe('[E2E] Onboarding-Tour (Sarah-Wuensche 2026-05-25)', () => {
+  test('Slide 1 hat Titel "Wochenübersicht" (kein "Deine Yoga-Woche" mehr)', async () => {
+    const src = read('components/OnboardingTour.tsx')
+    expect(src).toMatch(/title:\s*['"]Wochenübersicht['"]/)
+    expect(src).not.toMatch(/Deine Yoga-Woche/)
+  })
+
+  test('Slide 1 body enthaelt "in einer Wochenübersicht"', async () => {
+    const src = read('components/OnboardingTour.tsx')
+    expect(src).toMatch(/in einer Wochenübersicht/)
+  })
+
+  test('Slide 2 hat Titel "Deine Buchungen — und wie Credits entstehen"', async () => {
+    const src = read('components/OnboardingTour.tsx')
+    expect(src).toMatch(/title:\s*['"]Deine Buchungen — und wie Credits entstehen['"]/)
+    // Alter Titel darf nicht mehr existieren
+    expect(src).not.toMatch(/Deine Stunden — und wie Credits entstehen/)
+  })
+
+  test('Slide 2 body enthaelt "deine Einzelstunden die du gebucht hast"', async () => {
+    const src = read('components/OnboardingTour.tsx')
+    expect(src).toMatch(/deine Einzelstunden die du gebucht hast/)
+  })
+
+  test('Zurueck-Button hat flex-1 btn-secondary (gleich breit wie Weiter/Los-geht\'s)', async () => {
+    const src = read('components/OnboardingTour.tsx')
+    expect(src).toMatch(/className="flex-1 btn-secondary/)
+  })
+
+  test('Zurueck-Button hat KEIN altes px-4 (Fix-Breite entfernt)', async () => {
+    const src = read('components/OnboardingTour.tsx')
+    // Im Zurueck-Button-Block darf kein px-4 mehr stehen
+    const backBtnMatch = src.match(/setStep\(s => s - 1\)[\s\S]{0,200}Zurück/)
+    expect(backBtnMatch).toBeTruthy()
+    expect(backBtnMatch![0]).not.toMatch(/px-4/)
+  })
+
+  test('Tour wird in app/kurse/page.tsx nur fuer !is_admin && onboarding_completed===false gerendert', async () => {
+    const src = read('app/kurse/page.tsx')
+    expect(src).toMatch(/import OnboardingTour/)
+    expect(src).toMatch(/!prof\?\.is_admin\s*&&\s*prof\?\.onboarding_completed\s*===\s*false/)
+    expect(src).toMatch(/showOnboarding\s*&&\s*<OnboardingTour/)
+  })
+
+  test('finish() setzt profiles.onboarding_completed = true', async () => {
+    const src = read('components/OnboardingTour.tsx')
+    expect(src).toMatch(/async function finish/)
+    expect(src).toMatch(/\.from\(['"]profiles['"]\)\s*\.update\(\{\s*onboarding_completed:\s*true\s*\}\)/)
+    expect(src).toMatch(/\.eq\(['"]id['"],\s*user\.id\)/)
+  })
+})
+
 // ── 14) Email-Failure Resilience ───────────────────────────────────────────
 test.describe('[E2E] Email-Failure handling', () => {
   test('admin_notifications-Tabelle existiert (Failure-Log)', async () => {

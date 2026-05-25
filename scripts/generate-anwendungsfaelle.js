@@ -329,6 +329,42 @@ content.push(...ucase({
   ],
 }))
 
+content.push(...ucase({
+  titel: 'Onboarding-Tour (erste Anmeldung)',
+  was: 'Nach Registrierung und AGB-Akzeptanz erscheint beim ersten Aufruf der Wochenübersicht eine 5-stufige Tour, die dem neuen Yogi die App-Struktur erklärt. Wird einmalig gezeigt — danach nie wieder.',
+  wer: 'Yogi (frisch registriert, kein Admin)',
+  ablauf: [
+    'Yogi loggt sich nach Einladung/Registrierung das erste Mal ein und landet auf der Wochenübersicht (/kurse).',
+    'Wenn im Profil onboarding_completed = false (Default fuer neue Yogis) und Yogi kein Admin ist: Overlay mit 5 Slides erscheint.',
+    'Oben: Schritt-Indikator (z.B. „Schritt 1 von 5") + „Überspringen"-Link rechts. Darunter Fortschritts-Punkte.',
+    'Mitte: Icon, Titel, kleine gelbe Tab-Hinweis-Pille, Beschreibungstext.',
+    'Unten: ab Slide 2 Zurück- und Weiter-Button (gleich breit, nebeneinander). Auf Slide 5 statt Weiter der grüne „Los geht’s!"-Button.',
+    'Klick auf „Los geht’s!" oder „Überspringen": profiles.onboarding_completed wird auf true gesetzt, Overlay schließt.',
+  ],
+  regeln: [
+    'Tour erscheint NUR fuer Yogis (nicht fuer Admin/Sarah).',
+    'Tour erscheint genau einmal — nach „Los geht’s!" oder „Überspringen" nie wieder automatisch.',
+    'Wenn der Yogi mitten in der Tour die Seite verlaesst (Reload, Tab schliesst): beim naechsten /kurse-Aufruf erscheint sie wieder — solange onboarding_completed = false.',
+    'Tour kann beliebig per „Zurück" / „Weiter" durchlaufen werden, ohne dass etwas gespeichert wird, bis am Ende ein Klick erfolgt.',
+  ],
+  texte: [
+    'Schritt 1 von 5',
+    'Überspringen',
+    'Zurück',
+    'Weiter',
+    'Los geht’s!',
+  ],
+  sonder: [
+    'Slide 1 — Titel: „Wochenübersicht". Tab-Hinweis: „Tab „Kurse“ — unten links". Text: „Hier siehst du alle Stunden in einer Wochenübersicht. Mit den Pfeilen oder dem Datum oben wechselst du die Woche. Stunden in denen du angemeldet bist haben einen grünen Rahmen."',
+    'Slide 2 — Titel: „Deine Buchungen — und wie Credits entstehen". Tab-Hinweis: „Tab „Meine“ — dritter Tab unten". Text: „Unter „Meine“ findest du alle deine Kurse auf die Sarah dich eingetragen hat und deine Einzelstunden die du gebucht hast. Wenn du eine rechtzeitig (bis 3h vorher) absagst, bekommst du einen Credit zum Nachholen — den kannst du dann für eine andere Stunde nutzen."',
+    'Slide 3 — Titel: „Stunde buchen". Tab-Hinweis: „In „Kurse“ auf eine freie Stunde tippen". Text: „Klick einfach auf eine freie Stunde und wähle „Buchen“. Ein Credit wird automatisch verrechnet — du musst nichts weiter tun."',
+    'Slide 4 — Titel: „Volle Stunde? Kein Problem". Tab-Hinweis: „Tab „Warteliste“ — zweiter Tab unten". Text: „Trag dich auf die Warteliste ein — du wirst automatisch nachgerückt sobald ein Platz frei wird. Oder lass dich einfach nur benachrichtigen und entscheide dann ob du kommen willst."',
+    'Slide 5 — Titel: „App auf den Startbildschirm". Tab-Hinweis: „Profil → „Anleitung anzeigen“". Text: „Damit du die App wie eine echte App auf dem Handy hast: Wenn unten ein kleines „Installieren“-Fenster aufpoppt, einfach drauftippen. Falls nicht: geh in dein Profil und klick auf „Anleitung anzeigen“ — da steht für iPhone und Android wie es geht."',
+    'DB-Effekt: profiles.onboarding_completed wird auf true gesetzt sobald „Los geht’s!" oder „Überspringen" geklickt wird. Danach kein Re-Trigger mehr.',
+    'Re-Trigger fuer Tests: Admin kann das Flag manuell in der DB auf false setzen — beim naechsten /kurse-Aufruf erscheint die Tour wieder.',
+  ],
+}))
+
 // ════════════════════════════════════════════════════════════════════════════
 // 2. LOGIN, LOGOUT & PASSWORT
 // ════════════════════════════════════════════════════════════════════════════

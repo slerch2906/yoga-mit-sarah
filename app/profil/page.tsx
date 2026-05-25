@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/auth'
 import { fullLogout } from '@/lib/logout'
 import { getCurrentAgbVersion, type AgbVersion } from '@/lib/agb-version'
+import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -337,10 +338,36 @@ export default function ProfilPage() {
       phone: null,
     }).eq('user_id', user.id)
 
-    // 3) Warteliste + offene Buchungen entfernen
+    // 3) Warteliste-Einträge komplett entfernen
     await supabase.from('waitlist').delete().eq('user_id', user.id)
 
-    // 3b) Audit-Log Einträge anonymisieren (DSGVO – PII aus details JSONB entfernen)
+    // Sarah-Wunsch 2026-05-25: ZUKÜNFTIGE Buchungen stornieren + Kurs-Teilnahmen
+    // entfernen, damit Plätze für andere Yogis (Wartelisten) frei werden.
+    // 3a) Alle aktiven Buchungen mit Session-Daten laden, dann clientseitig auf zukünftige
+    //     Sessions filtern. PostgREST kann nicht direkt auf nested session.date filtern.
+    const today = new Date().toISOString().split('T')[0]
+    const { data: allActiveBookings } = await supabase.from('bookings')
+      .select('id, session_id, session:sessions(date, time_start)')
+      .eq('user_id', user.id).eq('status', 'active')
+    const sessionsToPromote: string[] = (allActiveBookings || [])
+      .filter((b: any) => b.session?.date && b.session.date >= today)
+      .map((b: any) => b.session_id)
+    // 3b) Buchungen auf cancelled setzen (Trigger trg_sync_credit_used schreibt Credit zurück
+    //     — Credit-Anzeige zerlegt sich später eh durch profil-Anonymisierung)
+    if (sessionsToPromote.length > 0) {
+      await supabase.from('bookings').update({
+        status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false,
+      }).eq('user_id', user.id).eq('status', 'active').in('session_id', sessionsToPromote)
+    }
+    // 3c) Enrollments komplett entfernen — Yogi ist nicht mehr Kursteilnehmer
+    await supabase.from('enrollments').delete().eq('user_id', user.id)
+    // 3d) Für jede so freigewordene Stunde: Auto-Promote der Warteliste triggern.
+    //     Läuft parallel (best-effort) — Anonymisierung soll nicht warten.
+    for (const sId of sessionsToPromote) {
+      promoteWaitlistOrOfferLate(supabase, sId).catch(e => console.error('promote on delete:', e))
+    }
+
+    // 3e) Audit-Log Einträge anonymisieren (DSGVO – PII aus details JSONB entfernen)
     try { await supabase.rpc('anonymize_user_audit_logs' as any, { target_user_id: user.id }) } catch {}
 
     // 4) Admin informieren (inkl. Drive-Hinweis)
@@ -1061,17 +1088,19 @@ export default function ProfilPage() {
           </button>
         ) : (
           <div className="bg-yoga-red-bg border border-yoga-red-text/20 rounded-yoga p-4">
-            <p className="text-sm font-bold text-yoga-red-text mb-2">Account wirklich löschen?</p>
+            <p className="text-sm font-bold text-yoga-red-text mb-2">Account endgültig löschen?</p>
             <p className="text-sm text-yoga-red-text/80 leading-relaxed mb-3">
-              Dein Account wird gemäß DSGVO anonymisiert: Dein Name und deine E-Mail-Adresse werden entfernt.
-              Deine Buchungshistorie bleibt anonym erhalten. Credits und offene Buchungen werden storniert.
+              Alle deine Buchungen werden storniert und deine Plätze freigegeben. Diese Aktion ist nicht rückgängig zu machen.
+            </p>
+            <p className="text-xs text-yoga-red-text/60 leading-relaxed mb-3">
+              Dein Konto wird DSGVO-konform anonymisiert: Name und E-Mail werden entfernt, die anonymisierte Buchungshistorie bleibt aus rechtlichen Gründen erhalten.
             </p>
             <label className="flex items-start gap-3 cursor-pointer mb-4">
               <input type="checkbox" checked={deleteConfirmed}
                 onChange={e => setDeleteConfirmed(e.target.checked)}
                 className="mt-0.5 flex-shrink-0 w-5 h-5" />
               <span className="text-sm text-yoga-red-text leading-relaxed">
-                Ich verstehe, dass mein Account DSGVO-konform anonymisiert wird und diese Aktion nicht rückgängig gemacht werden kann.
+                Ich verstehe, dass ich danach nicht mehr in meine Kurse zurückkehren kann.
               </span>
             </label>
             <div className="flex gap-2">

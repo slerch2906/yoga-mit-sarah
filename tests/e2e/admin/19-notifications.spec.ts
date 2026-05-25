@@ -355,6 +355,33 @@ test.describe('[E2E] Kursabbruch-Workflow: complete-Notification', () => {
   })
 })
 
+// ── 10a-2) Account-Löschen: Cascade auf Buchungen + Enrollments ───────────
+// Sarah-Wunsch 2026-05-25: Sobald Yogi seinen Account loescht, werden
+// alle zukuenftigen Buchungen storniert + Enrollments entfernt + die
+// Wartelisten der freigewordenen Stunden automatisch nachgerueckt.
+test.describe('[E2E] Account-Loeschen: Cascade-Logik', () => {
+  test('handleDeleteAccount stoerniert zukuenftige Buchungen + entfernt Enrollments', async () => {
+    const src = read('app/profil/page.tsx')
+    expect(src).toMatch(/handleDeleteAccount/)
+    expect(src).toMatch(/from\(['"]bookings['"]\)\.update\([\s\S]{0,200}status:\s*['"]cancelled['"]/)
+    expect(src).toMatch(/from\(['"]enrollments['"]\)\.delete\(\)\.eq\(['"]user_id['"]/)
+  })
+
+  test('handleDeleteAccount triggert promoteWaitlistOrOfferLate fuer jede freigewordene Session', async () => {
+    const src = read('app/profil/page.tsx')
+    expect(src).toMatch(/import \{\s*promoteWaitlistOrOfferLate\s*\}/)
+    expect(src).toMatch(/sessionsToPromote/)
+    expect(src).toMatch(/for \(const sId of sessionsToPromote\)[\s\S]{0,200}promoteWaitlistOrOfferLate/)
+  })
+
+  test('Bestaetigungs-Dialog: neuer Sarah-Wortlaut (Plaetze freigegeben, nicht rueckgaengig)', async () => {
+    const src = read('app/profil/page.tsx')
+    expect(src).toMatch(/Account endg[üu]ltig l[öo]schen/)
+    expect(src).toMatch(/Pl[äa]tze freigegeben/)
+    expect(src).toMatch(/nicht r[üu]ckg[äa]ngig zu machen/)
+  })
+})
+
 // ── 10b) Kurs-Löschen/Archivieren: 9-Tage-Sperre nach Kursende ─────────────
 // Sarah-Bug 2026-05-24: Beim Löschen eines beendeten Kurses gingen valide
 // Yogi-Credits verloren (8-Tage-Gültigkeit nach Kursende). Lösung: Kurs erst

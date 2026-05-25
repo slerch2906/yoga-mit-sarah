@@ -73,4 +73,25 @@ test.describe('[E2E] DSGVO Account-Löschung — Source-Smoke', () => {
     expect(src).toMatch(/admin_dsgvo_deletion/)
     expect(src).toMatch(/account_deleted_yogi/)
   })
+
+  // ── Sarah-Welle 2026-05-25 (Workflow #6): Reihenfolge accountDeletedYogi VOR Auth-Delete ──
+  test('Profil-Pfad: accountDeletedYogi() wird VOR delete-account-Call ausgefuehrt', async () => {
+    const src = read('app/profil/page.tsx')
+    // Reihenfolge: Email.accountDeletedYogi(...) ... /api/delete-account
+    const re = /Email\.accountDeletedYogi[\s\S]+\/api\/delete-account/
+    expect(re.test(src), 'accountDeletedYogi MUSS vor /api/delete-account aufgerufen werden — sonst keine Email mehr nach Auth-Delete').toBe(true)
+  })
+
+  test('Admin-Yogi-Loesch-Pfad: accountDeletedYogi() wird VOR delete-account-Call ausgefuehrt', async () => {
+    const src = read('app/admin/yogis/[id]/page.tsx')
+    const re = /Email\.accountDeletedYogi[\s\S]+\/api\/delete-account/
+    expect(re.test(src), 'accountDeletedYogi MUSS vor /api/delete-account aufgerufen werden — sonst keine Email mehr nach Auth-Delete').toBe(true)
+  })
+
+  test('/api/delete-account ruft auth/v1/admin/users/<id> DELETE auf (server-side Auth-Delete)', async () => {
+    const src = read('app/api/delete-account/route.ts')
+    expect(src).toMatch(/auth\/v1\/admin\/users/)
+    expect(src).toMatch(/method:\s*['"]DELETE['"]/)
+    expect(src).toMatch(/SUPABASE_SERVICE_ROLE_KEY/)
+  })
 })

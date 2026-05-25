@@ -1,4 +1,4 @@
-// VOLLER Source-Snapshot der deployten Edge Function send-email (Version 46).
+// VOLLER Source-Snapshot der deployten Edge Function send-email (Version 61).
 // Wird von tests/e2e/27-email-plausibilitaet.spec.ts gelesen.
 // Bei jedem deploy_edge_function neu ziehen mit:
 //   mcp__supabase__get_edge_function project_id=jcczvyablgdijeiyymhc function_slug=send-email
@@ -13,119 +13,281 @@ const ADMIN_EMAIL = 'Mail@yogamitsarah.me'
 const APP_URL = 'https://kurse.yogamitsarah.me'
 const LOGO = 'https://yogamitsarah.me/wp-content/uploads/2025/09/Logo-300x300.png'
 const TZ = 'Europe/Berlin'
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-function-secret' }
 
+function checkSecret(req: Request): boolean {
+  const secret = Deno.env.get('EDGE_FUNCTION_SECRET')
+  if (!secret) return true
+  return req.headers.get('x-function-secret') === secret
+}
+
+function kursLabel(data: any): string {
+  return data?.isSingle === true ? 'Einzelstunde' : 'Kurs'
+}
+
+async function notifyEmailFailed(to: string, subject: string, error: string, status: number) {
+  try {
+    const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { autoRefreshToken: false, persistSession: false } })
+    await sb.from('admin_notifications').insert({ type: 'email_failed', message: `Email konnte nicht zugestellt werden an ${to}`, details: { to, subject, error, status }, read: false })
+  } catch (e) { console.error('notifyEmailFailed:', e) }
+}
+
+async function sendEmail(to: string, subject: string, html: string): Promise<{ok: boolean, status: number}> {
+  const apiKey = Deno.env.get('BREVO_API_KEY')
+  if (!apiKey) { await notifyEmailFailed(to, subject, 'BREVO_API_KEY fehlt', 0); return { ok: false, status: 0 } }
+  try {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'api-key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sender: { name: FROM_NAME, email: FROM_EMAIL },
+        to: [{ email: to }],
+        subject,
+        htmlContent: html,
+        headers: {
+          'X-Mailin-Track-Click': '0',
+          'X-Mailin-Track-Open': '0',
+        },
+      }),
+    })
+    if (!res.ok) { const e = await res.text().catch(() => ''); await notifyEmailFailed(to, subject, e.substring(0,500), res.status) }
+    return { ok: res.ok, status: res.status }
+  } catch(e) { await notifyEmailFailed(to, subject, String(e), 0); return { ok: false, status: 0 } }
+}
+
+function base(content: string): string {
+  return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:Arial,sans-serif;background:#f5f2f0;margin:0;padding:20px"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.08)"><div style="background:#cfcbca;padding:28px 32px;text-align:center"><img src="${LOGO}" width="64" height="64" style="border-radius:50%;display:block;margin:0 auto 12px"/><h1 style="color:#3d3a39;font-size:18px;margin:0;font-weight:700">Yoga mit Sarah</h1></div><div style="padding:28px 32px;color:#3d3a39">${content}</div><div style="padding:16px 32px;text-align:center;font-size:12px;color:#999;border-top:1px solid #f0eded">Sarah Lerch &middot; Fuldaer Str. 7 &middot; 63628 Bad Soden-Salmünster<br><a href="https://www.yogamitsarah.me/agb" style="color:#999">AGB</a> &middot; <a href="https://yogamitsarah.me/privacy-policy/" style="color:#999">Datenschutz</a></div></div></body></html>`
+}
+function btn(text: string, url: string, color = '#3d3a39'): string {
+  return `<p style="text-align:center;margin:16px 0"><a href="${url}" style="display:inline-block;background:${color};color:#f5f2f0;text-decoration:none;padding:13px 26px;border-radius:100px;font-weight:700;font-size:14px">${text}</a></p>`
+}
+function hl(content: string, bg = '#f5f2f0'): string {
+  return `<div style="background:${bg};border-radius:10px;padding:14px 18px;margin:16px 0">${content}</div>`
+}
+function fmtDate(d: string, t?: string): string {
+  const date = new Date(`${d}T12:00:00Z`).toLocaleDateString('de-DE', {
+    weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone: TZ
+  })
+  return t ? `${date} um ${t.slice(0,5)} Uhr` : date
+}
+function fmtDateShort(d: string): string {
+  return new Date(`${d}T12:00:00Z`).toLocaleDateString('de-DE', { day:'numeric', month:'long', timeZone: TZ })
+}
+function cancelDeadlineStr(timeStart: string): string {
+  const [hStr, mStr] = (timeStart || '00:00').split(':')
+  let h = parseInt(hStr, 10) - 3
+  const m = parseInt(mStr, 10)
+  if (h < 0) h += 24
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
+}
+function guthabenExpiryStr(): string {
+  const d = new Date()
+  d.setFullYear(d.getFullYear() + 2)
+  return d.toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric', timeZone: TZ })
+}
+const WD: Record<string,string> = { 'Montag':'Montags','Dienstag':'Dienstags','Mittwoch':'Mittwochs','Donnerstag':'Donnerstags','Freitag':'Freitags','Samstag':'Samstags','Sonntag':'Sonntags' }
 const LG = '<p style="font-size:15px;margin-top:20px">Liebe Grüße,<br><strong>Sarah</strong></p>'
+const BULK_OPTOUT = '<p style="font-size:11px;color:#999;margin-top:24px;padding-top:12px;border-top:1px solid #f0eded;line-height:1.5;text-align:center">Du erhältst diese Mail weil du Yogi bei Yoga mit Sarah bist.<br>Wenn du keine solchen Info-Mails mehr erhalten möchtest, schreib mir kurz: <a href="mailto:Mail@yogamitsarah.me" style="color:#999">Mail@yogamitsarah.me</a></p>'
 
-case 'welcome':
-  html = base(`<p style="font-size:15px">Hallo ${data.firstName}!</p><p style="font-size:15px">Schön, dass du dabei bist! 💛</p>${data.courseName ? hl(`<p style="margin:0;font-size:15px">Du bist direkt in den Kurs <strong>${data.courseName}</strong> eingebucht.</p>`,'#e8ede6') : ''}${btn('Zur App',APP_URL)}<p style="font-size:15px">Ich freue mich, dich bald auf der Matte zu sehen!</p>${LG}`)
-  break
-
-case 'invitation_sent':
-  html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">ich lade dich herzlich ein, meiner Yoga-App beizutreten!</p><p style="font-size:15px">Die Stundenverwaltung läuft ausschließlich über die App – bitte registriere dich, um deine Stunden planen und buchen zu können.</p>${data.courseName ? hl(`<p style="margin:0;font-size:15px;color:#3a5a30">Du wirst direkt in den Kurs <strong>${data.courseName}</strong> eingebucht.</p>`,'#e8ede6') : ''}${btn('Jetzt registrieren',data.inviteLink)}<p style="font-size:13px;color:#999;text-align:center">Der Link ist 14 Tage gültig.</p>${LG}`)
-  break
-
-case 'invitation_reminder':
-  html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">ich wollte kurz an deine Einladung erinnern.</p><p style="font-size:15px">Die Stundenverwaltung läuft ausschließlich über die App – bitte registriere dich, um deine Stunden planen und buchen zu können.</p>${data.courseName ? hl(`<p style="margin:0;font-size:15px;color:#3a5a30">Du wirst direkt in den Kurs <strong>${data.courseName}</strong> eingebucht.</p>`,'#e8ede6') : ''}${btn('Jetzt registrieren',data.inviteLink)}<p style="font-size:13px;color:#999;text-align:center">Der Einladungslink ist noch gültig.</p>${LG}`)
-  break
-
-case 'yogi_enrolled_by_admin': {
-  const total = data.totalUnits
-  const remaining = data.remainingUnits ?? data.totalUnits
-  const midCourse = total && remaining && remaining < total
-  html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">ich habe dich in einen Kurs eingetragen.</p>${hl(`<p style="margin:4px 0;font-size:15px;font-weight:bold">Kurs: ${data.courseName}</p><p style="margin:8px 0 4px;font-size:14px">📅 ${WD[data.weekday]||data.weekday} um ${data.timeStart?.slice(0,5)} Uhr</p><p style="margin:4px 0;font-size:14px">${data.durationMin} Minuten pro Einheit</p>`)}${hl(`<p style="margin:0 0 10px;font-size:14px;font-weight:bold">Dein Kursumfang</p>${total ? `<p style="margin:4px 0;font-size:14px">Kurs hat insgesamt <strong>${total} Einheiten</strong>${data.dateStart ? ` (Kursbeginn: ${fmtDate(data.dateStart)})` : ''}.</p>` : ''}${midCourse ? `<p style="margin:8px 0 4px;font-size:14px;color:#6b2a2a">Du steigst <strong>mitten im Kurs</strong> ein${data.firstSessionDate ? ` (deine erste Stunde: ${fmtDate(data.firstSessionDate)})` : ''}.</p><p style="margin:4px 0;font-size:14px;color:#3a5a30">✅ Für dich verbleiben <strong>${remaining} Stunden</strong> — du hast dafür <strong>${remaining} Credits</strong> in deinem Profil.</p>` : `<p style="margin:8px 0;font-size:14px;color:#3a5a30">✅ Du nimmst an allen <strong>${remaining} Stunden</strong> teil — du hast dafür <strong>${remaining} Credits</strong> in deinem Profil.</p>`}`,'#e8ede6')}${hl(`<p style="margin:0 0 8px;font-size:14px;font-weight:bold">Wichtige Regeln</p><p style="margin:4px 0;font-size:13px">✅ Abmeldung einzelner Stunden: kostenlos bis 3 Stunden vorher</p>`,'#f5f2f0')}${btn('Zu meinen Buchungen',APP_URL+'/meine')}<p style="font-size:15px">Ich freue mich, dich bald auf der Matte zu begrüßen!</p>${LG}`)
-  break
-}
-
-case 'booking_confirmed':
-  html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">deine Buchung ist bestätigt!</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">Kurs: ${data.courseName} · ${data.durationMin} Min.</p>`)}<p style="font-size:15px">Abmeldefrist: <strong>${dlStr} Uhr</strong></p>${btn('Meine Buchungen',APP_URL+'/meine')}${LG}`)
-  break
-
-case 'booking_cancelled':
-  html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">deine Abmeldung wurde bestätigt.</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 ${fmtDate(data.date,data.timeStart)}</p><p style="margin:4px 0;font-size:14px">Kurs: ${data.courseName}</p><p style="margin:4px 0;font-size:14px">${data.creditReturned?'✅ Du bekommst einen Credit gutgeschrieben.':'❌ Credit nicht zurückgebucht (unter 3h).'}</p>`)}${data.creditReturned ? btn('Zur App',APP_URL+'/meine') : btn('Zur App',APP_URL)}${LG}`)
-  break
-
-case 'waitlist_joined': {
-  const unsubscribeUrl = data.unsubscribeToken
-    ? `${APP_URL}/warteliste/austragen?token=${encodeURIComponent(data.unsubscribeToken)}`
-    : `${APP_URL}/meine`
-  html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">du stehst auf der Warteliste.</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 ${fmtDate(data.date,data.timeStart)}</p><p style="margin:4px 0;font-size:14px">Kurs: ${data.courseName}</p><p style="margin:4px 0;font-size:14px">👥 Position: <strong>${data.position}</strong></p>`)}<p style="font-size:15px">Du wirst automatisch eingebucht, sobald ein Platz frei wird.</p>${btn('Zur Warteliste',APP_URL+'/meine')}${btn('Wieder austragen',unsubscribeUrl,'#6b2a2a')}${LG}`)
-  break
-}
-
-case 'waitlist_promoted':
-  html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">🎉 Ein Platz ist frei – du bist automatisch eingebucht!</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">Kurs: ${data.courseName}</p>`)}<p style="font-size:15px">Du hast <strong>1 Stunde Zeit</strong>, dich kostenlos abzumelden.</p>${btn('Meine Buchungen',APP_URL+'/meine')}${LG}`)
-  break
-
-case 'waitlist_removed_credit_used_elsewhere':
-  html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">deine Wartelisten-Position (für die unten stehende Einheit) wurde entfernt, weil dein Credit anderweitig verwendet wurde:</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 ${fmtDate(data.date,data.timeStart)}</p><p style="margin:4px 0;font-size:14px">Kurs: ${data.courseName}</p>`,'#f0e6e6')}<p style="font-size:15px">Falls du nochmal versuchen willst auf die Warteliste zu kommen – du brauchst dafür einen freien Credit.</p>${btn('Zur App',APP_URL+'/meine')}${LG}`)
-  break
-
-case 'notify_place_free':
-  html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">🎉 Ein Platz ist frei geworden!</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">Kurs: ${data.courseName}</p>`)}${btn('Jetzt buchen',APP_URL+'/kurse/'+data.sessionId)}${LG}`)
-  break
-
-case 'session_reminder':
-  html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">kleine Erinnerung an deine Yogastunde:</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">Kurs: ${data.courseName} · ${data.durationMin} Min.</p>`,'#e8ede6')}<p style="font-size:15px">Falls du nicht kommen kannst, melde dich über die App ab.</p>${btn('Zur Stunde',APP_URL+'/meine')}${LG}`)
-  break
-
-case 'session_cancelled': {
-  const hasRep = !!data.replacementDate
-  html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">leider muss ich diese Stunde absagen:</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">Kurs: ${data.courseName}</p>${data.reason?`<p style="margin:4px 0;font-size:14px">💬 ${data.reason}</p>`:''}`,'#f0e6e6')}${hasRep?`${hl(`<p style="margin:0 0 8px;font-size:14px;font-weight:bold;color:#3a5a30">Ersatztermin: ${fmtDate(data.replacementDate,data.replacementTime)}</p><p style="margin:0;font-size:13px">Dein Credit wird automatisch auf den Ersatztermin eingebucht.</p>`,'#e8ede6')}${btn('Meine Buchungen',APP_URL+'/meine')}`:`<p style="font-size:15px">✅ Dein Credit wird dir automatisch gutgeschrieben.</p><p style="font-size:15px">Sobald eine Ersatzstunde eingetragen wird, wirst du automatisch eingebucht – außer du hast den gutgeschriebenen Credit bereits in einer anderen Stunde verwendet.</p>`}${LG}`)
-  break
-}
-
-case 'session_added': {
-  const hasOrig = !!data.originalDate
-  subject = hasOrig ? `Ersatztermin für deine abgesagte Stunde am ${fmtDateShort(data.originalDate)} – ${data.courseName}` : `Neuer Ersatztermin: ${data.courseName}`
-  html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">für deine abgesagte Stunde gibt es einen Ersatztermin.</p>${hasOrig ? hl(`<p style="margin:0 0 4px;font-size:13px;font-weight:bold;color:#6b2a2a">Ursprüngliche Stunde (abgesagt):</p><p style="margin:4px 0;font-size:14px">📅 ${fmtDate(data.originalDate, data.originalTime)}</p>`, '#f0e6e6') : ''}${hl(`<p style="margin:0 0 4px;font-size:13px;font-weight:bold;color:#3a5a30">Neuer Ersatztermin:</p><p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">Kurs: ${data.courseName}</p>`,'#e8ede6')}<p style="font-size:15px">✅ Du wurdest automatisch eingetragen und dein Credit der ursprünglichen Stunde wurde dafür verwendet.</p>${btn('Meine Stunden',APP_URL+'/meine')}${LG}`)
-  break
-}
-
-case 'course_time_changed':
-  html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">die Uhrzeit für deine Stunden hat sich geändert:</p>${hl(`<p style="margin:4px 0;font-size:14px">Kurs: <strong>${data.courseName}</strong></p><p style="margin:8px 0 4px;font-size:14px">Bisher: <strong>${data.oldTime?.slice(0,5)} Uhr</strong></p><p style="margin:4px 0;font-size:14px;color:#3a5a30">Neu: <strong>${data.newTime?.slice(0,5)} Uhr</strong></p>`)}${btn('Meine Stunden',APP_URL+'/meine')}${LG}`)
-  break
-
-case 'course_cancelled': {
-  const isAllR = data.refundMode === 'all_refund'
-  html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">leider muss ich den folgenden Kurs absagen:</p>${hl(`<p style="margin:4px 0;font-size:15px;font-weight:bold">Kurs: ${data.courseName}</p>${data.reason?`<p style="margin:8px 0 0;font-size:14px">💬 ${data.reason}</p>`:''}<p style="margin:8px 0 0;font-size:14px">💡 ${data.remainingSessions} Stunden entfallen</p>`,'#f0e6e6')}${isAllR?`<p style="font-size:15px">Für die <strong>${data.remainingSessions} noch nicht stattgefundenen Kurseinheiten</strong> erhältst du eine anteilige Erstattung des gezahlten Kurspreises. Bereits absolvierte Einheiten sind von der Erstattung ausgenommen. Ich melde mich bei dir.</p>`:`<p style="font-size:15px">Für die <strong>${data.remainingSessions} noch nicht stattgefundenen Kurseinheiten</strong> hast du die Wahl zwischen einer anteiligen Erstattung oder Kurs-Guthaben (<strong>2 Jahre gültig</strong>) für zukünftige Kurse. Bereits absolvierte Einheiten sind von der Erstattung ausgenommen.</p>${hl(`<p style="margin:0;font-size:13px">💡 <strong>Du siehst die ${data.remainingSessions} Credits ab sofort als Guthaben in deiner App-Übersicht.</strong> Bei der Wahl <strong>„Anteilige Erstattung"</strong> werden sie wieder entfernt — dafür bekommst du den Betrag in Geld zurück.</p>`,'#f5f2f0')}<p style="font-size:15px">Du hast <strong>7 Tage</strong> Zeit, eine Entscheidung zu treffen:</p><div style="margin:20px 0">${btn('Guthaben behalten - 2 Jahre gültig',data.guthabenUrl,'#3a5a30')}${btn('Anteilige Erstattung',data.guthabenUrl+'?wahl=erstattung','#6b2a2a')}</div><p style="font-size:12px;color:#999;text-align:center">Ohne Rückmeldung innerhalb von 7 Tagen wird dir automatisch das Guthaben (<strong>2 Jahre gültig</strong>) gutgeschrieben.</p>`}${LG}`)
-  break
-}
-
-case 'admin_course_cancelled_summary': {
-  html = base(`<p style="font-size:15px">Hallo Sarah,</p><p style="font-size:15px">du hast folgenden Kurs abgebrochen:</p>${hl(`<p style="margin:4px 0;font-size:15px;font-weight:bold">Kurs: ${data.courseName}</p>${data.reason?`<p style="margin:8px 0 0;font-size:14px">💬 ${data.reason}</p>`:''}<p style="margin:8px 0 0;font-size:14px">💡 ${data.remainingSessions} Stunden entfallen</p>`,'#f0e6e6')}`)
-  break
-}
-
-case 'admin_yogi_choice': {
-  const isGuthaben = data.choice === 'guthaben'
-  html = base(`<p style="font-size:15px">Hallo Sarah,</p><p style="font-size:15px">ein Yogi hat seine Entscheidung zum Kursabbruch getroffen:</p>${hl(`<p style="margin:4px 0;font-size:15px;font-weight:bold">${choiceLabel}</p><p style="margin:8px 0 0;font-size:14px">Kurs: ${data.courseName}</p>`,isGuthaben?'#e8ede6':'#f0e6e6')}`)
-  break
-}
-
-case 'yogi_course_cancel_choice': {
-  const isGuthaben = data.choice === 'guthaben'
-  const refund = data.refundCredits ?? 0
-  const guthaben = data.guthabenCredits ?? 0
-  const verrechnet = Math.max(0, refund - guthaben)
-  subject = isGuthaben ? `Guthaben gutgeschrieben: ${data.courseName}` : `Erstattungsanfrage bestätigt: ${data.courseName}`
-  if (isGuthaben) {
-    html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">danke für deine Rückmeldung — ich habe dein Guthaben für den abgesagten Kurs gespeichert.</p>${hl(`<p style="margin:4px 0;font-size:15px;font-weight:bold">Guthaben behalten</p><p style="margin:8px 0 0;font-size:14px">Kurs: ${data.courseName}</p><p style="margin:4px 0;font-size:14px">💡 ${refund} Stunden betroffen</p>${guthaben > 0 ? `<p style="margin:8px 0 0;font-size:14px;color:#3a5a30">✅ <strong>${guthaben} Credits</strong> wurden dir als Guthaben gutgeschrieben (2 Jahre gültig).</p>` : ''}${verrechnet > 0 ? `<p style="margin:4px 0;font-size:14px;color:#3a5a30">✅ Zusätzlich wurde dein vorher verrechnetes Guthaben (${verrechnet} Credits) wieder freigegeben.</p>` : ''}`,'#e8ede6')}<p style="font-size:15px">Das Guthaben kannst du bei jedem zukünftigen Kurs einlösen. Es ist nicht für Einzelstunden verwendbar.</p>${btn('Mein Guthaben',APP_URL+'/meine')}${LG}`)
-  } else {
-    const verrechnetSatz = verrechnet > 0 ? ` Dein verrechnetes Guthaben (${verrechnet} Credits) wurde nicht zurückgegeben — du bekommst stattdessen den entsprechenden Geldbetrag erstattet.` : ''
-    html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">deine Wahl ist gespeichert — du hast dich für die anteilige Erstattung entschieden.</p>${hl(`<p style="margin:4px 0;font-size:15px;font-weight:bold">Anteilige Erstattung</p><p style="margin:8px 0 0;font-size:14px">Kurs: ${data.courseName}</p><p style="margin:4px 0;font-size:14px">✅ ${refund} Stunden werden anteilig erstattet</p>`,'#f0e6e6')}<p style="font-size:15px">Ich melde mich persönlich bei dir wegen der Auszahlung.${verrechnetSatz}</p>${btn('Zur App',APP_URL+'/meine')}${LG}`)
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  if (!checkSecret(req)) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: CORS })
+  try {
+    const { type, data } = await req.json()
+    let subject = '', html = '', to = data?.email || ADMIN_EMAIL
+    const KL = kursLabel(data)
+    switch (type) {
+      case 'welcome':
+        subject = 'Willkommen bei Yoga mit Sarah!'
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName}!</p><p style="font-size:15px">Schön, dass du dabei bist! 💛</p>${data.courseName ? hl(`<p style="margin:0;font-size:15px">Du bist direkt in den Kurs <strong>${data.courseName}</strong> eingebucht.</p>`,'#e8ede6') : ''}${btn('Zur App',APP_URL)}<p style="font-size:15px">Ich freue mich, dich bald auf der Matte zu sehen!</p>${LG}`)
+        break
+      case 'invitation_sent':
+        subject = 'Einladung zur Yoga-App – Yoga mit Sarah'
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">ich lade dich herzlich ein, meiner Yoga-App beizutreten!</p><p style="font-size:15px">Die Stundenverwaltung läuft ausschließlich über die App – bitte registriere dich, um deine Stunden planen und buchen zu können.</p>${data.courseName ? hl(`<p style="margin:0;font-size:15px;color:#3a5a30">Du wirst direkt in den Kurs <strong>${data.courseName}</strong> eingebucht.</p>`,'#e8ede6') : ''}${btn('Jetzt registrieren',data.inviteLink)}<p style="font-size:13px;color:#999;text-align:center">Der Link ist 14 Tage gültig.</p>${LG}`)
+        break
+      case 'invitation_reminder':
+        subject = 'Erinnerung: Deine Einladung zur Yoga-App'
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">ich wollte kurz an deine Einladung erinnern.</p><p style="font-size:15px">Die Stundenverwaltung läuft ausschließlich über die App – bitte registriere dich, um deine Stunden planen und buchen zu können.</p>${data.courseName ? hl(`<p style="margin:0;font-size:15px;color:#3a5a30">Du wirst direkt in den Kurs <strong>${data.courseName}</strong> eingebucht.</p>`,'#e8ede6') : ''}${btn('Jetzt registrieren',data.inviteLink)}<p style="font-size:13px;color:#999;text-align:center">Der Einladungslink ist noch gültig.</p>${LG}`)
+        break
+      case 'admin_bulk_announcement': {
+        const bodyHtml = String(data.body || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')
+        subject = data.subject
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><div style="font-size:15px;line-height:1.55">${bodyHtml}</div>${btn('Zur App',APP_URL)}${LG}${BULK_OPTOUT}`)
+        break
+      }
+      case 'yogi_enrolled_by_admin': {
+        const total = data.totalUnits
+        const remaining = data.remainingUnits ?? data.totalUnits
+        const midCourse = total && remaining && remaining < total
+        subject = `Du wurdest in den Kurs ${data.courseName} eingetragen`
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">ich habe dich in einen Kurs eingetragen.</p>${hl(`<p style="margin:4px 0;font-size:15px;font-weight:bold">Kurs: ${data.courseName}</p><p style="margin:8px 0 4px;font-size:14px">📅 ${WD[data.weekday]||data.weekday} um ${data.timeStart?.slice(0,5)} Uhr</p><p style="margin:4px 0;font-size:14px">${data.durationMin} Minuten pro Einheit</p>`)}${hl(`<p style="margin:0 0 10px;font-size:14px;font-weight:bold">Dein Kursumfang</p>${total ? `<p style="margin:4px 0;font-size:14px">Kurs hat insgesamt <strong>${total} Einheiten</strong>${data.dateStart ? ` (Kursbeginn: ${fmtDate(data.dateStart)})` : ''}.</p>` : ''}${midCourse ? `<p style="margin:8px 0 4px;font-size:14px;color:#6b2a2a">Du steigst <strong>mitten im Kurs</strong> ein${data.firstSessionDate ? ` (deine erste Stunde: ${fmtDate(data.firstSessionDate)})` : ''}.</p><p style="margin:4px 0;font-size:14px;color:#3a5a30">✅ Für dich verbleiben <strong>${remaining} Stunden</strong> — du hast dafür <strong>${remaining} Credits</strong> in deinem Profil.</p>` : `<p style="margin:8px 0;font-size:14px;color:#3a5a30">✅ Du nimmst an allen <strong>${remaining} Stunden</strong> teil — du hast dafür <strong>${remaining} Credits</strong> in deinem Profil.</p>`}`,'#e8ede6')}${hl(`<p style="margin:0 0 8px;font-size:14px;font-weight:bold">Wichtige Regeln</p><p style="margin:4px 0;font-size:13px">✅ Abmeldung einzelner Stunden: kostenlos bis 3 Stunden vorher</p><p style="margin:4px 0;font-size:13px">✅ Nachholen dieser Stunden: bis 8 Tage nach Kursende möglich</p><p style="margin:4px 0;font-size:13px">✅ Vorholen von Stunden max. 10 Tage im Voraus</p><p style="margin:4px 0;font-size:13px">✅ Rücktritt vom gesamten Kurs: kostenlos bis 14 Tage vor Kursbeginn — danach Gebühr (30 € bis 7 Tage vorher, ab 6 Tagen volle Gebühr). Ersatzteilnehmer jederzeit möglich.</p>`,'#f5f2f0')}${btn('Zu meinen Buchungen',APP_URL+'/meine')}<p style="font-size:15px">Ich freue mich, dich bald auf der Matte zu begrüßen!</p>${LG}`)
+        break
+      }
+      case 'booking_confirmed': {
+        subject = `Buchung bestätigt: ${data.courseName}`
+        const dlStr = cancelDeadlineStr(data.timeStart)
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">deine Buchung ist bestätigt!</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">${KL}: ${data.courseName} · ${data.durationMin} Min.</p>`)}<p style="font-size:15px">Abmeldefrist: <strong>${dlStr} Uhr</strong></p>${btn('Meine Buchungen',APP_URL+'/meine')}${LG}`)
+        break
+      }
+      case 'booking_cancelled':
+        subject = `Abmeldung bestätigt: ${data.courseName}`
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">deine Abmeldung wurde bestätigt.</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 ${fmtDate(data.date,data.timeStart)}</p><p style="margin:4px 0;font-size:14px">${KL}: ${data.courseName}</p><p style="margin:4px 0;font-size:14px">${data.creditReturned?'✅ Du bekommst einen Credit gutgeschrieben.':'❌ Credit nicht zurückgebucht (unter 3h).'}</p>`)}${data.creditReturned ? btn('Zur App',APP_URL+'/meine') : btn('Zur App',APP_URL)}${LG}`)
+        break
+      case 'waitlist_joined': {
+        const unsubscribeUrl = data.unsubscribeToken
+          ? `${APP_URL}/warteliste/austragen?token=${encodeURIComponent(data.unsubscribeToken)}`
+          : `${APP_URL}/meine`
+        subject = `Warteliste: ${data.courseName}`
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">du stehst auf der Warteliste.</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 ${fmtDate(data.date,data.timeStart)}</p><p style="margin:4px 0;font-size:14px">${KL}: ${data.courseName}</p><p style="margin:4px 0;font-size:14px">👥 Position: <strong>${data.position}</strong></p>`)}<p style="font-size:15px">Du wirst automatisch eingebucht, sobald ein Platz frei wird. Du hast dann <strong>1 Stunde Zeit</strong>, dich kostenlos abzumelden.</p><p style="font-size:13px;color:#666">Wird ein Platz weniger als 90 Minuten vor Stundenbeginn frei, bekommen alle Wartelisten-Yogis eine Auswahl-Mail — wer zuerst klickt, kriegt den Platz.</p>${btn('Zur Warteliste',APP_URL+'/meine')}${btn('Wieder austragen',unsubscribeUrl,'#6b2a2a')}${LG}`)
+        break
+      }
+      case 'waitlist_promoted':
+        subject = `Du bist dabei: ${data.courseName}`
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">🎉 Ein Platz ist frei – du bist automatisch eingebucht!</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">${KL}: ${data.courseName}</p>`)}<p style="font-size:15px">Du hast <strong>1 Stunde Zeit</strong>, dich kostenlos abzumelden.</p>${btn('Meine Buchungen',APP_URL+'/meine')}${LG}`)
+        break
+      case 'waitlist_offer_late': {
+        subject = `Letzte Chance: ${data.courseName} in Kürze`
+        const acceptUrl = `${APP_URL}/warteliste/angebot/${encodeURIComponent(data.offerToken || '')}`
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">ein Platz wurde gerade frei — aber es ist weniger als 90 Minuten vor Stundenbeginn.</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">${KL}: ${data.courseName}</p>`,'#fff3d6')}<p style="font-size:15px"><strong>Alle Wartelisten-Yogis bekommen diese Mail — wer zuerst klickt, bekommt den Platz.</strong></p>${btn('Ja, ich nehme den Platz',acceptUrl,'#3a5a30')}<p style="font-size:13px;color:#666">Wenn du nicht reagierst, passiert nichts — dein Wartelisten-Platz bleibt aber auch nicht erhalten für diese Stunde.</p>${LG}`)
+        break
+      }
+      case 'waitlist_removed_credit_used_elsewhere':
+        subject = `Warteliste entfernt: ${data.courseName}`
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">deine Wartelisten-Position (für die unten stehende Einheit) wurde entfernt, weil dein Credit anderweitig verwendet wurde:</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 ${fmtDate(data.date,data.timeStart)}</p><p style="margin:4px 0;font-size:14px">${KL}: ${data.courseName}</p>`,'#f0e6e6')}<p style="font-size:15px">Falls du nochmal versuchen willst auf die Warteliste zu kommen – du brauchst dafür einen freien Credit. Du kannst dich aber jederzeit benachrichtigen lassen, wenn ein Platz frei wird.</p>${btn('Zur App',APP_URL+'/meine')}${LG}`)
+        break
+      case 'notify_place_free':
+        subject = `Platz frei: ${data.courseName}`
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">🎉 Ein Platz ist frei geworden!</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">${KL}: ${data.courseName}</p>`)}${btn('Jetzt buchen',APP_URL+'/kurse/'+data.sessionId)}${LG}`)
+        break
+      case 'session_reminder':
+        subject = `Erinnerung: ${data.courseName} in ${data.hoursBefore} Std.`
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">kleine Erinnerung an deine Yogastunde:</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">${KL}: ${data.courseName} · ${data.durationMin} Min.</p>`,'#e8ede6')}<p style="font-size:15px">Falls du nicht kommen kannst, melde dich über die App ab.</p>${btn('Zur Stunde',APP_URL+'/meine')}${LG}`)
+        break
+      case 'session_cancelled': {
+        subject = `Kursstunde abgesagt: ${data.courseName}`
+        const hasRep = !!data.replacementDate
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">leider muss ich diese Stunde absagen:</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">${KL}: ${data.courseName}</p>${data.reason?`<p style="margin:4px 0;font-size:14px">💬 ${data.reason}</p>`:''}`,'#f0e6e6')}${hasRep?`${hl(`<p style="margin:0 0 8px;font-size:14px;font-weight:bold;color:#3a5a30">Ersatztermin: ${fmtDate(data.replacementDate,data.replacementTime)}</p><p style="margin:0;font-size:13px">Dein Credit wird automatisch auf den Ersatztermin eingebucht.</p>`,'#e8ede6')}${btn('Meine Buchungen',APP_URL+'/meine')}`:`<p style="font-size:15px">✅ Dein Credit wird dir automatisch gutgeschrieben.</p><p style="font-size:15px">Sobald eine Ersatzstunde eingetragen wird, wirst du automatisch eingebucht – außer du hast den gutgeschriebenen Credit bereits in einer anderen Stunde verwendet.</p>`}${LG}`)
+        break
+      }
+      case 'session_added': {
+        const hasOrig = !!data.originalDate
+        subject = hasOrig ? `Ersatztermin für deine abgesagte Stunde am ${fmtDateShort(data.originalDate)} – ${data.courseName}` : `Neuer Ersatztermin: ${data.courseName}`
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">für deine abgesagte Stunde gibt es einen Ersatztermin.</p>${hasOrig ? hl(`<p style="margin:0 0 4px;font-size:13px;font-weight:bold;color:#6b2a2a">Ursprüngliche Stunde (abgesagt):</p><p style="margin:4px 0;font-size:14px">📅 ${fmtDate(data.originalDate, data.originalTime)}</p>`, '#f0e6e6') : ''}${hl(`<p style="margin:0 0 4px;font-size:13px;font-weight:bold;color:#3a5a30">Neuer Ersatztermin:</p><p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">${KL}: ${data.courseName}</p>`,'#e8ede6')}<p style="font-size:15px">✅ Du wurdest automatisch eingetragen und dein Credit der ursprünglichen Stunde wurde dafür verwendet.</p>${btn('Meine Stunden',APP_URL+'/meine')}${LG}`)
+        break
+      }
+      case 'course_time_changed':
+        subject = `Uhrzeitänderung: ${data.courseName}`
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">die Uhrzeit für deine Stunden hat sich geändert:</p>${hl(`<p style="margin:4px 0;font-size:14px">Kurs: <strong>${data.courseName}</strong></p><p style="margin:8px 0 4px;font-size:14px">Bisher: <strong>${data.oldTime?.slice(0,5)} Uhr</strong></p><p style="margin:4px 0;font-size:14px;color:#3a5a30">Neu: <strong>${data.newTime?.slice(0,5)} Uhr</strong></p>`)}${btn('Meine Stunden',APP_URL+'/meine')}${LG}`)
+        break
+      case 'course_cancelled': {
+        subject = `Kurs abgesagt: ${data.courseName}`
+        const isAllR = data.refundMode === 'all_refund'
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">leider muss ich den folgenden Kurs absagen:</p>${hl(`<p style="margin:4px 0;font-size:15px;font-weight:bold">Kurs: ${data.courseName}</p>${data.reason?`<p style="margin:8px 0 0;font-size:14px">💬 ${data.reason}</p>`:''}<p style="margin:8px 0 0;font-size:14px">💡 ${data.remainingSessions} Stunden entfallen</p>`,'#f0e6e6')}${isAllR?`<p style="font-size:15px">Für die <strong>${data.remainingSessions} noch nicht stattgefundenen Kurseinheiten</strong> erhältst du eine anteilige Erstattung des gezahlten Kurspreises. Ich melde mich bei dir.</p>`:`<p style="font-size:15px">Für die <strong>${data.remainingSessions} noch nicht stattgefundenen Kurseinheiten</strong> hast du die Wahl zwischen einer anteiligen Erstattung oder Kurs-Guthaben (<strong>2 Jahre gültig</strong>).</p>${hl(`<p style="margin:0;font-size:13px">💡 <strong>Du siehst die ${data.remainingSessions} Credits ab sofort als Guthaben in deiner App-Übersicht.</strong> Bei der Wahl <strong>„Anteilige Erstattung"</strong> werden sie wieder entfernt.</p>`,'#f5f2f0')}<p style="font-size:15px">Du hast <strong>7 Tage</strong> Zeit:</p><div style="margin:20px 0">${btn('Guthaben behalten - 2 Jahre gültig',data.guthabenUrl,'#3a5a30')}${btn('Anteilige Erstattung',data.guthabenUrl+'?wahl=erstattung','#6b2a2a')}</div>${hl(`<p style="margin:0;font-size:13px">✨ Ich freue mich besonders, wenn du das Guthaben wählst — dann sehen wir uns im nächsten Kurs wieder. Das Guthaben ist 2 Jahre gültig und falls du es bis dahin nicht eingelöst hast (z. B. weil kein passender Kurs zustande kommt), wird dir der Geldbetrag automatisch ausgezahlt — du verlierst in keinem Fall etwas.</p>`,'#e8ede6')}<p style="font-size:12px;color:#999;text-align:center">Ohne Rückmeldung wird dir automatisch der Geldbetrag erstattet. Sarah meldet sich dann persönlich bei dir wegen der Überweisung.</p>`}${LG}`)
+        break
+      }
+      case 'admin_course_cancelled_summary': {
+        to = ADMIN_EMAIL
+        subject = `Kurs abgebrochen: ${data.courseName}`
+        const yogiRows = (data.yogis || []).map((y: any) => `<tr><td style="padding:6px 8px;border-bottom:1px solid #f0eded;font-size:14px">${y.firstName} ${y.lastName}</td><td style="padding:6px 8px;border-bottom:1px solid #f0eded;font-size:14px">${y.email}</td></tr>`).join('')
+        html = base(`<p style="font-size:15px">Hallo Sarah,</p><p style="font-size:15px">du hast folgenden Kurs abgebrochen:</p>${hl(`<p style="margin:4px 0;font-size:15px;font-weight:bold">Kurs: ${data.courseName}</p>${data.reason?`<p style="margin:8px 0 0;font-size:14px">💬 ${data.reason}</p>`:''}<p style="margin:8px 0 0;font-size:14px">💡 ${data.remainingSessions} Stunden entfallen</p>`,'#f0e6e6')}<p style="font-size:15px;font-weight:bold;margin-top:20px">Betroffene Yogis (${(data.yogis||[]).length}):</p><table style="width:100%;border-collapse:collapse;margin-top:8px"><thead><tr style="background:#f5f2f0"><th style="padding:8px;text-align:left;font-size:13px;font-weight:600">Name</th><th style="padding:8px;text-align:left;font-size:13px;font-weight:600">E-Mail</th></tr></thead><tbody>${yogiRows}</tbody></table>${btn('Admin-Bereich',APP_URL+'/admin/kurse')}`)
+        break
+      }
+      case 'admin_yogi_choice': {
+        to = ADMIN_EMAIL
+        const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { autoRefreshToken: false, persistSession: false } })
+        const { data: profile } = await sb.from('profiles').select('first_name, last_name, email').eq('id', data.userId).maybeSingle()
+        const yogiName = profile ? `${profile.first_name||''} ${profile.last_name||''}`.trim() : 'Unbekannt'
+        const yogiEmail = profile?.email || ''
+        const isGuthaben = data.choice === 'guthaben'
+        const choiceLabel = isGuthaben ? 'Guthaben behalten' : 'Geld zurück'
+        subject = `Kursabbruch-Entscheidung: ${yogiName}`
+        html = base(`<p style="font-size:15px">Hallo Sarah,</p><p style="font-size:15px">ein Yogi hat seine Entscheidung zum Kursabbruch getroffen:</p>${hl(`<p style="margin:4px 0;font-size:15px;font-weight:bold">${choiceLabel}</p><p style="margin:10px 0 4px;font-size:14px"><strong>${yogiName}</strong></p><p style="margin:4px 0;font-size:14px">${yogiEmail}</p><p style="margin:8px 0 0;font-size:14px">Kurs: ${data.courseName}</p><p style="margin:4px 0;font-size:14px">${data.remainingSessions} Einheiten</p>`,isGuthaben?'#e8ede6':'#f0e6e6')}${isGuthaben?'<p style="font-size:15px">✅ Credits wurden automatisch gutgeschrieben.</p>':'<p style="font-size:15px">Bitte kläre die Erstattung direkt mit dem Yogi.</p>'}${btn('Admin-Bereich',APP_URL+'/admin/kurse')}`)
+        break
+      }
+      case 'yogi_course_cancel_choice': {
+        const isGuthaben = data.choice === 'guthaben'
+        const refund = data.refundCredits ?? 0
+        const newPaid = data.newPaidCredits ?? data.guthabenCredits ?? 0
+        const verrechnet = Math.max(0, refund - newPaid)
+        subject = isGuthaben ? `Guthaben gutgeschrieben: ${data.courseName}` : `Erstattungsanfrage bestätigt: ${data.courseName}`
+        if (isGuthaben) {
+          const expiryStr = guthabenExpiryStr()
+          html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">danke für deine Rückmeldung — ich habe dein Guthaben gespeichert.</p>${hl(`<p style="margin:4px 0;font-size:15px;font-weight:bold">Guthaben behalten</p><p style="margin:8px 0 0;font-size:14px">Kurs: ${data.courseName}</p><p style="margin:4px 0;font-size:14px">💡 ${refund} Stunden betroffen</p>${newPaid > 0 ? `<p style="margin:8px 0 0;font-size:14px;color:#3a5a30">✅ <strong>${newPaid} Credits</strong> als Guthaben gutgeschrieben.</p>` : ''}${verrechnet > 0 ? `<p style="margin:4px 0;font-size:14px;color:#3a5a30">✅ Vorher verrechnetes Guthaben (${verrechnet} Credits) wieder freigegeben.</p>` : ''}`,'#e8ede6')}${hl(`<p style="margin:0;font-size:13px">Hinweis: Das Guthaben ist 2 Jahre gültig (bis <strong>${expiryStr}</strong>). Falls du es bis dahin nicht eingelöst hast — z. B. weil kein passender Kurs zustande kommt — bekommst du den Geldbetrag automatisch erstattet.</p>`,'#f5f2f0')}${btn('Mein Guthaben',APP_URL+'/meine')}${LG}`)
+        } else {
+          const verrechnetSatz = verrechnet > 0 ? ` Dein verrechnetes Guthaben (${verrechnet} Credits) wurde nicht zurückgegeben — du bekommst stattdessen den entsprechenden Geldbetrag erstattet.` : ''
+          html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p><p style="font-size:15px">deine Wahl ist gespeichert — anteilige Erstattung.</p>${hl(`<p style="margin:4px 0;font-size:15px;font-weight:bold">Anteilige Erstattung</p><p style="margin:8px 0 0;font-size:14px">Kurs: ${data.courseName}</p><p style="margin:4px 0;font-size:14px">✅ ${refund} Stunden werden anteilig erstattet</p>`,'#f0e6e6')}<p style="font-size:15px">Ich melde mich persönlich bei dir wegen der Auszahlung.${verrechnetSatz}</p>${btn('Zur App',APP_URL+'/meine')}${LG}`)
+        }
+        break
+      }
+      case 'admin_guthaben_verrechnet': {
+        to = ADMIN_EMAIL
+        const remaining = data.guthabenRemaining ?? 0
+        const courseTotal = data.courseTotal ?? data.guthabenAmount
+        const newCreds = data.newCreditsCount ?? Math.max(0, courseTotal - data.guthabenAmount)
+        subject = `Guthaben verrechnet: ${data.yogiName} (${data.guthabenAmount}/${courseTotal} Credits)`
+        html = base(`<p style="font-size:15px">Hallo Sarah,</p><p style="font-size:15px">beim Hinzufügen zu einem Kurs wurde Guthaben verrechnet:</p>${hl(`<p style="margin:4px 0;font-size:15px;font-weight:bold">${data.guthabenAmount} Credits aus Guthaben verrechnet</p><p style="margin:10px 0 4px;font-size:14px"><strong>${data.yogiName}</strong></p><p style="margin:4px 0;font-size:14px">${data.yogiEmail}</p><p style="margin:8px 0 0;font-size:14px">Kurs: ${data.courseName}</p>`,'#e8ede6')}${hl(`<p style="margin:0 0 10px;font-size:14px;font-weight:bold">Buchhaltung</p><p style="margin:4px 0;font-size:14px">Kurs insgesamt: <strong>${courseTotal} Credits</strong></p><p style="margin:4px 0;font-size:14px;color:#3a5a30">Aus Guthaben verrechnet: <strong>${data.guthabenAmount} Credits</strong></p><p style="margin:4px 0;font-size:14px;color:#6b2a2a">Yogi muss neu bezahlen: <strong>${newCreds} Credits</strong></p>${remaining > 0 ? `<p style="margin:10px 0 0;font-size:14px">Verbleibendes Guthaben: <strong>${remaining} Credits</strong></p>` : '<p style="margin:10px 0 0;font-size:14px">✅ Guthaben vollständig aufgebraucht.</p>'}`,'#f5f2f0')}${btn('Yogi ansehen',APP_URL+'/admin/yogis')}`)
+        break
+      }
+      case 'password_reset_request': {
+        to = data.email
+        subject = 'Passwort zurücksetzen – Yoga mit Sarah'
+        const sbReset = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { autoRefreshToken: false, persistSession: false } })
+        const { data: linkData, error: linkError } = await sbReset.auth.admin.generateLink({
+          type: 'recovery', email: data.email,
+          options: { redirectTo: APP_URL + '/profil/passwort' }
+        })
+        if (linkError || !linkData?.properties?.hashed_token) {
+          return new Response(JSON.stringify({ ok: true }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
+        }
+        const tokenHash = linkData.properties.hashed_token
+        const resetUrl = `${APP_URL}/profil/passwort?token_hash=${encodeURIComponent(tokenHash)}&type=recovery`
+        html = base(`<p style="font-size:15px">Hallo,</p><p style="font-size:15px">du hast eine Passwort-Zurücksetzung angefordert.</p>${hl(`<p style="margin:0;font-size:15px">Klicke auf den Button. Der Link ist <strong>1 Stunde gültig</strong>.</p>`)}<div style="margin:20px 0">${btn('Neues Passwort festlegen',resetUrl)}</div><p style="font-size:13px;color:#999">Wenn du diese Anfrage nicht gestellt hast, ignoriere die E-Mail.</p>${LG}`)
+        break
+      }
+      case 'admin_dsgvo_deletion':
+        to = ADMIN_EMAIL
+        subject = 'DSGVO: Account gelöscht – PDF bitte manuell löschen'
+        html = base(`<p style="font-size:15px">Hallo Sarah,</p><p style="font-size:15px">folgender Account wurde DSGVO-konform gelöscht:</p>${hl(`<p style="margin:4px 0;font-size:14px"><strong>${data.fullName}</strong></p><p style="margin:4px 0;font-size:14px">${data.email}</p>`)}<p style="font-size:15px">Bitte lösche die AGB-PDF im Google Drive manuell. Suche nach: "${data.fullName}"</p>`)
+        break
+      case 'admin_new_yogi':
+        to = ADMIN_EMAIL
+        subject = `Neuer Yogi: ${data.fullName}`
+        html = base(`<p style="font-size:15px">Hallo Sarah,</p><p style="font-size:15px">ein neuer Yogi hat sich registriert!</p>${hl(`<p style="margin:4px 0;font-size:14px"><strong>${data.fullName}</strong></p><p style="margin:4px 0;font-size:14px">${data.email}</p>${data.courseName?`<p style="margin:4px 0;font-size:14px">Kurs: ${data.courseName}</p>`:''}` )}${btn('Yogis verwalten',APP_URL+'/admin/yogis')}`)
+        break
+      case 'illness_credit': {
+        subject = `Krankheits-Austragung: ${data.courseName}`
+        const expiryStr = fmtDate(data.expiresAt)
+        html = base(`<p style="font-size:15px">Liebe/r ${data.firstName},</p><p style="font-size:15px">gemäß deinem vorgelegten Attest habe ich dich aus dem Kurs <strong>„${data.courseName}"</strong> ausgetragen.</p>${hl(`<p style="margin:4px 0;font-size:15px;font-weight:bold;color:#3a5a30">✅ ${data.hoursCredited} Stunden Guthaben gutgeschrieben</p><p style="margin:8px 0 0;font-size:14px">Gültig bis <strong>${expiryStr}</strong></p>`,'#e8ede6')}<p style="font-size:15px">Du erhältst ein Guthaben über ${data.hoursCredited} Stunden für einen neuen Kurs.</p><p style="font-size:14px;color:#666">Hinweis: Mit der Krankheits-Austragung sind eventuell offene Vorhol- und Nachholbuchungen ersatzlos beendet. Das Guthaben kann nur für die Buchung eines neuen Kurses verwendet werden, wenn dort ein Platz frei ist — eine Auszahlung in Geld ist ausgeschlossen.</p>${btn('Mein Guthaben',APP_URL+'/meine')}<p style="font-size:15px">Werde schnell wieder gesund — ich freue mich, dich wiederzusehen.</p>${LG}`)
+        break
+      }
+      case 'admin_guthaben_2y_expiry': {
+        to = ADMIN_EMAIL
+        subject = `Guthaben nach 2 Jahren abgelaufen: ${data.yogiName} — bitte erstatten`
+        html = base(`<p style="font-size:15px">Hallo Sarah,</p><p style="font-size:15px">ein Guthaben aus einem Kursabbruch ist heute nach 2 Jahren abgelaufen, ohne eingelöst worden zu sein. Gemäß AGB § 1.2 musst du den Geldbetrag jetzt automatisch erstatten:</p>${hl(`<p style=\"margin:4px 0;font-size:15px;font-weight:bold\">${data.unusedCredits} ungenutzte Credits</p><p style=\"margin:10px 0 4px;font-size:14px\"><strong>${data.yogiName}</strong></p><p style=\"margin:4px 0;font-size:14px\">${data.yogiEmail}</p>${data.originalCourseName ? `<p style=\"margin:8px 0 0;font-size:14px\">Urspruenglicher Kurs: ${data.originalCourseName}</p>` : ''}<p style=\"margin:4px 0;font-size:14px\">Guthaben-Vergabe: ${data.creditCreatedAt ? new Date(data.creditCreatedAt).toLocaleDateString('de-DE') : '—'}</p>`,'#f0e6e6')}<p style="font-size:15px">Bitte überweise den Betrag (Höhe gemäß deiner Kurspreis-Liste) und markiere die Aufgabe im Admin-Dashboard als erledigt.</p>${btn('Zum Admin-Dashboard',APP_URL+'/admin/dashboard')}`)
+        break
+      }
+      case 'account_deleted_yogi': {
+        to = data.email
+        subject = 'Dein Account bei Yoga mit Sarah wurde geloescht'
+        html = base(`<p style="font-size:15px">Hallo ${data.firstName},</p>
+    <p style="font-size:15px">deine Account-Loeschung wurde soeben durchgefuehrt. Was passiert ist:</p>
+    ${hl(`<p style="margin:6px 0;font-size:14px">✅ Alle deine Stammdaten (Name, Telefon, Geburtsdatum, Notfallkontakt) wurden aus unserer Datenbank entfernt</p>
+    <p style="margin:6px 0;font-size:14px">✅ Alle deine zukuenftigen Buchungen wurden storniert</p>
+    <p style="margin:6px 0;font-size:14px">✅ Deine Buchungshistorie wurde geloescht</p>
+    <p style="margin:6px 0;font-size:14px">✅ Im internen Protokoll wurde deine Nutzer-ID anonymisiert (bleibt 24 Monate ohne Personenbezug erhalten — Details in der Datenschutzerklaerung)</p>
+    <p style="margin:6px 0;font-size:14px">✅ <strong>Mit dem Versand dieser Bestaetigungs-E-Mail wird auch deine E-Mail-Adresse aus unserer Datenbank entfernt.</strong> Diese eine Mail ist die letzte Nachricht, die du von mir erhaeltst.</p>`,'#e8ede6')}
+    ${hl(`<p style="margin:0;font-size:14px;color:#6b2a2a"><strong>Wichtig:</strong> Falls du noch offene Credits oder Guthaben hattest, sind diese mit der Loeschung ebenfalls verfallen (siehe AGB § 1.0). Eine Rueckerstattung erfolgt nicht.</p>`,'#f0e6e6')}
+    <p style="font-size:15px">Falls du dich spaeter wieder anmelden moechtest, kannst du jederzeit einen neuen Account anlegen — du startest dann bei null.</p>
+    <p style="font-size:15px">Bei Fragen erreichst du mich unter Mail@yogamitsarah.me.</p>
+    ${LG}`)
+        break
+      }
+      default:
+        return new Response(JSON.stringify({ error: 'Unknown type: '+type }), { status: 400, headers: CORS })
+    }
+    const result = await sendEmail(to, subject, html)
+    return new Response(JSON.stringify({ ok: result.ok, status: result.status }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
+  } catch(e) {
+    return new Response(JSON.stringify({ ok: false, error: String(e) }), { headers: { ...CORS, 'Content-Type': 'application/json' } })
   }
-  break
-}
-
-case 'admin_guthaben_verrechnet': {
-  html = base(`<p style="font-size:15px">Hallo Sarah,</p><p style="font-size:15px">beim Hinzufügen zu einem Kurs wurde Guthaben verrechnet:</p>${hl(`<p style="margin:4px 0;font-size:15px;font-weight:bold">${data.guthabenAmount} Credits aus Guthaben verrechnet</p><p style="margin:8px 0 0;font-size:14px">Kurs: ${data.courseName}</p>`,'#e8ede6')}${hl(`<p style="margin:4px 0;font-size:14px">Kurs insgesamt: <strong>${courseTotal} Credits</strong></p><p style="margin:4px 0;font-size:14px;color:#3a5a30">Aus Guthaben verrechnet: <strong>${data.guthabenAmount} Credits</strong></p><p style="margin:4px 0;font-size:14px;color:#6b2a2a">Yogi muss neu bezahlen: <strong>${newCreds} Credits</strong></p>${remaining > 0 ? `<p style="margin:10px 0 0;font-size:14px">Verbleibendes Guthaben des Yogi: <strong>${remaining} Credits</strong> (für nächsten Kurs)</p>` : '<p style="margin:10px 0 0;font-size:14px">✅ Guthaben dieses Yogi vollständig aufgebraucht.</p>'}`,'#f5f2f0')}`)
-  break
-}
-
-case 'admin_dsgvo_deletion':
-  html = base(`<p style="font-size:15px">Hallo Sarah,</p><p style="font-size:15px">folgender Account wurde DSGVO-konform gelöscht:</p>${hl(`<p style="margin:4px 0;font-size:14px"><strong>${data.fullName}</strong></p><p style="margin:4px 0;font-size:14px">${data.email}</p>`)}<p style="font-size:15px">Bitte lösche die AGB-PDF im Google Drive manuell.</p>`)
-  break
-
-case 'admin_new_yogi':
-  html = base(`<p style="font-size:15px">Hallo Sarah,</p><p style="font-size:15px">ein neuer Yogi hat sich registriert!</p>${hl(`<p style="margin:4px 0;font-size:14px"><strong>${data.fullName}</strong></p><p style="margin:4px 0;font-size:14px">${data.email}</p>${data.courseName?`<p style="margin:4px 0;font-size:14px">Kurs: ${data.courseName}</p>`:''}` )}${btn('Yogis verwalten',APP_URL+'/admin/yogis')}`)
-  break
+})

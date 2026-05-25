@@ -40,8 +40,9 @@ test.describe('[AUDIT] Email Template — yogi_course_cancel_choice', () => {
     expect(re.test(edgeFunctionSource)).toBe(true)
   })
 
-  test('Guthaben: 2 Branches für guthaben>0 und verrechnet>0', async () => {
-    expect(edgeFunctionSource).toMatch(/guthaben > 0 \?/i)
+  test('Guthaben: 2 Branches für newPaid>0 und verrechnet>0', async () => {
+    // v61: 'guthaben' wurde in 'newPaid' umbenannt (newPaidCredits ?? guthabenCredits)
+    expect(edgeFunctionSource).toMatch(/newPaid > 0 \?/i)
     expect(edgeFunctionSource).toMatch(/verrechnet > 0 \?/i)
   })
 })
@@ -124,6 +125,99 @@ test.describe('[AUDIT] Email Template — waitlist_joined', () => {
 
   test('unsubscribeUrl-Token-Fallback bei fehlendem Token', async () => {
     expect(edgeFunctionSource).toMatch(/unsubscribeToken\s*\?[\s\S]*warteliste\/austragen[\s\S]*:[\s\S]*meine/i)
+  })
+})
+
+// ───────────────────────────────────────────────────────────────────────────
+// Sarah-Welle 2026-05-25: Templates v55 / v58 / v59 / v61
+// ───────────────────────────────────────────────────────────────────────────
+
+test.describe('[AUDIT] Email Template — illness_credit (Welle G, v55)', () => {
+  test.skip(() => !edgeFunctionSource, 'Edge Function Source nicht lokal verfügbar')
+
+  test('Case-Block "illness_credit" existiert', async () => {
+    expect(edgeFunctionSource).toMatch(/case ['"]illness_credit['"]/)
+  })
+
+  test('Subject enthaelt "Krankheits-Austragung" + Kursname', async () => {
+    expect(edgeFunctionSource).toMatch(/subject\s*=\s*`Krankheits-Austragung:\s*\$\{data\.courseName\}/)
+  })
+
+  test('Body zeigt hoursCredited + expiresAt + 10-Mon-Frist-Hinweis', async () => {
+    expect(edgeFunctionSource).toMatch(/\$\{data\.hoursCredited\}\s*Stunden Guthaben/)
+    expect(edgeFunctionSource).toMatch(/\$\{expiryStr\}/)
+    expect(edgeFunctionSource).toMatch(/Vorhol-\s*und Nachholbuchungen ersatzlos beendet/i)
+    expect(edgeFunctionSource).toMatch(/Auszahlung in Geld ist ausgeschlossen/i)
+  })
+})
+
+test.describe('[AUDIT] Email Template — course_cancelled "Geldbetrag erstattet" (v58)', () => {
+  test.skip(() => !edgeFunctionSource, 'Edge Function Source nicht lokal verfügbar')
+
+  test('Hinweis "Geldbetrag automatisch ausgezahlt" wenn 2J verstreichen', async () => {
+    expect(edgeFunctionSource).toMatch(/Geldbetrag automatisch ausgezahlt/i)
+    expect(edgeFunctionSource).toMatch(/2 Jahre gültig/)
+  })
+
+  test('Ohne Rueckmeldung: Default = Geldbetrag erstattet (Sarah-Welle 2026-05-25)', async () => {
+    expect(edgeFunctionSource).toMatch(/Ohne Rückmeldung wird dir automatisch der Geldbetrag erstattet/)
+  })
+})
+
+test.describe('[AUDIT] Email Template — admin_guthaben_2y_expiry (v59)', () => {
+  test.skip(() => !edgeFunctionSource, 'Edge Function Source nicht lokal verfügbar')
+
+  test('Case-Block + Admin-Empfaenger', async () => {
+    expect(edgeFunctionSource).toMatch(/case ['"]admin_guthaben_2y_expiry['"]/)
+    // im Block wird to = ADMIN_EMAIL gesetzt
+    const re = /admin_guthaben_2y_expiry[\s\S]{0,200}to\s*=\s*ADMIN_EMAIL/
+    expect(re.test(edgeFunctionSource)).toBe(true)
+  })
+
+  test('Subject mit yogiName + Hinweis "bitte erstatten"', async () => {
+    expect(edgeFunctionSource).toMatch(/Guthaben nach 2 Jahren abgelaufen:\s*\$\{data\.yogiName\}/)
+    expect(edgeFunctionSource).toMatch(/bitte erstatten/i)
+  })
+
+  test('Body verweist auf AGB § 1.2 + unusedCredits + Admin-Dashboard-Link', async () => {
+    expect(edgeFunctionSource).toMatch(/AGB\s*§\s*1\.2/)
+    expect(edgeFunctionSource).toMatch(/\$\{data\.unusedCredits\}\s*ungenutzte Credits/)
+    expect(edgeFunctionSource).toMatch(/Zum Admin-Dashboard/)
+  })
+})
+
+test.describe('[AUDIT] Email Template — account_deleted_yogi (v61)', () => {
+  test.skip(() => !edgeFunctionSource, 'Edge Function Source nicht lokal verfügbar')
+
+  test('Case-Block + Yogi-Empfaenger', async () => {
+    expect(edgeFunctionSource).toMatch(/case ['"]account_deleted_yogi['"]/)
+    // to = data.email (an Yogi)
+    const re = /account_deleted_yogi[\s\S]{0,200}to\s*=\s*data\.email/
+    expect(re.test(edgeFunctionSource)).toBe(true)
+  })
+
+  test('Subject: "Dein Account ... geloescht"', async () => {
+    expect(edgeFunctionSource).toMatch(/Dein Account bei Yoga mit Sarah wurde geloescht/i)
+  })
+
+  test('Body listet 5 ✅-Punkte (Stammdaten + Buchungen + Historie + Audit + Email-Loesch)', async () => {
+    // Mindestens 5 ✅-Bullets im Block
+    const re = /account_deleted_yogi[\s\S]+?(✅[\s\S]+?){5}/
+    expect(re.test(edgeFunctionSource), 'Mindestens 5 ✅-Bullets erwartet').toBe(true)
+    // Inhalts-Spot-Checks
+    expect(edgeFunctionSource).toMatch(/Stammdaten.*entfernt/i)
+    expect(edgeFunctionSource).toMatch(/zukuenftigen Buchungen.*storniert/i)
+    expect(edgeFunctionSource).toMatch(/Buchungshistorie.*geloescht/i)
+    expect(edgeFunctionSource).toMatch(/anonymisiert/i)
+  })
+
+  test('Hinweis "letzte Nachricht" (DSGVO Art. 12 — Empfangsbestaetigung)', async () => {
+    expect(edgeFunctionSource).toMatch(/letzte Nachricht, die du von mir erhaeltst/i)
+  })
+
+  test('Credit/Guthaben-Verfall-Hinweis (AGB § 1.0)', async () => {
+    expect(edgeFunctionSource).toMatch(/AGB\s*§\s*1\.0/)
+    expect(edgeFunctionSource).toMatch(/Rueckerstattung erfolgt nicht/i)
   })
 })
 

@@ -542,6 +542,106 @@ test.describe('[E2E] Kursabbruch-Welle 2026-05-25: Default Erstattung + 2J-Verfa
     await db.from('credits').delete().eq('id', cred!.id)
   })
 
+  // ── Sarah-Welle 2026-05-25: Ergaenzungen #4 + #5 ─────────────────────────
+  test('[E2E] Default-Wahl im Cron = ERSTATTUNG (fn_expire_cancellation_tokens setzt choice=erstattung)', async () => {
+    // Workflow #4: Bei Default ohne Yogi-Wahl nach 7d muss der Cron-Job
+    // choice='erstattung' setzen (nicht mehr 'guthaben' wie frueher).
+    // Wir testen direkt am SQL-Verhalten: ein abgelaufener Token ohne Wahl
+    // bekommt nach RPC-Call choice='erstattung'.
+    const { getAdminClient, getUserIdByEmail } = await import('../utils/db')
+    const { createEnrolledCourse, E2E_PREFIX } = await import('../utils/seed')
+    const yogiId = (await getUserIdByEmail(process.env.TEST_YOGI1_EMAIL!))!
+    const db = await getAdminClient()
+
+    await db.from('credits').delete().eq('user_id', yogiId).eq('model', 'guthaben')
+    const course = await createEnrolledCourse(yogiId, { name: `${E2E_PREFIX} Default-Erstattung` })
+    await db.from('courses').update({ is_cancelled: true, is_active: false }).eq('id', course.courseId)
+
+    const past = new Date(); past.setDate(past.getDate() - 1)
+    const token = `e2e-default-erstattung-${Date.now()}`
+    const { data: resp } = await db.from('course_cancellation_responses').insert({
+      user_id: yogiId, course_id: course.courseId, token,
+      choice: null, refund_paid: false,
+      expires_at: past.toISOString(),
+      remaining_sessions: 1, new_credits_count: 1,
+    }).select('id').single()
+
+    await db.rpc('fn_expire_cancellation_tokens' as any)
+
+    const { data: updated } = await db.from('course_cancellation_responses')
+      .select('choice').eq('id', resp!.id).single()
+    expect(updated?.choice, 'Default-Wahl nach Cron muss "erstattung" sein (NICHT guthaben)').toBe('erstattung')
+
+    // Cleanup
+    await db.from('course_cancellation_responses').delete().eq('id', resp!.id)
+    await db.from('admin_notifications').delete().eq('type', 'refund_pending')
+      .filter('details->>response_id', 'eq', resp!.id)
+    await db.from('audit_log').delete().eq('user_id', yogiId).eq('action', 'token_expired_auto_refund')
+    await db.from('credits').delete().eq('user_id', yogiId).eq('model', 'guthaben')
+    const { data: sessions } = await db.from('sessions').select('id').eq('course_id', course.courseId)
+    if (sessions && sessions.length > 0) {
+      await db.from('bookings').delete().in('session_id', sessions.map(s => s.id))
+    }
+    await db.from('enrollments').delete().eq('course_id', course.courseId)
+    await db.from('credits').delete().eq('course_id', course.courseId)
+    await db.from('sessions').delete().eq('course_id', course.courseId)
+    await db.from('courses').delete().eq('id', course.courseId)
+  })
+
+  test('[E2E] 2J-Auto-Refund: audit_log enthaelt guthaben_2y_auto_refund (Workflow #5)', async () => {
+    // Workflow #5: fn_check_guthaben_2y_expiry markiert abgelaufenes Guthaben
+    // mit used=total UND legt audit_log-Eintrag 'guthaben_2y_auto_refund' an
+    // (zusaetzlich zur admin_notification — wird in :510-Test bereits geprueft).
+    const { getAdminClient, getUserIdByEmail } = await import('../utils/db')
+    const yogiId = (await getUserIdByEmail(process.env.TEST_YOGI1_EMAIL!))!
+    const db = await getAdminClient()
+
+    await db.from('credits').delete().eq('user_id', yogiId).eq('model', 'guthaben')
+    const past = new Date(); past.setDate(past.getDate() - 1)
+    const { data: cred } = await db.from('credits').insert({
+      user_id: yogiId, course_id: null, model: 'guthaben',
+      source: 'cancellation_choice',
+      total: 4, used: 1, expires_at: past.toISOString(),
+    }).select('id').single()
+
+    // Audit-Baseline
+    const auditBefore = await db.from('audit_log')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', yogiId).eq('action', 'guthaben_2y_auto_refund')
+
+    await db.rpc('fn_check_guthaben_2y_expiry' as any)
+
+    // Audit-Eintrag MUSS angelegt sein
+    const auditAfter = await db.from('audit_log')
+      .select('id, details', { count: 'exact' })
+      .eq('user_id', yogiId).eq('action', 'guthaben_2y_auto_refund')
+    expect((auditAfter.count ?? 0) - (auditBefore.count ?? 0),
+      'audit_log guthaben_2y_auto_refund-Eintrag muss durch Cron-Job angelegt werden').toBeGreaterThanOrEqual(1)
+
+    // Cleanup
+    await db.from('admin_notifications').delete().eq('type', 'refund_pending_auto_2y')
+      .filter('details->>credit_id', 'eq', cred!.id)
+    await db.from('audit_log').delete().eq('user_id', yogiId).eq('action', 'guthaben_2y_auto_refund')
+    await db.from('credits').delete().eq('id', cred!.id)
+  })
+
+  test('[E2E] Dashboard-Mapping refund_pending_auto_2y: tone=action + dynamische href via user_id', async () => {
+    // Workflow #9: app/admin/dashboard/page.tsx muss refund_pending_auto_2y mit
+    // tone:'action' + dynamischer href-Funktion (n.details?.user_id → /admin/yogis/<id>) registrieren.
+    const fs = await import('fs')
+    const path = await import('path')
+    const src = fs.readFileSync(path.join(process.cwd(), 'app/admin/dashboard/page.tsx'), 'utf8')
+    expect(src).toMatch(/refund_pending_auto_2y/)
+    // Im META-Mapping (kein Komma-getrennter Property-Check, weil mehrzeilig)
+    // Pruefen wir gezielt: nach refund_pending_auto_2y kommt tone:'action'
+    const re = /refund_pending_auto_2y\s*:\s*\{[\s\S]{0,400}tone\s*:\s*['"]action['"]/
+    expect(re.test(src), 'refund_pending_auto_2y muss tone:"action" haben').toBe(true)
+    // Dynamische href-Funktion: details?.user_id → /admin/yogis/...
+    const reHref = /refund_pending_auto_2y\s*:\s*\{[\s\S]{0,400}href:[^,}]*details\?\.user_id/
+    expect(reHref.test(src), 'href muss dynamisch aus n.details?.user_id gebaut werden').toBe(true)
+    expect(src).toMatch(/\/admin\/yogis/)
+  })
+
   test('pg_cron Schedules: beide Jobs registriert', async () => {
     // Diese Jobs sind via pg_cron registriert. Wir koennen sie nicht direkt
     // via PostgREST abfragen (cron-Schema ist privat). Smoke-Test: die

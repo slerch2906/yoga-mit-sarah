@@ -29,7 +29,9 @@ test.describe('Spät-Abmeldung: Innerhalb 3h vor Stundenbeginn', () => {
     // Alte Credits aufräumen
     await db.from('credits').delete().eq('user_id', yogi1Id).eq('model', 'single')
 
-    // Session in 1h (innerhalb der 3h-Stornofrist)
+    // Session in 1h (innerhalb der 3h-Stornofrist fuer Einzel-Sessions; nicht zu
+    // verwechseln mit 14-Tage-Kursruecktritt-Stornofrist aus den AGB —
+    // siehe tests/e2e/39-stornofrist-14tage.spec.ts).
     // Datum aus lokalen Komponenten der sessionTime ableiten (sonst Tag-Wechsel-Bug)
     const sessionTime = new Date(Date.now() + 60 * 60 * 1000) // +1h
     const dateStr = `${sessionTime.getFullYear()}-${String(sessionTime.getMonth()+1).padStart(2,'0')}-${String(sessionTime.getDate()).padStart(2,'0')}`

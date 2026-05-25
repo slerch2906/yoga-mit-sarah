@@ -513,6 +513,7 @@ export default function AdminKursePage() {
           user_id: prof.id,
           course_id: null,
           model: 'guthaben',
+          source: 'cancellation_choice',
           total: newCreditsCount,
           used: 0,
           expires_at: expiry2y.toISOString(),

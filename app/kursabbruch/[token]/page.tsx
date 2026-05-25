@@ -92,7 +92,7 @@ export default function KursabbruchPage() {
             <div className="text-4xl mb-3"></div>
             <p className="font-semibold">Frist abgelaufen</p>
             <p className="text-sm text-yoga-text/60 mt-2">
-              Die 7-Tage-Frist ist abgelaufen. Dein Guthaben wurde automatisch gutgeschrieben.
+              Die 7-Tage-Frist ist abgelaufen. Dir wird automatisch der Geldbetrag erstattet — Sarah meldet sich bei dir wegen der Überweisung.
             </p>
           </div>
         ) : (

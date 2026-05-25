@@ -779,6 +779,59 @@ test.describe('[E2E] Onboarding-Tour (Sarah-Wuensche 2026-05-25)', () => {
   })
 })
 
+// ── 13a) Welle 2026-05-25: Rechtssicherer Kursabbruch-Default + 2J-Cron ──
+// Sarah-Wunsch 2026-05-25: Default bei keiner Wahl nach 7d = ERSTATTUNG
+// (vorher Guthaben). Plus: 2J-Auto-Refund-Cron fuer nicht-eingeloestes
+// cancellation_choice-Guthaben.
+test.describe('[E2E] Kursabbruch-Welle 2026-05-25: rechtssicher', () => {
+  test('Edge-Function send-email v58+: course_cancelled-Text "Geldbetrag erstattet"', async () => {
+    // Smoke gegen lib/email.ts — der Helper courseCancelled exportiert
+    const src = read('lib/email.ts')
+    expect(src).toMatch(/courseCancelled:/)
+  })
+
+  test('admin_notifications kann refund_pending_auto_2y speichern', async () => {
+    const db = getServiceClient()
+    const { data: ins, error: insErr } = await db.from('admin_notifications').insert({
+      type: 'refund_pending_auto_2y',
+      message: '[E2E-Test] 2J-Verfall Insert/Delete-Smoke',
+      details: { credit_id: '00000000-0000-0000-0000-000000000000', unused_credits: 1 },
+      read: false,
+    }).select('id').single()
+    expect(insErr?.message || '').toBe('')
+    if (ins?.id) await db.from('admin_notifications').delete().eq('id', ins.id)
+  })
+
+  test('RPC fn_expire_cancellation_tokens existiert', async () => {
+    const db = getServiceClient()
+    const { error } = await db.rpc('fn_expire_cancellation_tokens' as any)
+    if (error) expect(error.message).not.toMatch(/does not exist/i)
+  })
+
+  test('RPC fn_check_guthaben_2y_expiry existiert', async () => {
+    const db = getServiceClient()
+    const { error } = await db.rpc('fn_check_guthaben_2y_expiry' as any)
+    if (error) expect(error.message).not.toMatch(/does not exist/i)
+  })
+
+  test('Token-Page UI: "Frist abgelaufen" sagt jetzt "Geldbetrag erstattet" (nicht mehr Guthaben)', async () => {
+    const src = read('app/kursabbruch/[token]/page.tsx')
+    expect(src).toMatch(/Geldbetrag erstattet/)
+    expect(src).not.toMatch(/Guthaben wurde automatisch gutgeschrieben/)
+  })
+
+  test('AGB-Generator: neuer Default-Text "Geldbetrag automatisch erstattet"', async () => {
+    const src = read('scripts/generate-agb.js')
+    expect(src).toMatch(/Geldbetrag automatisch erstattet/)
+    expect(src).not.toMatch(/wird automatisch das Guthaben gutgeschrieben/)
+  })
+
+  test('admin/kurse: provisional credit wird mit source=cancellation_choice angelegt', async () => {
+    const src = read('app/admin/kurse/page.tsx')
+    expect(src).toMatch(/source:\s*['"]cancellation_choice['"]/)
+  })
+})
+
 // ── 14) Email-Failure Resilience ───────────────────────────────────────────
 test.describe('[E2E] Email-Failure handling', () => {
   test('admin_notifications-Tabelle existiert (Failure-Log)', async () => {

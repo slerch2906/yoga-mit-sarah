@@ -154,14 +154,15 @@ const doc = new Document({
       pRich([{ text: 'Während eines laufenden Kurses (Krankheits-Austragung):', bold: true }]),
       p('Wenn der Teilnehmende krankheitsbedingt für mindestens 4 Einheiten nicht am Kurs teilnehmen kann, erfolgt auf Wunsch eine Gutschrift über die versäumten Stunden bis zum Ende des Kurses, ab dem Tag der Vorlage eines ärztlichen Attestes. Die Gutschrift kann nur für einen neuen Kurs und innerhalb von 10 Monaten eingelöst werden. Ist kein Platz in einem Kurs frei oder findet kein passender Kurs statt, verfällt der Anspruch.'),
 
-      // Kursabbruch durch Yogalehrerin (NEU mit Wahloption)
-      pRich([{ text: 'Kursabbruch durch die Yogalehrerin (Wahloption Erstattung/Guthaben):', bold: true }]),
+      // Kursabbruch durch Yogalehrerin (Welle Mai 2026: Default Erstattung + 2J-Auto-Refund)
+      pRich([{ text: 'Kursabbruch durch die Yogalehrerin (mit Wahloption Erstattung oder Guthaben):', bold: true }]),
       p('Die Yogalehrerin ist berechtigt, bei Nichterreichen der im Angebot genannten Mindestteilnehmerzahl oder aus einem wichtigen privaten Grund (z. B. Krankheit, Unfall, Todesfall) einen Kurs vor Beginn oder während der Laufzeit abzusagen.'),
       p('Wird ein Kurs vor Beginn abgesagt, werden bereits gezahlte Gebühren in voller Höhe zurückerstattet.'),
       p('Wird ein Kurs während der Laufzeit abgesagt, hast du für die noch nicht stattgefundenen Einheiten innerhalb von 7 Tagen die Wahl zwischen:'),
       bullet('Anteilige Erstattung des Kurspreises für die ausgefallenen Einheiten, oder'),
-      bullet('Kurs-Guthaben in Höhe der ausgefallenen Stunden, einlösbar für einen neuen Kurs innerhalb von 2 Jahren ab Vergabe.'),
-      p('Triffst du innerhalb von 7 Tagen keine Wahl, wird automatisch das Guthaben gutgeschrieben. Das Guthaben ist nicht auszahlbar. Eine Einlösung ist nur möglich, wenn innerhalb der 2-Jahres-Frist ein freier Platz in einem von dir gewünschten Kurs verfügbar ist; andernfalls verfällt das Guthaben ersatzlos.'),
+      bullet('Kurs-Guthaben in Höhe der ausgefallenen Stunden, hinterlegt in der App und einlösbar ausschließlich für einen neuen Kurs innerhalb von 2 Jahren ab Vergabe.'),
+      p('Triffst du innerhalb von 7 Tagen keine Wahl, wird dir der anteilige Geldbetrag automatisch erstattet. Ich melde mich dann persönlich bei dir wegen der Überweisung.'),
+      p('Ich freue mich aber besonders, wenn du das Guthaben wählst — dann sehen wir uns hoffentlich im nächsten Kurs wieder. Das Guthaben ist 2 Jahre gültig. Sollte es bis dahin nicht eingelöst worden sein (z. B. weil kein passender Kurs zustande kommt oder du keinen freien Platz findest), wird dir der entsprechende Geldbetrag automatisch ausgezahlt — du verlierst also in keinem Fall etwas.'),
 
       // § 1.3
       h2('1.3 Stundenausfall und Nachholregelung — Kurse'),

@@ -429,3 +429,128 @@ test.describe('Kursabbruch: Token-Reuse (atomic update)', () => {
     await cleanupScenario(c2, yogiId)
   })
 })
+
+// ===========================================================================
+// Sarah-Welle 2026-05-25: Rechtssicher
+// ---------------------------------------------------------------------------
+// Default bei keiner Wahl nach 7d = ERSTATTUNG (vorher: Guthaben). Plus:
+// 2J-Auto-Refund-Cron fuer nicht-eingeloestes Kursabbruch-Guthaben.
+// ===========================================================================
+
+test.describe('[E2E] Kursabbruch-Welle 2026-05-25: Default Erstattung + 2J-Verfall', () => {
+  test('fn_expire_cancellation_tokens: abgelaufener Token ohne Wahl -> choice=erstattung + provisional geloescht + admin_notification', async () => {
+    const { getAdminClient, getUserIdByEmail } = await import('../utils/db')
+    const { createEnrolledCourse, E2E_PREFIX } = await import('../utils/seed')
+    const yogiId = (await getUserIdByEmail(process.env.TEST_YOGI1_EMAIL!))!
+    const db = await getAdminClient()
+
+    // Setup: Kurs + Cancellation-Response mit expired Token + provisional Guthaben
+    await db.from('credits').delete().eq('user_id', yogiId).eq('model', 'guthaben')
+    const course = await createEnrolledCourse(yogiId, { name: `${E2E_PREFIX} Cron-Expire` })
+    await db.from('courses').update({ is_cancelled: true, is_active: false }).eq('id', course.courseId)
+
+    const expiry2y = new Date(); expiry2y.setFullYear(expiry2y.getFullYear() + 2)
+    const { data: provCred } = await db.from('credits').insert({
+      user_id: yogiId, course_id: null, model: 'guthaben',
+      source: 'cancellation_choice',
+      total: 2, used: 0, expires_at: expiry2y.toISOString(),
+    }).select('id').single()
+
+    const pastExpiry = new Date(); pastExpiry.setDate(pastExpiry.getDate() - 1)
+    const token = `e2e-cron-expire-${Date.now()}`
+    const { data: resp } = await db.from('course_cancellation_responses').insert({
+      user_id: yogiId, course_id: course.courseId, token,
+      choice: null, refund_paid: false,
+      expires_at: pastExpiry.toISOString(),
+      remaining_sessions: 2, new_credits_count: 2,
+      provisional_credit_id: provCred!.id,
+    }).select('id').single()
+
+    // Cron-Funktion aufrufen
+    const { error: rpcErr } = await db.rpc('fn_expire_cancellation_tokens' as any)
+    expect(rpcErr?.message || '').toBe('')
+
+    // Token: choice=erstattung gesetzt
+    const { data: updated } = await db.from('course_cancellation_responses')
+      .select('choice, responded_at').eq('id', resp!.id).single()
+    expect(updated?.choice, 'Default nach 7d = erstattung').toBe('erstattung')
+    expect(updated?.responded_at).toBeTruthy()
+
+    // Provisorisches Guthaben muss geloescht sein
+    const { data: provAfter } = await db.from('credits').select('id').eq('id', provCred!.id).maybeSingle()
+    expect(provAfter, 'Provisorisches Guthaben muss bei Auto-Erstattung geloescht sein').toBeNull()
+
+    // admin_notification refund_pending vorhanden (via Trigger)
+    const { data: notifs } = await db.from('admin_notifications')
+      .select('id, message').eq('type', 'refund_pending')
+      .filter('details->>response_id', 'eq', resp!.id)
+    expect((notifs || []).length, 'admin_notification refund_pending muss erzeugt sein').toBeGreaterThanOrEqual(1)
+
+    // audit_log token_expired_auto_refund
+    const { data: audit } = await db.from('audit_log')
+      .select('id').eq('user_id', yogiId).eq('action', 'token_expired_auto_refund')
+    expect((audit || []).length).toBeGreaterThanOrEqual(1)
+
+    // Cleanup
+    await db.from('admin_notifications').delete().eq('type', 'refund_pending')
+      .filter('details->>response_id', 'eq', resp!.id)
+    await db.from('audit_log').delete().eq('user_id', yogiId).eq('action', 'token_expired_auto_refund')
+    await db.from('course_cancellation_responses').delete().eq('id', resp!.id)
+    await db.from('credits').delete().eq('user_id', yogiId).eq('model', 'guthaben')
+    const { data: sessions } = await db.from('sessions').select('id').eq('course_id', course.courseId)
+    if (sessions && sessions.length > 0) {
+      await db.from('bookings').delete().in('session_id', sessions.map(s => s.id))
+    }
+    await db.from('enrollments').delete().eq('course_id', course.courseId)
+    await db.from('credits').delete().eq('course_id', course.courseId)
+    await db.from('sessions').delete().eq('course_id', course.courseId)
+    await db.from('courses').delete().eq('id', course.courseId)
+  })
+
+  test('fn_check_guthaben_2y_expiry: abgelaufenes cancellation_choice-Guthaben -> admin_notification + used=total', async () => {
+    const { getAdminClient, getUserIdByEmail } = await import('../utils/db')
+    const yogiId = (await getUserIdByEmail(process.env.TEST_YOGI1_EMAIL!))!
+    const db = await getAdminClient()
+
+    // Setup: Kursabbruch-Guthaben mit abgelaufenem expires_at
+    await db.from('credits').delete().eq('user_id', yogiId).eq('model', 'guthaben')
+    const past = new Date(); past.setDate(past.getDate() - 1)
+    const { data: cred } = await db.from('credits').insert({
+      user_id: yogiId, course_id: null, model: 'guthaben',
+      source: 'cancellation_choice',
+      total: 5, used: 2, expires_at: past.toISOString(),
+    }).select('id').single()
+
+    const { error: rpcErr } = await db.rpc('fn_check_guthaben_2y_expiry' as any)
+    expect(rpcErr?.message || '').toBe('')
+
+    // Credit: used = total (markiert)
+    const { data: after } = await db.from('credits').select('total, used').eq('id', cred!.id).single()
+    expect(after?.used, 'Credit muss als used=total markiert sein').toBe(after?.total)
+
+    // admin_notification refund_pending_auto_2y
+    const { data: notifs } = await db.from('admin_notifications')
+      .select('id, message').eq('type', 'refund_pending_auto_2y')
+      .filter('details->>credit_id', 'eq', cred!.id)
+    expect((notifs || []).length, 'admin_notification refund_pending_auto_2y muss erzeugt sein').toBeGreaterThanOrEqual(1)
+    expect(notifs![0].message).toMatch(/3 ungenutzte Credits/)
+
+    // Cleanup
+    await db.from('admin_notifications').delete().eq('type', 'refund_pending_auto_2y')
+      .filter('details->>credit_id', 'eq', cred!.id)
+    await db.from('audit_log').delete().eq('user_id', yogiId).eq('action', 'guthaben_2y_auto_refund')
+    await db.from('credits').delete().eq('id', cred!.id)
+  })
+
+  test('pg_cron Schedules: beide Jobs registriert', async () => {
+    // Diese Jobs sind via pg_cron registriert. Wir koennen sie nicht direkt
+    // via PostgREST abfragen (cron-Schema ist privat). Smoke-Test: die
+    // RPC-Funktionen sind callable.
+    const { getAdminClient, getUserIdByEmail } = await import('../utils/db')
+    const db = await getAdminClient()
+    const { error: e1 } = await db.rpc('fn_expire_cancellation_tokens' as any)
+    if (e1) expect(e1.message).not.toMatch(/does not exist/i)
+    const { error: e2 } = await db.rpc('fn_check_guthaben_2y_expiry' as any)
+    if (e2) expect(e2.message).not.toMatch(/does not exist/i)
+  })
+})

@@ -131,7 +131,7 @@ const doc = new Document({
       p('Alle Stunden-Buchungen, Abmeldungen, Nachhol-Buchungen, Wartelisten-Einträge und Krankheits-Austragungen werden ausschließlich über die App geregelt. E-Mail- oder WhatsApp-Abmeldungen werden — außer in technischen Notfällen — nicht mehr akzeptiert.'),
       pRich([
         { text: 'Account-Löschung: ', bold: true },
-        { text: 'Du kannst deinen App-Account jederzeit selbstständig löschen. Mit der Löschung verfallen alle offenen Buchungen, Wartelisten-Einträge, Credits und Guthaben ersatzlos. Eine Rückerstattung von verbleibenden Credits oder Guthaben erfolgt nicht.' },
+        { text: 'Du kannst deinen App-Account jederzeit selbstständig unter Profil → „Account löschen“ löschen. Mit der Löschung verfallen alle offenen Buchungen, Wartelisten-Einträge, Credits und Guthaben ersatzlos. Eine Rückerstattung von verbleibenden Credits oder Guthaben erfolgt nicht. Vor dem endgültigen Entfernen deines Auth-Zugangs erhältst du gemäß Art. 12 DSGVO eine Bestätigungs-E-Mail an deine bisherige Adresse, in der die Löschung der Daten, die Stornierung aller offenen Buchungen sowie die Entfernung deiner E-Mail-Adresse zusammengefasst sind. Diese E-Mail ist die letzte Nachricht, die du von der App erhältst.' },
       ]),
       p('Diese Regelung gilt nicht für Personal-Yoga-Einheiten (§ 2), Veranstaltungen außerhalb der Kursreihen (§ 1.2 „Veranstaltungen") und Firmenyoga (§ 3) — dort gilt die jeweilige individuelle Vereinbarung.'),
 
@@ -152,7 +152,12 @@ const doc = new Document({
       bullet('Ab Tag 6 fällt die volle Kursgebühr an, auch bei Nichterscheinen.'),
       bullet('Du kannst jederzeit einen passenden Ersatzteilnehmer benennen.'),
       pRich([{ text: 'Während eines laufenden Kurses (Krankheits-Austragung):', bold: true }]),
-      p('Wenn der Teilnehmende krankheitsbedingt für mindestens 4 Einheiten nicht am Kurs teilnehmen kann, erfolgt auf Wunsch eine Gutschrift über die versäumten Stunden bis zum Ende des Kurses, ab dem Tag der Vorlage eines ärztlichen Attestes. Die Gutschrift kann nur für einen neuen Kurs und innerhalb von 10 Monaten eingelöst werden. Ist kein Platz in einem Kurs frei oder findet kein passender Kurs statt, verfällt der Anspruch.'),
+      p('Wenn der Teilnehmende krankheitsbedingt für mindestens 4 Einheiten nicht am Kurs teilnehmen kann, erfolgt auf Wunsch eine Gutschrift über die ab dem Attest-Datum noch ausstehenden Stunden des Kurses. Voraussetzung ist die Vorlage eines ärztlichen Attestes; die Austragung erfolgt durch mich (Sarah) im Admin-Bereich mit ausdrücklicher Bestätigung, dass mir das Attest vorliegt.'),
+      bullet('Die Gutschrift wird in deinem App-Profil als „Krankheits-Guthaben“ hinterlegt.'),
+      bullet('Sie ist 10 Monate ab Attest-Datum gültig (eigene Frist; weicht bewusst von der 2-Jahres-Frist beim Kursabbruch ab).'),
+      bullet('Sie kann ausschließlich mit der Buchung eines neuen Kurses verrechnet werden — keine Auszahlung in Geld und keine Verwendung für einzelne Drop-In-Stunden.'),
+      bullet('Alle bestehenden Vorhol- und Nachholbuchungen werden zum Zeitpunkt der Austragung ersatzlos storniert.'),
+      bullet('Ist kein Platz in einem passenden Folgekurs frei oder findet innerhalb der 10 Monate kein passender Kurs statt, verfällt der Anspruch ersatzlos.'),
 
       // Kursabbruch durch Yogalehrerin (Welle Mai 2026: Default Erstattung + 2J-Auto-Refund)
       pRich([{ text: 'Kursabbruch durch die Yogalehrerin (mit Wahloption Erstattung oder Guthaben):', bold: true }]),
@@ -175,10 +180,11 @@ const doc = new Document({
       pRich([{ text: 'Absage durch Yogalehrerin: ', bold: true }, { text: 'Bei Absage einer einzelnen Kursstunde aus einem wichtigen Grund (z. B. Krankheit, Unfall, Todesfall) wird die Gebühr nicht erstattet, sondern die Einheit durch einen Ersatztermin ersetzt. Der Ersatztermin wird in der App eingetragen. Du wirst automatisch auf den Ersatztermin umgebucht und per E-Mail benachrichtigt. Falls du am Ersatztermin nicht teilnehmen kannst, gelten die normalen Abmelderegeln aus § 1.3 (Absage durch Schüler). Sollte der Schüler bei dem Ersatztermin nicht anwesend sein können, ist das Nachholen der Stunde in einem gleichwertigen Kurs nach Absprache möglich. Findet kein gleichwertiger Kurs statt, verfällt der Anspruch auf einen weiteren Ersatztermin.' }]),
 
       // § 1.4
-      h2('1.4 Sonstiges'),
-      p('Bitte sei pünktlich auf deiner Matte. Bei Verspätung in einem Kurs, tritt bitte erst nach der Anfangsentspannung leise in den Kursraum ein.'),
-      p('Bitte schalte dein Handy immer stumm oder aus.'),
-      p('Aus Rücksicht auf die Gruppe bitte ich dich, bei ansteckenden Erkrankungen oder deutlichen Erkältungssymptomen nicht am Unterricht teilzunehmen.'),
+      h2('1.4 Allgemeine Regeln (Verhalten im Kurs)'),
+      p('Folgende Regeln sind verbindlicher Bestandteil deiner Teilnahme an meinen Kursen und Stunden. Du bestätigst sie zusätzlich bei deinem ersten App-Login per Click-Wrap unter „Rechtliches“:'),
+      bullet('Pünktlichkeit: Bitte sei pünktlich auf deiner Matte. Bei Verspätung erfolgt kein Eintritt während der Anfangsentspannung — bitte warte vor dem Kursraum, bis die Anfangsentspannung beendet ist.'),
+      bullet('Handy: Bitte schalte dein Handy immer stumm oder ganz aus, bevor die Stunde beginnt.'),
+      bullet('Krankheit / Erkältung: Aus Rücksicht auf die Gruppe bitte ich dich, bei ansteckenden Erkrankungen oder deutlichen Erkältungssymptomen nicht am Unterricht teilzunehmen.'),
       p('Die Yogalehrerin behält sich das Recht vor, Kurszeiten und Kursort in zumutbarer Weise zu ändern.'),
 
       // § 1.5 NEU - Warteliste

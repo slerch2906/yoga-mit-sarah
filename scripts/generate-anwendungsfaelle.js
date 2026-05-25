@@ -195,7 +195,7 @@ content.push(new Paragraph({
 content.push(new Paragraph({
   alignment: AlignmentType.CENTER,
   spacing: { after: 80 },
-  children: [new TextRun({ text: 'Version 2.0 — Stand der App nach Welle A bis F (UI-Refresh, Credit-Banner, 3h-Modal, Quick-Credit-Form)', font: FONT, size: 22 })],
+  children: [new TextRun({ text: 'Version 2.2 — Stand der App nach Welle A bis H (UI-Refresh, Credit-Banner, 3h-Modal, Quick-Credit-Form, Krankheits-Austragung, Click-Wrap, 2J-Auto-Refund, DSGVO-Confirm-Mail)', font: FONT, size: 22 })],
 }))
 content.push(pageBreak())
 
@@ -1220,18 +1220,19 @@ content.push(...ucase({
     'Auswahl „Yogi-Wahl (Erstattung ODER Guthaben behalten)".',
     'System legt für jeden Yogi einen Wahl-Token an (7 Tage gültig).',
     'Yogi bekommt E-Mail mit zwei Buttons: „Guthaben behalten" oder „Anteilige Erstattung".',
-    'Wählt der Yogi „Guthaben": Credits bleiben als Guthaben in seinem Profil, 2 Jahre gültig.',
-    'Wählt er „Erstattung": Guthaben-Credit wird gelöscht, Sarah muss Geld auszahlen.',
-    'Antwortet der Yogi nicht innerhalb 7 Tagen → automatisch Guthaben.',
+    'Wählt der Yogi „Guthaben": Credits bleiben als Guthaben in seinem Profil, 2 Jahre gültig (siehe auch Cron-Auto-Refund nach 2 Jahren weiter unten).',
+    'Wählt er „Erstattung" (Default gemäß § 326 BGB): Guthaben-Credit wird gelöscht, Sarah muss Geld manuell auszahlen.',
+    'Antwortet der Yogi nicht innerhalb 7 Tagen → automatisch Erstattung (Geldbetrag), nicht Guthaben.',
   ],
   regeln: [
+    'Default ist seit Mai 2026 die Geld-Erstattung (§ 326 BGB) — das bisherige Verhalten „Default Guthaben" wurde umgestellt.',
     'Provisorisches Guthaben wird sofort beim Abbrechen sichtbar in der App, mit Hinweis „bei Wahl Erstattung wieder entfernt".',
   ],
   emails: [
     {
       betreff: 'Kurs abgesagt: [Kursname]',
       an: 'Alle Kurs-Teilnehmer',
-      kern: 'Hallo [Vorname], leider muss ich den folgenden Kurs absagen. Für die [X] noch nicht stattgefundenen Kurseinheiten hast du die Wahl zwischen einer anteiligen Erstattung oder Kurs-Guthaben (2 Jahre gültig). 💡 Du siehst die [X] Credits ab sofort als Guthaben in deiner App-Übersicht. Bei der Wahl „Anteilige Erstattung" werden sie wieder entfernt. Du hast 7 Tage Zeit. Ohne Rückmeldung wird dir automatisch das Guthaben gutgeschrieben.',
+      kern: 'Hallo [Vorname], leider muss ich den folgenden Kurs absagen. Für die [X] noch nicht stattgefundenen Kurseinheiten hast du die Wahl zwischen einer anteiligen Erstattung (Default — gemäß § 326 BGB) oder Kurs-Guthaben (2 Jahre gültig). 💡 Ich freue mich besonders, wenn du das Guthaben wählst — dann sehen wir uns hoffentlich im nächsten Kurs wieder. Du hast 7 Tage Zeit für deine Wahl. Ohne Rückmeldung wird dir automatisch der anteilige Geldbetrag erstattet — ich melde mich dann persönlich bei dir wegen der Überweisung.',
     },
     {
       betreff: 'Guthaben gutgeschrieben: [Kursname]',
@@ -1609,6 +1610,9 @@ const mailRows = [
   ['yogi_enrolled_by_admin', 'Sarah bucht einen Yogi manuell in einen Kurs ein', 'Yogi', 'Du wurdest in den Kurs [Kursname] eingetragen', 'Kurs-Info + Anzahl Stunden + Regeln (Abmeldung, Nachholen, Vorholen, Kursrücktritt).'],
   ['admin_new_yogi', 'Neuer Yogi registriert sich erfolgreich', 'Admin', 'Neuer Yogi: [Voller Name]', 'Yogi-Daten + ggf. Kurs.'],
   ['admin_dsgvo_deletion', 'Yogi löscht seinen Account DSGVO-konform', 'Admin', 'DSGVO: Account gelöscht – PDF bitte manuell löschen', 'Hinweis zur manuellen Löschung der AGB-PDF im Drive.'],
+  ['account_deleted_yogi', 'VOR dem finalen Auth-Delete (Welle DSGVO-Bestätigung)', 'Yogi (letzte Mail an alte Adresse)', 'Dein Account bei Yoga mit Sarah wurde gelöscht', 'Hallo [Vorname], dein Account wurde gelöscht. Alle deine Daten wurden entfernt, offene Buchungen storniert, Credits/Guthaben verfallen. Mit dieser E-Mail wird auch deine E-Mail-Adresse aus unserem System entfernt — du erhältst keine weiteren Nachrichten mehr.'],
+  ['illness_credit', 'Sarah trägt Yogi krankheitsbedingt aus Kurs aus (Welle G, 25.05.2026)', 'Yogi (keine Dummies)', 'Krankheits-Austragung: [Kursname]', 'Hallo [Vorname], gemäß deinem Attest habe ich dich aus dem Kurs ausgetragen. Du erhältst ein Krankheits-Guthaben über [N] Stunden, gültig bis [Attest+10 Monate]. Vorhol-/Nachholbuchungen wurden ersatzlos beendet. Das Guthaben kann nur mit einem neuen Kurs verrechnet werden — keine Auszahlung.'],
+  ['admin_guthaben_2y_expiry', 'Cron-Job (täglich 04:00 Uhr) erkennt 2-Jahre-Guthaben abgelaufen', 'Admin', 'Guthaben nach 2 Jahren abgelaufen: [Yogi-Name] — bitte erstatten', 'Hallo Sarah, das Kursabbruch-Guthaben von [Yogi-Name] ([X] Credits, ursprünglich vergeben am [Datum]) ist heute nach 2 Jahren abgelaufen. Bitte den entsprechenden Geldbetrag manuell überweisen. Link zur Yogi-Detail-Seite anbei.'],
   ['password_reset_request', 'Yogi fordert Passwort-Reset an', 'Yogi', 'Passwort zurücksetzen – Yoga mit Sarah', 'Link zur Passwort-Zurücksetzung (1 Stunde gültig).'],
   ['admin_bulk_announcement', 'Sarah verschickt Bulk-Mail an alle Yogis', 'Alle Yogis', '[frei wählbar von Sarah]', 'Frei wählbarer Body + rechtssicherer Opt-Out-Hinweis am Ende.'],
 ]
@@ -1971,6 +1975,132 @@ content.push(...ucase({
   ],
 }))
 
+// ════════════════════════════════════════════════════════════════════════════
+// Welle H (2026-05-25): Click-Wrap, Kursabbruch-Default, 2J-Auto-Refund, DSGVO-Confirm-Mail
+// ════════════════════════════════════════════════════════════════════════════
+content.push(pageBreak())
+content.push(h1('Welle H: Click-Wrap, Auto-Refund & DSGVO-Confirm (25.05.2026)'))
+content.push(p('Welle H bündelt vier rechtlich relevante Änderungen, die alle am selben Tag entstanden sind:'))
+content.push(bullet('Click-Wrap „Allgemeine Regeln" auf der Rechtliches-Seite — Yogi muss die Verhaltensregeln zusätzlich zur AGB aktiv bestätigen.'))
+content.push(bullet('Stornofrist auf 14 Tage erhöht + 30 € Bearbeitungsgebühr im Fenster 13–7 Tage.'))
+content.push(bullet('Kursabbruch-Default umgestellt: ohne Yogi-Wahl gibt es jetzt Geldbetrag (war: Guthaben).'))
+content.push(bullet('Cron-Job „2-Jahre-Guthaben-Auto-Refund" — abgelaufene Kursabbruch-Guthaben lösen Admin-Notification + Email an Sarah aus.'))
+content.push(bullet('Account-Lösch-Workflow: Yogi bekommt VOR dem finalen Auth-Delete eine Bestätigungs-Mail (DSGVO Art. 12 Transparenz).'))
+
+content.push(...ucase({
+  titel: 'Click-Wrap „Allgemeine Regeln" auf der Rechtliches-Seite',
+  was: 'Auf /rechtliches sieht der Yogi neben den AGB-Punkten auch einen separaten Block „Allgemeine Regeln". Er enthält die drei Verhaltensregeln (Pünktlichkeit, Handy stumm, Krankheit/Erkältung) und muss aktiv per Häkchen bestätigt werden.',
+  wer: 'Yogi (eingeloggt, beim ersten Login bzw. nach Update)',
+  ablauf: [
+    'Yogi öffnet /rechtliches (entweder beim Onboarding-Flow oder über Profil → Rechtliches).',
+    'Im Block „Allgemeine Regeln" stehen drei Bullet-Punkte:',
+    '• „Bitte sei pünktlich auf der Matte. Bei Verspätung — kein Eintritt während der Anfangsentspannung."',
+    '• „Schalte dein Handy immer stumm oder aus."',
+    '• „Aus Rücksicht auf die Gruppe bitte bei ansteckenden Erkrankungen / Erkältungssymptomen nicht am Unterricht teilnehmen."',
+    'Yogi setzt das Häkchen „Ich habe die AGB sowie die allgemeinen Regeln gelesen und akzeptiere sie" und bestätigt.',
+    'Zustimmung wird mit Versionsnummer + Zeitstempel im Profil gespeichert.',
+  ],
+  regeln: [
+    'Diese Regeln sind zusätzlich Bestandteil der AGB (§ 1.4). Click-Wrap dient der rechtssicheren Nachweisbarkeit.',
+    'Bei Versions-Update der AGB oder Allgemeinen Regeln erscheint die Seite erneut zur Re-Bestätigung (Welle A — AGB-Re-Akzeptanz-Banner).',
+  ],
+  texte: [
+    'Allgemeine Regeln',
+    'Bitte sei pünktlich auf der Matte. Bei Verspätung — kein Eintritt während der Anfangsentspannung.',
+    'Schalte dein Handy immer stumm oder aus.',
+    'Aus Rücksicht auf die Gruppe bitte bei ansteckenden Erkrankungen / Erkältungssymptomen nicht am Unterricht teilnehmen.',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Stornofrist neu: 14 Tage + 30 € Bearbeitungsgebühr (13–7 Tage)',
+  was: 'Die Stornofrist für komplette Kurse wurde von 7 auf 14 Tage erhöht; im Fenster 13–7 Tage vorher fällt eine Bearbeitungsgebühr von 30 € an. Unter 7 Tagen ist die volle Kursgebühr fällig. Ersatzteilnehmer sind jederzeit möglich.',
+  wer: 'Yogi / Admin (rechtlicher Workflow)',
+  ablauf: [
+    '> 14 Tage vor Kursbeginn: kostenfreie Stornierung.',
+    '13 bis 7 Tage vor Kursbeginn: 30 € Bearbeitungsgebühr, da der Platz kurzfristig neu vergeben werden muss.',
+    '< 7 Tage vor Kursbeginn: volle Kursgebühr ist fällig — auch bei Nichterscheinen.',
+    'Jederzeit möglich: Yogi benennt einen passenden Ersatzteilnehmer.',
+  ],
+  regeln: [
+    'Die neue Frist gilt sowohl in der App-Bestätigungs-E-Mail (Email-Template yogi_enrolled_by_admin) als auch auf /rechtliches und im AGB-Dokument.',
+    'Für Veranstaltungen (Workshops, Specials) bleibt die alte 7-Tage-Frist gemäß AGB § 1.2.',
+  ],
+  texte: [
+    'Kostenfreie Stornierung bis 14 Tage vor Kursbeginn',
+    '30 € Bearbeitungsgebühr (13 bis 7 Tage vorher)',
+    'Volle Kursgebühr ab 6 Tagen vorher',
+    'Ersatzteilnehmer jederzeit möglich',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Cron-Job: 2-Jahre-Guthaben-Auto-Refund (täglich 04:00 Uhr)',
+  was: 'Ein täglicher Cron-Job (fn_check_guthaben_2y_expiry) prüft, ob Kursabbruch-Guthaben (credits.source=„cancellation_choice" bzw. NULL) ihre 2-Jahres-Gültigkeit erreicht haben. Bei Ablauf wird das Guthaben automatisch als verbraucht markiert, eine Admin-Notification angelegt und eine E-Mail an Sarah versandt — sie überweist den Geldbetrag manuell.',
+  wer: 'System (DB-Function + pg_cron, 04:00 Uhr täglich)',
+  ablauf: [
+    'pg_cron ruft täglich um 04:00 Uhr die DB-Function public.fn_check_guthaben_2y_expiry() auf.',
+    'Function findet alle credits mit source=„cancellation_choice" (oder NULL) und expires_at <= heute, die noch nicht vollständig verbraucht sind.',
+    'Pro Treffer: credits.used = credits.total wird gesetzt (Guthaben gilt als „erledigt").',
+    'admin_notifications-Zeile mit type=„guthaben_2y_expired" wird angelegt — sichtbar im Dashboard mit Link zur Yogi-Detail-Seite.',
+    'pg_net.http_post triggert die Edge-Function trigger-admin-email → E-Mail-Template admin_guthaben_2y_expiry wird versandt an Sarah.',
+    'Sarah sieht die Aufgabe im Dashboard, überweist den Geldbetrag und hakt die Notification ab.',
+  ],
+  regeln: [
+    'Nur Kursabbruch-Guthaben (2 Jahre) betroffen — Krankheits-Guthaben (10 Monate, source=„illness") verfällt nach AGB ersatzlos und wird NICHT automatisch erstattet.',
+    'Idempotent: bereits vollständig verbrauchte Guthaben werden nicht erneut verarbeitet.',
+    'DB-Function nutzt net.http_post → trigger-admin-email → Edge-Function; verifiziert in Test 19-notifications.spec.ts.',
+  ],
+  emails: [
+    {
+      betreff: 'Guthaben nach 2 Jahren abgelaufen: [Yogi-Name] — bitte erstatten',
+      an: 'Admin',
+      kern: 'Hallo Sarah, das Kursabbruch-Guthaben von [Yogi-Name] ([X] Credits, vergeben am [Datum]) ist heute nach 2 Jahren abgelaufen. Du müsstest den entsprechenden Geldbetrag jetzt manuell überweisen. Hier ist der Link zur Yogi-Detail-Seite mit Bankverbindung.',
+    },
+  ],
+  texte: [
+    'Guthaben nach 2 Jahren abgelaufen',
+    'Bitte Geldbetrag manuell überweisen',
+  ],
+  sonder: [
+    'Damit erfüllt die App das in AGB § 1.2 versprochene „du verlierst in keinem Fall etwas" für Kursabbruch-Guthaben.',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Account-Lösch-Bestätigungs-E-Mail an Yogi (DSGVO Art. 12)',
+  was: 'Wenn ein Yogi seinen Account selbst löscht oder durch Sarah gelöscht wird, erhält der Yogi VOR dem finalen Auth-Delete eine Bestätigungs-Mail an seine bisherige E-Mail-Adresse. Diese E-Mail ist die letzte Nachricht der App an den Yogi.',
+  wer: 'System (lib/email.ts → Email.accountDeletedYogi)',
+  ablauf: [
+    'Yogi (oder Sarah als Admin) löst die Löschung aus.',
+    'Cascade läuft: Buchungen storniert, Wartelisten entfernt, Plätze freigegeben, PII anonymisiert, Credits/Guthaben verfallen.',
+    'BEVOR der Auth-User in Supabase Auth gelöscht wird: System ruft Email.accountDeletedYogi({email, firstName}) auf.',
+    'Yogi bekommt eine E-Mail mit Betreff „Dein Account bei Yoga mit Sarah wurde gelöscht".',
+    'Erst danach wird der Supabase-Auth-User entfernt und die E-Mail-Adresse aus der Datenbank gelöscht.',
+    'Parallel geht admin_dsgvo_deletion-Mail an Sarah (Hinweis auf manuelle PDF-Löschung).',
+  ],
+  regeln: [
+    'Rechtsgrundlage: DSGVO Art. 12 (Transparenz) — der Yogi muss über die Verarbeitung (hier: die Löschung) informiert werden.',
+    'E-Mail wird auch versandt, wenn Admin (Sarah) den Account löscht — nicht nur bei Selbstlöschung.',
+    'Direkter fetch zur Edge-Function send-email wurde aus app/profil/page.tsx und app/admin/yogis/[id]/page.tsx entfernt (fehlte x-function-secret → 401); jetzt ausschließlich über zentralen Email-Helper.',
+  ],
+  emails: [
+    {
+      betreff: 'Dein Account bei Yoga mit Sarah wurde gelöscht',
+      an: 'Yogi (an die noch existierende E-Mail-Adresse, letzte Nachricht)',
+      kern: 'Hallo [Vorname], dein Account bei Yoga mit Sarah wurde gelöscht. Alle deine persönlichen Daten wurden entfernt bzw. anonymisiert, offene Buchungen storniert und etwaige Credits/Guthaben sind verfallen. Mit dieser E-Mail wird auch deine E-Mail-Adresse aus unserem System entfernt — du erhältst keine weiteren Nachrichten mehr. Solltest du irgendwann zurückkommen wollen, freue ich mich auf eine neue Registrierung. Alles Liebe, Sarah.',
+    },
+    {
+      betreff: 'DSGVO: Account gelöscht – PDF bitte manuell löschen',
+      an: 'Admin (parallel zur Yogi-Mail)',
+      kern: 'Hallo Sarah, folgender Account wurde DSGVO-konform gelöscht: [Name], [E-Mail]. Bitte lösche die AGB-PDF im Google Drive manuell.',
+    },
+  ],
+  sonder: [
+    'Verifiziert durch tests/e2e/14a-account-loeschung-source.spec.ts: Source-Smoke-Tests prüfen Vorhandensein von Email.accountDeletedYogi in beiden Lösch-Pfaden und das Fehlen direkter send-email-Fetches.',
+  ],
+}))
+
 content.push(pageBreak())
 content.push(h1('Anhang: Begriffsklärung'))
 content.push(...[
@@ -1998,6 +2128,12 @@ content.push(...[
   ['Krankheits-Guthaben (Welle G)', 'Guthaben mit credits.source=„illness", angelegt bei Krankheits-Austragung. 10 Monate ab Attest-Datum gültig. Nur verrechenbar mit neuem Kurs, keine Auszahlung in Geld.'],
   ['credits.source', 'Spalte auf der credits-Tabelle (Welle G). Werte: NULL (Standard), „illness" (Krankheits-Austragung, 10 Mo), „cancellation_choice" (Kursabbruch-Wahl, 2 Jahre).'],
   ['enrollments.end_date / end_reason', 'Spalten auf enrollments (Welle G). end_date = Tag, an dem die Teilnahme endet (z.B. Attest-Datum). end_reason = „illness" / „course_cancelled" / „admin_removed".'],
+  ['Click-Wrap (Welle H)', 'Aktive Zustimmung per Häkchen auf /rechtliches — Yogi bestätigt zusätzlich zu den AGB die „Allgemeinen Regeln" (Pünktlichkeit, Handy, Krankheit). Zeitstempel + Versionsnummer werden im Profil gespeichert.'],
+  ['Stornofrist 14 Tage (Welle H)', 'Neue Frist seit 25.05.2026 — kostenfreier Rücktritt bis 14 Tage vor Kursbeginn, danach 30 € Bearbeitungsgebühr bis 7 Tage vorher, danach volle Kursgebühr.'],
+  ['fn_check_guthaben_2y_expiry (Welle H)', 'DB-Function, die täglich 04:00 Uhr per pg_cron läuft. Findet abgelaufene Kursabbruch-Guthaben (2 Jahre), markiert sie als verbraucht, legt admin_notification an und triggert via pg_net Edge-Function trigger-admin-email → Mail an Sarah.'],
+  ['admin_guthaben_2y_expiry (Mail-Template)', 'E-Mail-Template für die 2-Jahre-Auto-Refund-Benachrichtigung an Sarah. Subject: „Guthaben nach 2 Jahren abgelaufen: [Yogi-Name] — bitte erstatten".'],
+  ['account_deleted_yogi (Mail-Template)', 'Bestätigungs-Mail an den Yogi vor dem finalen Auth-Delete (DSGVO Art. 12). Letzte Nachricht vor Entfernung der E-Mail-Adresse.'],
+  ['Kursabbruch-Default (Welle H)', 'Seit 25.05.2026 ist die Geld-Erstattung (§ 326 BGB) der Default bei Kursabbruch ohne Yogi-Antwort. Bisher war es „Guthaben" — bewusst umgestellt.'],
 ].map(([term, def]) => pRich([
   { text: term + ': ', bold: true },
   { text: def },

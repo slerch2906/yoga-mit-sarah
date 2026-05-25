@@ -292,8 +292,13 @@ test.describe('[E2E] Yogi-Löschung v6: Plätze sofort frei', () => {
   })
 
   test('Email an Sarah (admin_dsgvo_deletion) wird gesendet', () => {
+    // 2026-05-25: Refactor auf zentralen Email-Helper (Bug-Fix: direkter fetch
+    // ohne x-function-secret hatte 401 produziert). Page nutzt jetzt
+    // Email.adminDsgvoDeletion(); der Type-String lebt in lib/email.ts.
     const src = read('app/admin/yogis/[id]/page.tsx')
-    expect(src).toMatch(/admin_dsgvo_deletion/)
+    expect(src).toMatch(/Email\.adminDsgvoDeletion/)
+    const helper = read('lib/email.ts')
+    expect(helper).toMatch(/admin_dsgvo_deletion/)
   })
 
   test('DB-FKs: bookings/credits/enrollments/waitlist sind CASCADE zu profiles', async () => {

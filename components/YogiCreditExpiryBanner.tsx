@@ -27,8 +27,27 @@ function daysBetween(a: Date, b: Date) {
   return Math.round((a.getTime() - b.getTime()) / (24 * 60 * 60 * 1000))
 }
 
+// Sarah-Wunsch 2026-05-25: Hinweisboxen wegklickbar (localStorage per Reminder-ID)
+const DISMISS_KEY = 'yogi-credit-expiry-dismissed'
+function loadDismissed(): string[] {
+  if (typeof window === 'undefined') return []
+  try { return JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]') } catch { return [] }
+}
+function saveDismissed(ids: string[]) {
+  try { localStorage.setItem(DISMISS_KEY, JSON.stringify(ids)) } catch {}
+}
+
 export default function YogiCreditExpiryBanner() {
   const [reminders, setReminders] = useState<Reminder[]>([])
+  const [dismissed, setDismissed] = useState<string[]>([])
+
+  useEffect(() => { setDismissed(loadDismissed()) }, [])
+
+  function dismiss(id: string) {
+    const next = [...dismissed, id]
+    setDismissed(next)
+    saveDismissed(next)
+  }
 
   useEffect(() => {
     let active = true
@@ -110,12 +129,17 @@ export default function YogiCreditExpiryBanner() {
     return () => { active = false }
   }, [])
 
-  if (reminders.length === 0) return null
+  const visible = reminders.filter(r => !dismissed.includes(r.id))
+  if (visible.length === 0) return null
 
   return (
     <div className="px-4 pt-3 space-y-2">
-      {reminders.map(r => (
-        <div key={r.id} className="card">
+      {visible.map(r => (
+        <div key={r.id} className="card relative pr-9">
+          <button onClick={() => dismiss(r.id)} aria-label="Hinweis schließen"
+            className="absolute top-2 right-2 bg-transparent border-0 cursor-pointer text-yoga-text/40 hover:text-yoga-text/70 p-1 leading-none">
+            <i className="ti ti-x text-base" />
+          </button>
           <p className={`text-sm font-semibold ${r.kind === 'alert' ? 'text-yoga-red-text' : 'text-yoga-amber-text'}`}>
             {r.kind === 'alert' ? 'Achtung — heute' : 'Hinweis'}
           </p>

@@ -521,6 +521,29 @@ export default function AdminKursePage() {
         )
         if (sessError) alert('Kurs angelegt aber Sessions-Fehler: ' + sessError.message)
       }
+      // Welle 4.7 (Sarah 2026-05-26): Audit-Spur fuer Kurs-Neuanlage.
+      await supabase.from('audit_log').insert({
+        action: 'course_created',
+        details: {
+          course_id: course.id, name: course.name,
+          weekday: courseData.weekday, time_start: courseData.time_start,
+          date_start: courseData.date_start, date_end: courseData.date_end,
+          total_units: courseData.total_units, max_spots: courseData.max_spots,
+          is_single: courseData.is_single, is_free: courseData.is_free,
+        }
+      })
+    }
+
+    // Welle 4.7: Audit-Spur fuer Kurs-Update (separater Eintrag, wenn editCourse).
+    if (editCourse) {
+      await supabase.from('audit_log').insert({
+        action: 'course_updated',
+        details: {
+          course_id: editCourse.id, name: courseData.name,
+          time_start: courseData.time_start, duration_min: courseData.duration_min,
+          max_spots: courseData.max_spots, location: courseData.location,
+        }
+      })
     }
 
     await loadData()
@@ -536,6 +559,11 @@ export default function AdminKursePage() {
 
   async function toggleOpen(id: string, currentlyOpen: boolean) {
     await supabase.from('courses').update({ is_open: !currentlyOpen }).eq('id', id)
+    // Welle 4.7 (Sarah 2026-05-26): Audit-Spur fuer Kurs-Freigabe/Sperre.
+    await supabase.from('audit_log').insert({
+      action: 'course_open_toggled',
+      details: { course_id: id, is_open: !currentlyOpen }
+    })
     loadData()
   }
 
@@ -901,6 +929,11 @@ export default function AdminKursePage() {
 
     if (!confirm(confirmMsg)) return
     await supabase.from('courses').update({ is_active: false }).eq('id', courseObj.id)
+    // Welle 4.7 (Sarah 2026-05-26): Audit-Spur fuer Archivieren.
+    await supabase.from('audit_log').insert({
+      action: 'course_archived',
+      details: { course_id: courseObj.id, course_name: courseObj.name }
+    })
     loadData()
   }
 
@@ -996,6 +1029,15 @@ export default function AdminKursePage() {
       alert('Fehler beim Löschen: ' + deleteError.message)
       return
     }
+    // Welle 4.7 (Sarah 2026-05-26): Audit-Spur fuer Kurs-Komplettloeschung
+    // (massive Datenmutation — ohne Trail rechtlich problematisch).
+    await supabase.from('audit_log').insert({
+      action: 'course_deleted',
+      details: {
+        course_id: courseId, course_name: name,
+        sessions_count: (sessions || []).length,
+      }
+    })
     loadData()
   }
 
@@ -1068,6 +1110,18 @@ export default function AdminKursePage() {
         total: newCreditsNeeded, used: 0, expires_at: expiresAt.toISOString(),
       }).select().single()
       newCourseCreditId = cc?.id || null
+      // Welle 4.7 (Sarah 2026-05-26): Audit-Spur fuer Course-Credit-Anlage.
+      if (newCourseCreditId) {
+        await supabase.from('audit_log').insert({
+          action: 'credit_assigned',
+          details: {
+            target_user_id: yogi.id, credit_id: newCourseCreditId,
+            amount: newCreditsNeeded, model: 'course',
+            course_id: course.id, expires_at: expiresAt.toISOString(),
+            source: 'admin_added_yogi_to_course',
+          }
+        })
+      }
     }
 
     // Pro Session den richtigen Credit zuordnen (Guthaben zuerst)

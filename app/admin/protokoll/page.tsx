@@ -47,6 +47,12 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   admin_illness_credit:           { label: 'Krankheits-Guthaben vergeben',   color: 'text-yoga-green-text' },
   admin_bulk_mail:                { label: 'Bulk-Mail versendet',            color: 'text-yoga-amber-text' },
   admin_dsgvo_deletion:           { label: 'DSGVO-Löschung durch Admin',     color: 'text-yoga-red-text' },
+  // ── Welle 4.7 (2026-05-26): Kurs-Mutationen Audit-Trail ─────────────
+  course_created:                 { label: 'Kurs angelegt',                  color: 'text-yoga-green-text' },
+  course_updated:                 { label: 'Kurs bearbeitet',                color: 'text-yoga-amber-text' },
+  course_archived:                { label: 'Kurs archiviert',                color: 'text-yoga-amber-text' },
+  course_deleted:                 { label: 'Kurs gelöscht',                  color: 'text-yoga-red-text' },
+  course_open_toggled:            { label: 'Kurs freigegeben/gesperrt',      color: 'text-yoga-amber-text' },
 }
 
 const SESSION_TYPE_LABEL: Record<string, string> = {

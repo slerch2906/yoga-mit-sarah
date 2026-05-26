@@ -347,6 +347,16 @@ export default function AdminDashboard() {
         user_id: yogi.id, total: 1, used: 1, expires_at: expiry.toISOString(), model: 'single', course_id: null
       }).select('id').single()
       creditId = nc?.id || null
+      // Welle 4.7: Audit fuer Quick-Credit-Vergabe
+      if (creditId) {
+        await supabase.from('audit_log').insert({
+          action: 'credit_assigned',
+          details: { target_user_id: yogi.id, credit_id: creditId, amount: 1,
+                     model: 'single', quick_credit: true,
+                     source: 'admin_added_yogi_to_session_via_quick_credit',
+                     session_id: selectedSession.id }
+        })
+      }
     }
 
     // Yogi enrolled in Kurs der Session? Dann type=course (gehört in den Kurs-Block, nicht Einzelstunden)
@@ -357,6 +367,13 @@ export default function AdminDashboard() {
     await supabase.from('bookings').insert({
       user_id: yogi.id, session_id: selectedSession.id, credit_id: creditId, type: bookingType, status: 'active',
       origin_session_id: originSessionId,
+    })
+    // Welle 4.7 (Sarah 2026-05-26): Audit-Spur fuer Admin-Einbuchung Course-Pfad fehlte
+    await supabase.from('audit_log').insert({
+      action: 'admin_added_yogi_to_session',
+      details: { user_id: yogi.id, session_id: selectedSession.id,
+                 credit_id: creditId, origin_session_id: originSessionId,
+                 booking_type: bookingType, source: 'dashboard' }
     })
     setDashAddingYogi(false)
     setShowDashAddYogi(false)
@@ -448,10 +465,25 @@ export default function AdminDashboard() {
       action: 'session_cancelled',
       details: {
         session_id: selectedSession.id,
+        session_type: selectedSession.session_type,
         replacement_date: replacementDate || null,
-        affected_yogis: activeBookings.length
+        affected_yogis: activeBookings.length,
+        source: 'dashboard',
       }
     })
+    // Welle 4.7 (Sarah 2026-05-26): wenn Ersatztermin angelegt, separater
+    // replacement_session_added-Audit (analog admin/sessions/[id]).
+    if (replacementDate && replacementTime) {
+      await supabase.from('audit_log').insert({
+        action: 'replacement_session_added',
+        details: {
+          original_session_id: selectedSession.id,
+          replacement_date: replacementDate, replacement_time: replacementTime,
+          yogis_re_enrolled: activeBookings.length,
+          source: 'dashboard',
+        }
+      })
+    }
 
     setShowCancelForm(false)
     setSelectedSession(null)
@@ -1089,9 +1121,11 @@ export default function AdminDashboard() {
             && sDate.getDate() === now.getDate()
           // Highlight nur für heute UND nicht vorbei UND nicht abgesagt
           const highlight = isToday && !isPast && !s.is_cancelled
+          // Welle 4.7 (Sarah 2026-05-26): Event-Akzentstreifen links, dezent dunkelbraun.
+          const isEventCard = s.session_type === 'event_free' || s.session_type === 'event_paid' || s.session_type === 'event_credit'
           return (
             <button key={s.id} onClick={() => loadSessionDetail(s)}
-              className={`w-full bg-white border rounded-yoga px-3 py-2.5 mb-2 text-left hover:border-yoga-border2 ${s.is_cancelled || isPast ? 'opacity-40' : ''} ${highlight ? 'border-2 border-yoga-text' : 'border-yoga-border'}`}>
+              className={`w-full bg-white border rounded-yoga px-3 py-2.5 mb-2 text-left hover:border-yoga-border2 ${s.is_cancelled || isPast ? 'opacity-40' : ''} ${highlight ? 'border-2 border-yoga-text' : 'border-yoga-border'} ${isEventCard ? 'border-l-4 border-l-yoga-text' : ''}`}>
               {/* Sarah-Wunsch 2026-05-24: Wochentag vorne, kompakt + nur Ausgetragen-Info */}
               <div className="flex items-center gap-2">
                 <div className="text-center flex-shrink-0 w-10">

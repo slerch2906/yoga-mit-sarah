@@ -296,6 +296,18 @@ export default function AdminSessionPage() {
       credit_id: newCredit.id, type: 'single', status: 'active',
       cancelled_at: null, cancel_late: false,
     }, { onConflict: 'user_id,session_id' })
+    // Welle 4.7 (Sarah 2026-05-26): Audit-Spur war komplett leer — Sarah-Frust.
+    // Jetzt 2 Eintraege: Credit-Vergabe + Einbuchung.
+    await supabase.from('audit_log').insert({
+      action: 'credit_assigned',
+      details: { target_user_id: yogi.id, credit_id: newCredit.id, amount: 1,
+                 model: 'single', quick_credit: true, source: 'admin_added_yogi_to_session_via_quick_credit',
+                 session_id: id }
+    })
+    await supabase.from('audit_log').insert({
+      action: 'admin_added_yogi_to_session',
+      details: { user_id: yogi.id, session_id: id, credit_id: newCredit.id, quick_credit: true }
+    })
     setQuickCreditYogi(null); setShowAddYogi(false)
     setYogiSearch(''); setYogiResults([])
     loadData()
@@ -718,6 +730,30 @@ export default function AdminSessionPage() {
     // 4) Warteliste löschen
     await supabase.from('waitlist').delete().eq('session_id', id)
 
+    // Welle 4.7 (Sarah 2026-05-26): Audit-Spur war komplett leer — kritische
+    // Compliance-Luecke. Jetzt session_cancelled + (falls Ersatz) replacement_session_added.
+    await supabase.from('audit_log').insert({
+      action: 'session_cancelled',
+      details: {
+        session_id: id, session_type: session?.session_type,
+        course_name: session?.course?.name, session_name: session?.name,
+        session_date: session?.date, session_time: session?.time_start,
+        reason: reason || null,
+        replacement_session_id: replacementSessionId,
+        affected_yogis: bookings.length,
+      }
+    })
+    if (replacementSessionId) {
+      await supabase.from('audit_log').insert({
+        action: 'replacement_session_added',
+        details: {
+          original_session_id: id, replacement_session_id: replacementSessionId,
+          replacement_date: replacementDate, replacement_time: replacementTime,
+          yogis_re_enrolled: bookings.filter(b => b.credit_id).length,
+        }
+      })
+    }
+
     setCancelling(false)
     // Welle 2.10 (Sarah 2026-05-26): bei Events/Einzelstunden ist die Credit-
     // Rückbuchung kontextabhängig — event_free hat gar keine Credits,
@@ -810,8 +846,15 @@ export default function AdminSessionPage() {
               <i className="ti ti-bullhorn mr-1" /> In Sprechblase posten (für alle Yogis)
             </button>
           )}
-          {/* Teilen-Button — für Admin sinnvoll, damit sie über WhatsApp/Email teilen kann */}
+          {/* Teilen-Button — für Admin sinnvoll, damit sie über WhatsApp/Email teilen kann.
+              Welle 4.7 (Sarah 2026-05-26): NUR bei Events / Einzelstunden / Charity
+              anzeigen. Bei normalen Kursstunden (course_session) ist Teilen sinnlos. */}
           {!session?.is_cancelled && (
+            session?.session_type === 'event_free' ||
+            session?.session_type === 'event_paid' ||
+            session?.session_type === 'single' ||
+            session?.course?.is_free
+          ) && (
             <button
               onClick={async () => {
                 const sessionDate = new Date(session.date)

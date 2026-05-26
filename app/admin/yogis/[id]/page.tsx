@@ -879,6 +879,17 @@ export default function AdminYogiDetailPage() {
       }
       case 'session_open_toggled':
         return { text: d.is_open ? 'Stunde/Event freigegeben' : 'Stunde/Event gesperrt', subject: termin }
+      // ── Welle 4.7 (2026-05-26): Kurs-Mutationen ────────────────────────
+      case 'course_created':
+        return { text: `Admin hat Kurs „${d.name || courseName || '?'}" angelegt (${d.total_units || '?'} Einheiten)`, subject: '' }
+      case 'course_updated':
+        return { text: `Admin hat Kurs „${d.name || courseName || '?'}" bearbeitet`, subject: '' }
+      case 'course_archived':
+        return { text: `Admin hat Kurs „${d.course_name || courseName || '?'}" archiviert`, subject: '' }
+      case 'course_deleted':
+        return { text: `Admin hat Kurs „${d.course_name || '?'}" komplett gelöscht (${d.sessions_count || 0} Sessions)`, subject: '' }
+      case 'course_open_toggled':
+        return { text: d.is_open ? 'Kurs freigegeben für externe Buchungen' : 'Kurs für externe Buchungen gesperrt', subject: '' }
       case 'admin_illness_credit': {
         const attest = d.attest_date ? new Date(d.attest_date).toLocaleDateString('de-DE') : '?'
         const hrs = d.hours_credited ?? '?'

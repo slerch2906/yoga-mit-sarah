@@ -255,10 +255,16 @@ test.describe('[E2E] Charity-Feature: is_free + image_url', () => {
   })
 
   test('app/kurse/[id]: handleBook skippt Credit-Picker bei is_free', async () => {
+    // 2026-05-26 Welle 2.5: isCharity blieb als Variable, aber die
+    // Skip-Logik wurde verallgemeinert (skipCreditCheck = isCharity ||
+    // event_free || event_paid). Test prueft jetzt die Sammelvariable
+    // damit Charity, kostenlose Events und Bezahl-Events alle den
+    // Credit-Picker korrekt skippen.
     const src = read('app/kurse/[id]/page.tsx')
     expect(src).toMatch(/isCharity\s*=\s*!!.*is_free/)
-    expect(src).toMatch(/!isCharity\s*&&\s*!bestCredit/)
-    expect(src).toMatch(/if\s*\(\s*!isCharity\s*\)/)
+    expect(src).toMatch(/skipCreditCheck\s*=[\s\S]*isCharity/)
+    expect(src).toMatch(/!skipCreditCheck\s*&&\s*!bestCredit/)
+    expect(src).toMatch(/if\s*\(\s*!skipCreditCheck\s*\)/)
   })
 
   test('lib/waitlist-promote.ts: tryAutoPromoteOneFree existiert + skip Credit', async () => {

@@ -42,7 +42,9 @@ export default function AdminDashboard() {
   const [sessionBookings, setSessionBookings] = useState<any[]>([])
   const [showDashAddYogi, setShowDashAddYogi] = useState(false)
   // Sarah-Wunsch 2026-05-25: 3h-Frist-Modal auch im Dashboard (gleiches Pattern wie /admin/sessions/[id])
-  const [cancelChoice, setCancelChoice] = useState<{ bookingId: string; sessionId: string; within3h: boolean } | null>(null)
+  // Welle 4 (Sarah 2026-05-26): sessionType im cancelChoice-State, damit
+  // Modal-Render bei Events das 3h-Frist-Choice NICHT mehr anzeigt (Defense-in-Depth).
+  const [cancelChoice, setCancelChoice] = useState<{ bookingId: string; sessionId: string; within3h: boolean; sessionType?: string } | null>(null)
   const [dashYogiSearch, setDashYogiSearch] = useState('')
   const [dashYogiResults, setDashYogiResults] = useState<any[]>([])
   const [dashAddingYogi, setDashAddingYogi] = useState(false)
@@ -229,7 +231,7 @@ export default function AdminDashboard() {
       const sessionStart = new Date(`${freshSession.date}T${freshSession.time_start}`).getTime()
       within3h = (sessionStart - Date.now()) <= 3 * 60 * 60 * 1000 && sessionStart > Date.now()
     }
-    setCancelChoice({ bookingId, sessionId, within3h })
+    setCancelChoice({ bookingId, sessionId, within3h, sessionType: sessType })
   }
 
   async function confirmCancelBooking(creditReturned: boolean) {
@@ -608,8 +610,12 @@ export default function AdminDashboard() {
 
       <div className="px-4 py-4">
 
-        {/* Cancel-Booking Modal — Sarah-Wunsch 2026-05-25: 3h-Frist Auswahl */}
-        {cancelChoice && (
+        {/* Cancel-Booking Modal — Sarah-Wunsch 2026-05-25: 3h-Frist Auswahl
+            Welle 4 (Sarah 2026-05-26): Defense-in-Depth — bei Events das
+            3h-Choice NIE anzeigen, weil Events kein Credit-System haben.
+            Falls (Bug-Defensive) cancelBookingForYogi den Event-Pfad nicht
+            erwischt, fallen wir hier nochmal auf einen simplen Confirm zurueck. */}
+        {cancelChoice && (cancelChoice.sessionType === 'event_free' || cancelChoice.sessionType === 'event_paid') ? null : cancelChoice && (
           <div className="fixed inset-0 bg-black/50 z-[60] flex items-end modal-overlay">
             <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10">
               {cancelChoice.within3h ? (

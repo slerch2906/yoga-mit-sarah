@@ -36,7 +36,9 @@ export default function AdminSessionPage() {
   const [addingYogi, setAddingYogi] = useState(false)
   const [quickCreditYogi, setQuickCreditYogi] = useState<any>(null)
   // Sarah-Wunsch 2026-05-25: Robustes Modal statt confirm() — Cache-bust + iOS-tauglich
-  const [cancelChoice, setCancelChoice] = useState<{ bookingId: string; sessionId: string; within3h: boolean } | null>(null)
+  // Welle 4 (Sarah 2026-05-26): sessionType im State — Defense-in-Depth gegen
+  // versehentliches Anzeigen des 3h-Choice-Modals bei Events.
+  const [cancelChoice, setCancelChoice] = useState<{ bookingId: string; sessionId: string; within3h: boolean; sessionType?: string } | null>(null)
   // Welle 2.5 (Sarah 2026-05-26): Edit-Form für Einzelstunden/Events (nicht für
   // course_session — die werden über den Kurs verwaltet).
   const [showEditForm, setShowEditForm] = useState(false)
@@ -134,7 +136,7 @@ export default function AdminSessionPage() {
       within3h = (sessionStart - Date.now()) <= 3 * 60 * 60 * 1000 && sessionStart > Date.now()
     }
     // Modal oeffnen — eigentliche Cancellation passiert in confirmCancelBooking(...)
-    setCancelChoice({ bookingId, sessionId, within3h })
+    setCancelChoice({ bookingId, sessionId, within3h, sessionType: sessType })
   }
 
   // Sarah-Wunsch 2026-05-25: Eigentliche Cancellation, getrennt vom UI-Trigger.
@@ -1117,8 +1119,10 @@ export default function AdminSessionPage() {
         </div>
       )}
 
-      {/* Cancel-Booking Modal — Sarah-Wunsch 2026-05-25: 3h-Frist Auswahl als echtes Modal */}
-      {cancelChoice && (
+      {/* Cancel-Booking Modal — Sarah-Wunsch 2026-05-25: 3h-Frist Auswahl als echtes Modal.
+          Welle 4 (Sarah 2026-05-26): Defense-in-Depth — bei Events NIE das
+          3h-Choice-Modal anzeigen (Events kennen kein Credit-System). */}
+      {cancelChoice && (cancelChoice.sessionType === 'event_free' || cancelChoice.sessionType === 'event_paid') ? null : cancelChoice && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay">
           <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10">
             {cancelChoice.within3h ? (

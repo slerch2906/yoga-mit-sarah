@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Email } from '@/lib/email'
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
+import { selectCreditForBooking } from '@/lib/credit-selector'
 import { createClient } from '@/lib/supabase/client'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
@@ -105,8 +106,15 @@ export default function AdminKursePage() {
   // (statt /admin/sessions/[id]?edit=1 Seite). Editing-State markiert UPDATE.
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   // Welle 2.11: Teilnehmer-Modal fuer Sessions (analog participantsCourse).
+  // Welle 4.6: Teilnehmer-Modal jetzt vollstaendig — Yogi hinzufuegen +
+  // Austragen direkt im Modal. /admin/sessions/[id] entfaellt fuer
+  // Events/Einzelstunden komplett.
   const [participantsSession, setParticipantsSession] = useState<any>(null)
   const [sessionBookings, setSessionBookings] = useState<any[]>([])
+  const [showSessionAddYogi, setShowSessionAddYogi] = useState(false)
+  const [sessionAddYogiSearch, setSessionAddYogiSearch] = useState('')
+  const [sessionAddYogiResults, setSessionAddYogiResults] = useState<any[]>([])
+  const [sessionAddingYogi, setSessionAddingYogi] = useState(false)
   const [singleForm, setSingleForm] = useState({
     name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12,
     location: '', description: '',
@@ -1212,7 +1220,177 @@ export default function AdminKursePage() {
     setParticipantsSession(s)
   }
 
-  // Welle 2.11: Teilen-Button auf Karte (Web Share / Copy-Link Fallback)
+  // Welle 4.6 (Sarah 2026-05-26): Yogi-Suche im Session-Teilnehmer-Modal
+  async function searchYogisForSession(q: string) {
+    setSessionAddYogiSearch(q)
+    if (q.length < 2) { setSessionAddYogiResults([]); return }
+    const { data } = await supabase.from('profiles')
+      .select('id, first_name, last_name, email, is_dummy, credits(*)')
+      .eq('is_admin', false)
+      .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`)
+      .limit(8)
+    const bookedIds = sessionBookings.map((b: any) => b.user_id)
+    setSessionAddYogiResults((data || []).filter(y => !bookedIds.includes(y.id)))
+  }
+
+  // Welle 4.6: Yogi direkt im Modal hinzufuegen (Credit-Safety analog
+  // /admin/sessions/[id] handleAddYogi).
+  async function addYogiToSessionFromModal(yogi: any) {
+    if (!participantsSession) return
+    setSessionAddingYogi(true)
+    const session = participantsSession
+    const sessionType: string = session.session_type || 'course_session'
+    const isFreeEvent = sessionType === 'event_free'
+    const isPaidEvent = sessionType === 'event_paid'
+    const skipCreditLogic = isFreeEvent || isPaidEvent
+
+    if (skipCreditLogic) {
+      // Events: credit_id=null, kein Credit-Abzug
+      const { error } = await supabase.from('bookings').upsert({
+        user_id: yogi.id, session_id: session.id,
+        credit_id: null, type: 'single', status: 'active',
+        origin_session_id: null, cancelled_at: null, cancel_late: false,
+      }, { onConflict: 'user_id,session_id' })
+      if (error) { setSessionAddingYogi(false); alert('Buchung konnte nicht angelegt werden.'); return }
+      if (yogi.email && !yogi.is_dummy) {
+        try {
+          const eventLabel = isFreeEvent
+            ? `${session.name} (kostenlos)`
+            : `${session.name} (${session.price_eur} € — bitte bar mitbringen oder vorab überweisen)`
+          await Email.bookingConfirmed({
+            email: yogi.email, firstName: yogi.first_name || 'Yogi',
+            courseName: eventLabel, date: session.date,
+            timeStart: session.time_start, durationMin: session.duration_min || 75,
+            isSingle: true, sessionType,
+          })
+        } catch (e) { /* nicht-blockierend */ }
+      }
+      await supabase.from('audit_log').insert({
+        action: 'admin_added_yogi_to_event',
+        details: { user_id: yogi.id, session_id: session.id, session_type: sessionType,
+                   credit_used: false, price_eur: isPaidEvent ? session.price_eur : null }
+      })
+    } else {
+      // Einzelstunde / course_session / event_credit → Credit-Logik
+      const pick = await selectCreditForBooking(supabase, yogi.id, session.id, session.date, session.time_start)
+      if (!pick.ok) {
+        alert(`${pick.message}\n\nBitte vergib zuerst Credits ueber die Yogi-Detail-Seite.`)
+        setSessionAddingYogi(false)
+        return
+      }
+      const { error } = await supabase.from('bookings').upsert({
+        user_id: yogi.id, session_id: session.id,
+        credit_id: pick.creditId, type: pick.type || 'single', status: 'active',
+        origin_session_id: pick.originSessionId || null,
+        cancelled_at: null, cancel_late: false,
+      }, { onConflict: 'user_id,session_id' })
+      if (error) { setSessionAddingYogi(false); alert('Buchung konnte nicht angelegt werden.'); return }
+      if (yogi.email && !yogi.is_dummy) {
+        try {
+          await Email.bookingConfirmed({
+            email: yogi.email, firstName: yogi.first_name || 'Yogi',
+            courseName: session.name || '', date: session.date,
+            timeStart: session.time_start, durationMin: session.duration_min || 75,
+            isSingle: true, sessionType,
+          })
+        } catch(e) {}
+      }
+      await supabase.from('audit_log').insert({
+        action: 'admin_added_yogi_to_session',
+        details: { user_id: yogi.id, session_id: session.id, session_type: sessionType }
+      })
+    }
+    setShowSessionAddYogi(false)
+    setSessionAddYogiSearch('')
+    setSessionAddYogiResults([])
+    setSessionAddingYogi(false)
+    // Reload Modal-Daten
+    loadSessionParticipants(session)
+    loadData()
+  }
+
+  // Welle 4.6: Yogi austragen direkt im Modal (Event: direkt-Confirm,
+  // Single: 3h-Frist-Confirm wenn applicable).
+  async function cancelBookingFromModal(bookingId: string, userId: string) {
+    if (!participantsSession) return
+    const session = participantsSession
+    const sessionType: string = session.session_type || 'course_session'
+    const isEvent = sessionType === 'event_free' || sessionType === 'event_paid'
+    const isPaidEvent = sessionType === 'event_paid'
+
+    let confirmText = 'Yogi austragen?'
+    if (isEvent) {
+      confirmText = 'Yogi aus dem Event austragen?'
+      if (isPaidEvent) {
+        const sessionStart = new Date(`${session.date}T${session.time_start}`).getTime()
+        const within7d = (sessionStart - Date.now()) <= 7 * 24 * 60 * 60 * 1000 && sessionStart > Date.now()
+        if (within7d) {
+          confirmText = `Yogi aus dem Event austragen?\n\n⚠️ Innerhalb der 7-Tage-Stornofrist — eine eventuell schon geleistete Bezahlung (${session.price_eur || '?'} €) musst du extern erstatten.`
+        }
+      }
+    } else {
+      const sessionStart = new Date(`${session.date}T${session.time_start}`).getTime()
+      const within3h = (sessionStart - Date.now()) <= 3 * 60 * 60 * 1000 && sessionStart > Date.now()
+      if (within3h) {
+        confirmText = `Innerhalb der 3-Stunden-Frist!\n\nWenn du jetzt austraegst, verfaellt der Credit des Yogi.\nTrotzdem austragen?`
+      }
+    }
+    if (!confirm(confirmText)) return
+
+    await supabase.from('bookings').update({
+      status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false,
+    }).eq('id', bookingId)
+    await supabase.from('audit_log').insert({
+      action: 'booking_cancelled_by_admin',
+      details: { booking_id: bookingId, session_id: session.id, user_id: userId,
+                 session_type: sessionType, credit_returned: !isEvent, within_3h: false }
+    })
+    loadSessionParticipants(session)
+    loadData()
+  }
+
+  // Welle 4.6 (Sarah 2026-05-26): Sprechblase-Promote auch fuer Events/Singles
+  // (vorher nur in /admin/sessions/[id] und nur fuer Charity). Postet die
+  // Session in das App-Banner ('admin_announcement') das alle Yogis sehen.
+  async function promoteSessionToSpeechbubble(s: any) {
+    const sessType = s.session_type
+    const isEventFree = sessType === 'event_free'
+    const isEventPaid = sessType === 'event_paid'
+    const isSingle = sessType === 'single'
+    const isCharitySession = s.course?.is_free
+    const sessionDate = new Date(s.date)
+    const isThisYear = sessionDate.getFullYear() === new Date().getFullYear()
+    const dateFormatted = sessionDate.toLocaleDateString('de-DE',
+      isThisYear
+        ? { weekday: 'long', day: 'numeric', month: 'long' }
+        : { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    const timeStr = s.time_start?.slice(0, 5)
+    const sessionName = s.name || s.course?.name || 'Stunde'
+    let message = ''
+    if (isEventPaid) {
+      message = `Event: ${sessionName} am ${dateFormatted} um ${timeStr} Uhr — ${s.price_eur} €`
+    } else if (isEventFree) {
+      message = `Kostenloses Event: ${sessionName} am ${dateFormatted} um ${timeStr} Uhr`
+    } else if (isCharitySession) {
+      message = `${sessionName} am ${dateFormatted} um ${timeStr} Uhr — kostenlos!`
+    } else if (isSingle) {
+      message = `Einzelstunde: ${sessionName} am ${dateFormatted} um ${timeStr} Uhr`
+    } else {
+      message = `${sessionName} am ${dateFormatted} um ${timeStr} Uhr`
+    }
+    if (!confirm(`In Sprechblase für alle Yogis posten?\n\n"${message}"`)) return
+    const { error } = await supabase.from('admin_announcement')
+      .update({
+        message, is_active: true,
+        link_url: `/kurse/${s.id}`, link_label: isEventPaid || isEventFree ? 'Zum Event' : 'Zur Stunde',
+        updated_at: new Date().toISOString(),
+      }).eq('id', 1)
+    if (error) alert('Fehler: ' + error.message)
+    else alert('In der Sprechblase für alle Yogis gepostet.')
+  }
+
+  // Welle 2.11: Teilen-Button auf Karte (Web Share / Copy-Link Fallback).
+  // Welle 4.6: bei Events/Charity zusaetzlich Sprechblase-Option anbieten.
   async function shareSession(s: any) {
     const url = `${window.location.origin}/kurse/${s.id}`
     const title = s.name || 'Yoga-Stunde'
@@ -1556,9 +1734,12 @@ export default function AdminKursePage() {
                 und "Beendete Stunden & Events" (date < heute, eigene Sektion unten). */}
             <p className="section-label mt-6">Geplante Stunden & Events</p>
             {(() => {
-              const today = new Date().toISOString().split('T')[0]
-              // Welle 3.5 (Sarah 2026-05-26): abgesagte ausschliessen (eigene Sektion)
-              const upcoming = containerSessions.filter((s: any) => s.date >= today && !s.is_cancelled)
+              // Welle 4.5 (Sarah 2026-05-26): "geplant" heisst sessionStart >= now
+              // (nicht mehr nur Datum-Vergleich). Heutiges 18-Uhr-Event ist um
+              // 19 Uhr in "Beendete", nicht erst morgen.
+              const nowMs = Date.now()
+              const isUpcoming = (s: any) => new Date(`${s.date}T${s.time_start}`).getTime() >= nowMs
+              const upcoming = containerSessions.filter((s: any) => isUpcoming(s) && !s.is_cancelled)
               if (upcoming.length === 0) {
                 return <p className="text-sm text-yoga-text/40 text-center py-4">Noch keine geplanten Stunden oder Events</p>
               }
@@ -1566,16 +1747,19 @@ export default function AdminKursePage() {
             })()}
             {containerSessions
               .filter((s: any) => {
-                const today = new Date().toISOString().split('T')[0]
-                return s.date >= today && !s.is_cancelled
+                const nowMs = Date.now()
+                return new Date(`${s.date}T${s.time_start}`).getTime() >= nowMs && !s.is_cancelled
               })
               .map((s: any) => {
                 const activeBookings = (s.bookings || []).filter((b: any) => b.status === 'active').length
                 const ext = s.external_participants_count || 0
                 const totalCount = activeBookings + ext
                 const overbooked = s.max_spots != null && totalCount > s.max_spots
+                // Welle 4.5 (Sarah 2026-05-26): Externe Teilnehmer nur bei Events,
+                // NICHT bei Einzelstunden ('single'). Bei Einzelstunden gibt es
+                // logisch keine "externen" — entweder Yogi ist gebucht oder nicht.
+                const isEventType = s.session_type === 'event_free' || s.session_type === 'event_paid' || s.session_type === 'event_credit'
                 // Type-Badge wie der "Kurs/Einzelstunde"-Badge bei Kursen.
-                // Welle 2.9: nutzt 'badge' Klasse fuer konsistente Groesse mit Kursen.
                 const typeBadge = s.session_type === 'single' ? { label: 'Einzelstunde', cls: 'badge-wait' }
                   : s.session_type === 'event_free' ? { label: 'Kostenlos', cls: 'badge-free' }
                   : s.session_type === 'event_credit' ? { label: 'Credit', cls: 'badge-wait' }
@@ -1597,7 +1781,7 @@ export default function AdminKursePage() {
                           {new Date(s.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })}
                           {' · '}{s.time_start?.slice(0,5)} Uhr · {s.duration_min} min
                         </div>
-                        {/* External-Counter inline */}
+                        {/* External-Counter inline — NUR bei Events (Welle 4.5) */}
                         <div className="text-sm text-yoga-text/60 mt-0.5 flex items-center gap-1 flex-wrap">
                           <span>
                             Teilnehmer:{' '}
@@ -1605,16 +1789,18 @@ export default function AdminKursePage() {
                             {s.max_spots ? `/${s.max_spots}` : ''}
                             {overbooked && <span className="ml-1 text-xs font-semibold text-yoga-red-text">· überbucht</span>}
                           </span>
-                          <span className="text-xs text-yoga-text/45 ml-1">·</span>
-                          <span className="text-xs text-yoga-text/60 ml-1">extern:</span>
-                          <button type="button"
-                            onClick={() => updateExternalCount(s.id, Math.max(0, ext - 1))}
-                            disabled={ext <= 0}
-                            className="w-6 h-6 rounded-full border border-yoga-border2 text-yoga-text/70 text-xs font-bold cursor-pointer hover:opacity-80 disabled:opacity-30 flex items-center justify-center bg-transparent">−</button>
-                          <strong className="text-xs w-4 text-center">{ext}</strong>
-                          <button type="button"
-                            onClick={() => updateExternalCount(s.id, ext + 1)}
-                            className="w-6 h-6 rounded-full border border-yoga-border2 text-yoga-text/70 text-xs font-bold cursor-pointer hover:opacity-80 flex items-center justify-center bg-transparent">+</button>
+                          {isEventType && <>
+                            <span className="text-xs text-yoga-text/45 ml-1">·</span>
+                            <span className="text-xs text-yoga-text/60 ml-1">extern:</span>
+                            <button type="button"
+                              onClick={() => updateExternalCount(s.id, Math.max(0, ext - 1))}
+                              disabled={ext <= 0}
+                              className="w-6 h-6 rounded-full border border-yoga-border2 text-yoga-text/70 text-xs font-bold cursor-pointer hover:opacity-80 disabled:opacity-30 flex items-center justify-center bg-transparent">−</button>
+                            <strong className="text-xs w-4 text-center">{ext}</strong>
+                            <button type="button"
+                              onClick={() => updateExternalCount(s.id, ext + 1)}
+                              className="w-6 h-6 rounded-full border border-yoga-border2 text-yoga-text/70 text-xs font-bold cursor-pointer hover:opacity-80 flex items-center justify-center bg-transparent">+</button>
+                          </>}
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
@@ -1647,18 +1833,25 @@ export default function AdminKursePage() {
                         className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70">
                         <i className="ti ti-users mr-1" />Teilnehmer
                       </button>
+                      {/* Welle 4.6: bei Events/Charity Sprechblase-Button als 4. Option */}
+                      {(isEventType || s.course?.is_free) && (
+                        <button onClick={() => promoteSessionToSpeechbubble(s)}
+                          className="text-sm border border-yoga-green-text/30 rounded-full py-2 px-3 font-semibold hover:opacity-80 cursor-pointer text-yoga-green-text bg-yoga-green-bg flex-shrink-0"
+                          title="In Sprechblase posten">
+                          <i className="ti ti-bullhorn" />
+                        </button>
+                      )}
                       <button onClick={() => shareSession(s)}
                         className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70">
                         <i className="ti ti-share mr-1" />Teilen
                       </button>
                     </div>
                     {/* Buttons-Reihe 2: Stunde absagen + Löschen.
-                        Welle 3.6 (Sarah 2026-05-26): style={{ background:
-                        var(...)}} hat nicht funktioniert (CSS-Var existiert
-                        nicht). Jetzt Tailwind-Klassen bg-yoga-gray /
-                        bg-yoga-red-bg direkt. */}
+                        Welle 4.6 (Sarah 2026-05-26): Absagen sichtbar wenn
+                        AKTIVE ODER EXTERNE Yogis drin (vorher nur active).
+                        Sarah-Wunsch: "absagen immer wenn yogis drin sind". */}
                     <div className="flex gap-2 mt-2">
-                      {activeBookings > 0 && (
+                      {(activeBookings > 0 || ext > 0) && (
                         <button onClick={() => router.push(`/admin/sessions/${s.id}?cancel=1`)}
                           className="flex-1 text-sm rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer border-0 text-yoga-text/70 bg-yoga-gray">
                           <i className="ti ti-ban mr-1" />Absagen
@@ -1681,9 +1874,12 @@ export default function AdminKursePage() {
                 Absagen-Buttons fallen weg (keine sinnvolle Aktion mehr in
                 der Vergangenheit), nur Teilnehmer + Löschen bleiben. */}
             {(() => {
-              const today = new Date().toISOString().split('T')[0]
-              // Welle 3.5: abgesagte ausschliessen (eigene Sektion unten)
-              const endedSessions = containerSessions.filter((s: any) => s.date < today && !s.is_cancelled)
+              // Welle 4.5 (Sarah 2026-05-26): "beendet" heisst sessionStart < now
+              // (Stunde hat begonnen — egal ob heute oder gestern).
+              const nowMs = Date.now()
+              const endedSessions = containerSessions.filter((s: any) =>
+                new Date(`${s.date}T${s.time_start}`).getTime() < nowMs && !s.is_cancelled
+              )
               if (endedSessions.length === 0) return null
               return <>
                 <p className="section-label mt-6">Beendete Stunden & Events</p>
@@ -2466,12 +2662,15 @@ export default function AdminKursePage() {
         const internal = sessionBookings.length
         const total = internal + ext
         const cap = participantsSession.max_spots
+        // Welle 4.6 (Sarah 2026-05-26): Externe Counter NUR bei Events sichtbar.
+        const sessType = participantsSession.session_type
+        const isEventType = sessType === 'event_free' || sessType === 'event_paid' || sessType === 'event_credit'
         return (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay" onClick={() => { setParticipantsSession(null); setSessionBookings([]) }}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay" onClick={() => { setParticipantsSession(null); setSessionBookings([]); setShowSessionAddYogi(false) }}>
           <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-base font-bold">Teilnehmer</h3>
-              <button onClick={() => { setParticipantsSession(null); setSessionBookings([]) }} className="bg-transparent border-0 cursor-pointer text-yoga-text/40">
+              <button onClick={() => { setParticipantsSession(null); setSessionBookings([]); setShowSessionAddYogi(false) }} className="bg-transparent border-0 cursor-pointer text-yoga-text/40">
                 <i className="ti ti-x text-xl" />
               </button>
             </div>
@@ -2479,7 +2678,7 @@ export default function AdminKursePage() {
               {participantsSession.name || '—'} · {new Date(participantsSession.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })} · {participantsSession.time_start?.slice(0,5)} Uhr
             </p>
 
-            {/* Welle 3.5: Counter-Übersicht direkt unter dem Titel */}
+            {/* Welle 3.5: Counter-Übersicht. Welle 4.6: Externe-Counter nur bei Events. */}
             <div className="bg-yoga-gray rounded-yoga p-3 mb-4">
               <div className="text-sm font-semibold mb-1">
                 {total}{cap ? ` / ${cap}` : ''} Teilnehmer gesamt
@@ -2487,50 +2686,92 @@ export default function AdminKursePage() {
               <div className="text-xs text-yoga-text/60 mb-2">
                 {internal} eingebucht{ext > 0 ? ` · ${ext} extern` : ''}
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-yoga-text/60">Externe Teilnehmer:</span>
-                <button type="button"
-                  onClick={async () => {
-                    await updateExternalCount(participantsSession.id, Math.max(0, ext - 1))
-                    setParticipantsSession((prev: any) => prev ? { ...prev, external_participants_count: Math.max(0, ext - 1) } : prev)
-                  }}
-                  disabled={ext <= 0}
-                  className="w-7 h-7 rounded-full border border-yoga-border2 text-yoga-text/70 text-sm font-bold cursor-pointer hover:opacity-80 disabled:opacity-30 flex items-center justify-center bg-transparent">−</button>
-                <strong className="text-sm w-5 text-center">{ext}</strong>
-                <button type="button"
-                  onClick={async () => {
-                    await updateExternalCount(participantsSession.id, ext + 1)
-                    setParticipantsSession((prev: any) => prev ? { ...prev, external_participants_count: ext + 1 } : prev)
-                  }}
-                  className="w-7 h-7 rounded-full border border-yoga-border2 text-yoga-text/70 text-sm font-bold cursor-pointer hover:opacity-80 flex items-center justify-center bg-transparent">+</button>
-              </div>
+              {isEventType && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-yoga-text/60">Externe Teilnehmer:</span>
+                  <button type="button"
+                    onClick={async () => {
+                      await updateExternalCount(participantsSession.id, Math.max(0, ext - 1))
+                      setParticipantsSession((prev: any) => prev ? { ...prev, external_participants_count: Math.max(0, ext - 1) } : prev)
+                    }}
+                    disabled={ext <= 0}
+                    className="w-7 h-7 rounded-full border border-yoga-border2 text-yoga-text/70 text-sm font-bold cursor-pointer hover:opacity-80 disabled:opacity-30 flex items-center justify-center bg-transparent">−</button>
+                  <strong className="text-sm w-5 text-center">{ext}</strong>
+                  <button type="button"
+                    onClick={async () => {
+                      await updateExternalCount(participantsSession.id, ext + 1)
+                      setParticipantsSession((prev: any) => prev ? { ...prev, external_participants_count: ext + 1 } : prev)
+                    }}
+                    className="w-7 h-7 rounded-full border border-yoga-border2 text-yoga-text/70 text-sm font-bold cursor-pointer hover:opacity-80 flex items-center justify-center bg-transparent">+</button>
+                </div>
+              )}
             </div>
+
+            {/* Welle 4.6: Yogi hinzufügen Button direkt im Modal */}
+            <button onClick={() => { setShowSessionAddYogi(true); setSessionAddYogiSearch(''); setSessionAddYogiResults([]) }}
+              className="w-full btn-secondary text-sm mb-4 flex items-center justify-center gap-2">
+              <i className="ti ti-user-plus" />Yogi hinzufügen
+            </button>
 
             <p className="section-label">Eingebuchte Yogis ({internal})</p>
             {sessionBookings.length === 0 ? (
               <p className="text-sm text-yoga-text/40 text-center py-6">Noch keine Buchungen</p>
             ) : sessionBookings.map((b: any) => (
-              <button key={b.id}
-                onClick={() => { setParticipantsSession(null); setSessionBookings([]); router.push(`/admin/yogis/${b.profile.id}`) }}
-                className="w-full flex items-center justify-between py-3 border-b border-yoga-border text-left hover:opacity-70 transition-opacity bg-transparent border-x-0 border-t-0 cursor-pointer">
-                <div>
+              <div key={b.id} className="flex items-center justify-between py-3 border-b border-yoga-border gap-2">
+                <button
+                  onClick={() => { setParticipantsSession(null); setSessionBookings([]); router.push(`/admin/yogis/${b.profile.id}`) }}
+                  className="flex-1 text-left hover:opacity-70 transition-opacity bg-transparent border-0 cursor-pointer min-w-0">
                   <div className="text-sm font-semibold flex items-center gap-2">
                     {b.profile?.first_name} {b.profile?.last_name}
                     {b.profile?.is_dummy && (
                       <span className="text-xs bg-yoga-text text-white rounded-full px-2 py-0.5 font-normal">Dummy</span>
                     )}
                   </div>
-                  <div className="text-xs text-yoga-text/50 mt-0.5">{b.profile?.email || 'Kein Login'}</div>
-                </div>
-                <i className="ti ti-chevron-right text-yoga-text/30" />
-              </button>
+                  <div className="text-xs text-yoga-text/50 mt-0.5 truncate">{b.profile?.email || 'Kein Login'}</div>
+                </button>
+                {/* Welle 4.6: Austragen pro Yogi-Zeile */}
+                <button onClick={() => cancelBookingFromModal(b.id, b.user_id)}
+                  className="text-xs bg-yoga-red-bg text-yoga-red-text rounded-full px-2.5 py-1 cursor-pointer font-semibold flex-shrink-0 border-0 hover:opacity-80">
+                  Austragen
+                </button>
+              </div>
             ))}
-            {/* Welle 2.11: Buchungen manuell aendern weiterhin via /admin/sessions/[id] */}
-            <button onClick={() => router.push(`/admin/sessions/${participantsSession.id}`)}
-              className="w-full mt-4 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70 bg-transparent">
-              <i className="ti ti-settings mr-1" />Stunde verwalten (Yogi hinzufügen)
-            </button>
+            {/* Welle 4.6: "Stunde verwalten" Link ENTFERNT — alles im Modal */}
           </div>
+
+          {/* Welle 4.6: Yogi-Suche Sub-Modal (innerhalb Teilnehmer-Modal) */}
+          {showSessionAddYogi && (
+            <div className="fixed inset-0 bg-black/50 z-[70] flex items-end modal-overlay" onClick={() => setShowSessionAddYogi(false)}>
+              <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-bold">Yogi hinzufügen</h3>
+                  <button onClick={() => setShowSessionAddYogi(false)} className="bg-transparent border-0 cursor-pointer text-yoga-text/40">
+                    <i className="ti ti-x text-xl" />
+                  </button>
+                </div>
+                <input className="field-input mb-3" placeholder="Name oder E-Mail..." autoFocus
+                  value={sessionAddYogiSearch} onChange={e => searchYogisForSession(e.target.value)} />
+                {sessionAddYogiSearch.length >= 2 && sessionAddYogiResults.length === 0 && (
+                  <p className="text-sm text-yoga-text/40 text-center py-3">Kein Yogi gefunden</p>
+                )}
+                {sessionAddYogiResults.map(yogi => (
+                  <div key={yogi.id} className="flex items-center justify-between py-3 border-b border-yoga-border">
+                    <div>
+                      <div className="text-sm font-semibold">
+                        {yogi.first_name} {yogi.last_name}
+                        {yogi.is_dummy && <span className="ml-2 text-xs bg-yoga-text text-white rounded-full px-2 py-0.5">Dummy</span>}
+                      </div>
+                      <div className="text-xs text-yoga-text/50">{yogi.email || 'Kein Login'}</div>
+                    </div>
+                    <button onClick={() => addYogiToSessionFromModal(yogi)} disabled={sessionAddingYogi}
+                      className="text-xs bg-yoga-text text-yoga-bg rounded-full px-3 py-1.5 font-semibold border-0 cursor-pointer disabled:opacity-40">
+                      {sessionAddingYogi ? '...' : 'Hinzufügen'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         )
       })()}

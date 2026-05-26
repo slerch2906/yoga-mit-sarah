@@ -1988,8 +1988,9 @@ export default function AdminKursePage() {
             })()}
 
             {/* Welle 3.5 (Sarah 2026-05-26): Abgesagte Stunden & Events —
-                eigene Sektion. Karten sind durchgestrichen rot markiert und
-                bieten nur "Endgültig löschen" — analog Abgebrochene Kurse.
+                eigene Sektion. Hotfix Welle 4.5: KEINE durchgestrichenen Titel
+                (Sarah-Wunsch). Differenzierung via text-yoga-text/60 (gedimmt)
+                + rote „Abgesagt"-Pille + opacity-70 auf der ganzen Karte.
                 Wenn null: Sektion ausgeblendet. */}
             {(() => {
               const cancelledSessions = containerSessions.filter((s: any) => s.is_cancelled)

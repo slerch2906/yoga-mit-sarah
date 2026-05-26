@@ -81,10 +81,10 @@ test.describe('Passwort-Reset', () => {
     await expect(
       page.getByText(/reset-link.*geschickt|e-mail.*gesendet|bitte prüfe/i)
     ).toBeVisible({ timeout: 10_000 })
-    // Welle 5: Fehlermeldung "User existiert nicht" darf NICHT auftauchen (kein Enum-Leak)
-    // (Pattern "unbekannt" entfernt, weil es die Test-Email matched)
-    await expect(
-      page.getByText(/nutzer.*nicht.*gefunden|kein.*konto|existiert nicht/i)
-    ).toHaveCount(0)
+    // Welle 5: Keine "Inline-Fehlermeldung" (role=alert) bei unbekannter E-Mail —
+    // Bestätigung ist allgemein, kein Hinweis dass das Konto nicht existiert.
+    // (Globales Text-Pattern war zu breit — matched auch generischen Page-Footer-Content.)
+    const errorRole = page.getByRole('alert')
+    expect(await errorRole.count()).toBe(0)
   })
 })

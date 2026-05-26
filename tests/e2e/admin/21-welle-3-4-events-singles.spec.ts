@@ -53,7 +53,15 @@ test.describe('[E2E] Welle 3/4 Source — /admin/kurse', () => {
     expect(src).toMatch(/cancelledSessions = containerSessions\.filter\(\(s: any\) => s\.is_cancelled\)/)
     // Welle 4.5 Sarah-Hotfix (2026-05-26): "ich möchte keine durchgestrichenen Titel"
     // — Differenzierung statt line-through durch text-yoga-text/60 + rote Pille + opacity-70.
-    expect(src).not.toMatch(/line-through/)
+    // Genauer Check: Im cancelledSessions-Block selbst (~50 Zeilen ab Anker) darf kein
+    // line-through stehen. line-through existiert noch für isExcluded-Yogi-Markierung
+    // an anderer Stelle (das ist erwünscht — Yogi ausgeschlossen vom Einzeltermin).
+    const cancelledBlockMatch = src.match(/Abgesagte Stunden & Events[\s\S]{0,2500}?(?=\{\/\*\s*Welle 2\.5)/)
+    expect(cancelledBlockMatch, 'cancelledSessions-Block muss isoliert findbar sein').toBeTruthy()
+    expect(cancelledBlockMatch![0]).not.toMatch(/line-through/)
+    // Stattdessen die explizite Differenzierungs-Klassen
+    expect(cancelledBlockMatch![0]).toMatch(/text-yoga-text\/60/)
+    expect(cancelledBlockMatch![0]).toMatch(/opacity-70/)
     // Sektion wird nur gerendert wenn >0 Einträge
     expect(src).toMatch(/cancelledSessions\.length === 0[\s\S]*?return null/)
   })

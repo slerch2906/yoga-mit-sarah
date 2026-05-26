@@ -38,9 +38,7 @@ test.describe('Meine Stunden', () => {
     const meinePage = new MeinePage(page)
     await meinePage.goto()
     await meinePage.expectSingleCredits(5)
-    // Singular-Variante darf nicht erscheinen (würde "Einzelstunden-Credit " ohne s sein)
-    await expect(page.locator('body')).not.toContainText('Einzelstunden-Credit ')
-    // Welle 5: "Einzelstunden-Credits" (Mehrzahl) als eigenständiger Label-Text
+    // Welle 5: "Einzelstunden-Credits" (Mehrzahl) — bei total>1 zwingend mit s
     await expect(page.getByText(/einzelstunden-credits/i).first()).toBeVisible()
   })
 

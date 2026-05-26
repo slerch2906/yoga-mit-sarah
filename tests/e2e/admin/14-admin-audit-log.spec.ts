@@ -102,9 +102,11 @@ test.describe('Audit-Log: /admin/protokoll Page rendert Einträge', () => {
     // Header sichtbar
     await expect(page.getByRole('heading', { name: /protokoll/i }).first()).toBeVisible({ timeout: 8_000 })
 
-    // Liste oder Empty-State sichtbar
+    // Liste oder Empty-State sichtbar — Welle 5 (Sarah 2026-05-26): Raw-Action-Strings
+    // sind seit dem ACTION_LABELS-Fix nicht mehr im UI sichtbar; jetzt das gemappte Label
+    // "Stunde gebucht"/"Stunde storniert" suchen ODER den Empty-State.
     await expect(
-      page.getByText(/booking_created|booking_cancelled|keine.*einträge|keine.*protokoll/i).first()
+      page.getByText(/stunde gebucht|stunde storniert|keine.*einträge|keine.*protokoll/i).first()
     ).toBeVisible({ timeout: 8_000 })
   })
 })

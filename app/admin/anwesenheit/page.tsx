@@ -142,13 +142,16 @@ function AnwesenheitInner() {
         {bookings.length === 0 ? (
           <p className="text-center text-yoga-text/40 text-sm py-6">Niemand angemeldet</p>
         ) : bookings.map(b => (
-          <div key={b.id} className="card mb-2 flex items-center justify-between">
+          /* Sarah-Wunsch: Yogi-Zeile klickbar → Yogi-Profil */
+          <button key={b.id}
+            onClick={() => router.push(`/admin/yogis/${b.user_id}`)}
+            className="card mb-2 w-full text-left flex items-center justify-between bg-transparent border border-yoga-border cursor-pointer hover:opacity-80 transition-opacity">
             <div>
               <div className="text-sm font-semibold">{b.profile?.first_name} {b.profile?.last_name}</div>
               <div className="text-xs text-yoga-text/50">{b.profile?.email}</div>
             </div>
             <span className="badge badge-enrolled">Angemeldet</span>
-          </div>
+          </button>
         ))}
 
         <button onClick={cancelSession} disabled={cancelling}

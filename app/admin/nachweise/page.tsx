@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
@@ -9,6 +10,7 @@ export default function NachweisePage() {
   const [acceptances, setAcceptances] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
+  const router = useRouter()
 
   useEffect(() => { loadData() }, [])
 
@@ -66,12 +68,15 @@ export default function NachweisePage() {
         {acceptances.map(a => (
           <div key={a.id} className="card mb-3">
             <div className="flex items-start justify-between mb-2">
-              <div>
+              {/* Sarah-Wunsch: Yogi-Name klickbar → Yogi-Profil */}
+              <button
+                onClick={() => router.push(`/admin/yogis/${a.user_id}`)}
+                className="text-left bg-transparent border-0 p-0 cursor-pointer hover:opacity-70 transition-opacity flex-1 min-w-0">
                 <div className="text-sm font-bold">
                   {a.full_name || `${a.profile?.first_name} ${a.profile?.last_name}`}
                 </div>
                 <div className="text-xs text-yoga-text/55">{a.profile?.email}</div>
-              </div>
+              </button>
               <span className="badge badge-done text-xs">
                 v{a.agb_version || a.version || '2025-12'}
               </span>

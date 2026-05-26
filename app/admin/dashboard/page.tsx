@@ -822,11 +822,14 @@ export default function AdminDashboard() {
               <p className="section-label">Angemeldet ({sessionBookings.filter(b => b._type === 'booking' && b.status === 'active').length})</p>
               {sessionBookings.filter(b => b._type === 'booking' && b.status === 'active').map(b => (
                 <div key={b.id} className="card mb-2 flex items-center justify-between gap-2">
-                  <div className="flex-1 min-w-0">
+                  {/* Sarah-Wunsch: Name klickbar → Yogi-Profil (Modal vorher schließen) */}
+                  <button
+                    onClick={() => { setSelectedSession(null); setSessionBookings([]); router.push(`/admin/yogis/${b.user_id}`) }}
+                    className="flex-1 text-left bg-transparent border-0 p-0 cursor-pointer hover:opacity-70 transition-opacity min-w-0">
                     <div className="text-sm font-semibold">{b.profile?.first_name} {b.profile?.last_name}</div>
-                    <div className="text-xs text-yoga-text/50">{b.profile?.email}</div>
-                  </div>
-                  <button onClick={() => cancelBookingForYogi(b.id, b.credit_id, selectedSession.id)}
+                    <div className="text-xs text-yoga-text/50 truncate">{b.profile?.email}</div>
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); cancelBookingForYogi(b.id, b.credit_id, selectedSession.id) }}
                     className="text-xs bg-yoga-red-bg text-yoga-red-text border-0 rounded-full px-2.5 py-1 cursor-pointer font-semibold flex-shrink-0">
                     Austragen
                   </button>
@@ -838,10 +841,12 @@ export default function AdminDashboard() {
                 <>
                   <p className="section-label mt-3">Ausgetragen ({sessionBookings.filter(b => b._type === 'booking' && b.status === 'cancelled').length})</p>
                   {sessionBookings.filter(b => b._type === 'booking' && b.status === 'cancelled').map(b => (
-                    <div key={b.id} className="card mb-2 opacity-60 flex items-center justify-between">
+                    <button key={b.id}
+                      onClick={() => { setSelectedSession(null); setSessionBookings([]); router.push(`/admin/yogis/${b.user_id}`) }}
+                      className="card mb-2 opacity-60 w-full text-left flex items-center justify-between bg-transparent border border-yoga-border cursor-pointer hover:opacity-80 transition-opacity">
                       <div className="text-sm">{b.profile?.first_name} {b.profile?.last_name}</div>
                       <span className="badge badge-left">Ausgetragen</span>
-                    </div>
+                    </button>
                   ))}
                 </>
               )}
@@ -851,10 +856,12 @@ export default function AdminDashboard() {
                 <>
                   <p className="section-label mt-3">Warteliste ({sessionBookings.filter(b => b._type === 'waitlist' && b.type === 'waitlist').length}) · Benachrichtigungen ({sessionBookings.filter(b => b._type === 'waitlist' && b.type === 'notify').length})</p>
                   {sessionBookings.filter(b => b._type === 'waitlist').map(w => (
-                    <div key={w.id} className="card mb-2 flex items-center justify-between">
+                    <button key={w.id}
+                      onClick={() => { setSelectedSession(null); setSessionBookings([]); router.push(`/admin/yogis/${w.user_id}`) }}
+                      className="card mb-2 w-full text-left flex items-center justify-between bg-transparent border border-yoga-border cursor-pointer hover:opacity-80 transition-opacity">
                       <div className="text-sm">{w.profile?.first_name} {w.profile?.last_name}</div>
                       <span className="badge badge-wait">{w.type === 'notify' ? 'Benachrichtigung' : `Pos. ${w.position}`}</span>
-                    </div>
+                    </button>
                   ))}
                 </>
               )}

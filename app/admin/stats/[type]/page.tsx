@@ -89,8 +89,10 @@ export default function AdminStatsPage() {
                 const sess = item.session
                 const course = sess?.course
                 return (
-                  <div key={item.id}
-                    className={`px-4 py-3 ${i < items.length - 1 ? 'border-b border-yoga-border' : ''}`}>
+                  /* Sarah-Wunsch: Yogi-Zeile klickbar → Yogi-Profil */
+                  <button key={item.id}
+                    onClick={() => router.push(`/admin/yogis/${item.user_id}`)}
+                    className={`px-4 py-3 w-full text-left bg-transparent border-0 cursor-pointer hover:opacity-70 transition-opacity ${i < items.length - 1 ? 'border-b border-yoga-border' : ''}`}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="text-sm font-semibold truncate">
@@ -105,15 +107,17 @@ export default function AdminStatsPage() {
                         {item.type === 'waitlist' ? `Pos. ${item.position}` : 'Benach.'}
                       </span>
                     </div>
-                  </div>
+                  </button>
                 )
               }
 
               // buchungen / abmeldungen
               const details = item.details || {}
               return (
-                <div key={item.id}
-                  className={`px-4 py-3 ${i < items.length - 1 ? 'border-b border-yoga-border' : ''}`}>
+                /* Sarah-Wunsch: Yogi-Zeile klickbar → Yogi-Profil */
+                <button key={item.id}
+                  onClick={() => item.user_id && router.push(`/admin/yogis/${item.user_id}`)}
+                  className={`px-4 py-3 w-full text-left bg-transparent border-0 cursor-pointer hover:opacity-70 transition-opacity ${i < items.length - 1 ? 'border-b border-yoga-border' : ''}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm font-semibold truncate">
@@ -128,7 +132,7 @@ export default function AdminStatsPage() {
                       {new Date(item.created_at).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
                     </div>
                   </div>
-                </div>
+                </button>
               )
             })}
           </div>

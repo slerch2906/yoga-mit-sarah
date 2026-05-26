@@ -923,14 +923,17 @@ export default function AdminSessionPage() {
             {bookings.map((b, i) => (
               <div key={b.id}
                 className={`px-4 py-3 flex items-center justify-between gap-2 ${i < bookings.length - 1 ? 'border-b border-yoga-border' : ''}`}>
-                <div>
+                {/* Sarah-Wunsch: Name klickbar → Yogi-Profil */}
+                <button
+                  onClick={() => router.push(`/admin/yogis/${b.user_id}`)}
+                  className="flex-1 text-left bg-transparent border-0 p-0 cursor-pointer hover:opacity-70 transition-opacity min-w-0">
                   <div className="text-sm font-semibold">
                     {b.profile?.first_name} {b.profile?.last_name}
                   </div>
-                  <div className="text-xs text-yoga-text/50">{b.profile?.email}</div>
-                </div>
+                  <div className="text-xs text-yoga-text/50 truncate">{b.profile?.email}</div>
+                </button>
                 {!session?.is_cancelled && (
-                  <button onClick={() => cancelBookingForYogi(b.id, b.credit_id, id)}
+                  <button onClick={(e) => { e.stopPropagation(); cancelBookingForYogi(b.id, b.credit_id, id) }}
                     className="text-xs bg-yoga-red-bg text-yoga-red-text border-0 rounded-full px-2.5 py-1 cursor-pointer font-semibold flex-shrink-0">
                     Austragen
                   </button>
@@ -951,14 +954,17 @@ export default function AdminSessionPage() {
               {waitlist.map((w, i) => (
                 <div key={w.id}
                   className={`px-4 py-3 flex items-center justify-between gap-2 ${i < waitlist.length - 1 ? 'border-b border-yoga-border' : ''}`}>
-                  <div className="flex-1 min-w-0">
+                  {/* Sarah-Wunsch: Name klickbar → Yogi-Profil */}
+                  <button
+                    onClick={() => router.push(`/admin/yogis/${w.user_id}`)}
+                    className="flex-1 text-left bg-transparent border-0 p-0 cursor-pointer hover:opacity-70 transition-opacity min-w-0">
                     <div className="text-sm font-semibold flex items-center gap-2">
                       <span className="text-xs text-yoga-text/50 font-normal">#{i + 1}</span>
                       <span className="truncate">{w.profile?.first_name} {w.profile?.last_name}</span>
                     </div>
                     <div className="text-xs text-yoga-text/50 truncate">{w.profile?.email}</div>
-                  </div>
-                  <button onClick={() => addWaitlistYogi(w)} disabled={!!promotingWaitlist}
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); addWaitlistYogi(w) }} disabled={!!promotingWaitlist}
                     className="text-xs bg-yoga-text text-yoga-bg border-0 rounded-full px-3 py-1.5 cursor-pointer font-semibold flex-shrink-0 disabled:opacity-50">
                     {promotingWaitlist === w.id ? '...' : 'Zur Stunde hinzufügen'}
                   </button>

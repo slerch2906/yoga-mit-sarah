@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
@@ -96,6 +97,7 @@ export default function ProtokolPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const supabase = createClient()
+  const router = useRouter()
 
   useEffect(() => { loadData() }, [])
 
@@ -184,9 +186,18 @@ export default function ProtokolPage() {
                     </span>
                     <span className="text-xs text-yoga-text/40 flex-shrink-0">{formatTime(log.created_at)}</span>
                   </div>
-                  <p className="text-xs text-yoga-text/60 mb-1">
-                    <i className="ti ti-user mr-1" />{actorName}
-                  </p>
+                  {/* Sarah-Wunsch: Actor klickbar → Yogi-Profil (wenn user_id vorhanden) */}
+                  {log.user_id && actor ? (
+                    <button
+                      onClick={() => router.push(`/admin/yogis/${log.user_id}`)}
+                      className="text-xs text-yoga-text/60 mb-1 bg-transparent border-0 p-0 cursor-pointer hover:opacity-70 transition-opacity text-left">
+                      <i className="ti ti-user mr-1" />{actorName}
+                    </button>
+                  ) : (
+                    <p className="text-xs text-yoga-text/60 mb-1">
+                      <i className="ti ti-user mr-1" />{actorName}
+                    </p>
+                  )}
                   {details.map((d, i) => (
                     <p key={i} className="text-xs text-yoga-text/50">{d}</p>
                   ))}

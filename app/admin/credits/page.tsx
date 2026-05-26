@@ -143,11 +143,14 @@ function CreditsVergebenInner() {
       <AppHeader title="Credits vergeben" isAdmin />
       <div className="px-4 py-4">
         {targetUser && (
-          <div className="card mb-4">
+          /* Sarah-Wunsch: Yogi-Karte klickbar → Yogi-Profil */
+          <button
+            onClick={() => userId && router.push(`/admin/yogis/${userId}`)}
+            className="card mb-4 w-full text-left bg-yoga-card border border-yoga-border cursor-pointer hover:opacity-80 transition-opacity">
             <p className="text-xs text-yoga-text/50 mb-0.5">Credits für</p>
             <p className="text-base font-bold">{targetUser.first_name} {targetUser.last_name}</p>
             <p className="text-sm text-yoga-text/50">{targetUser.email}</p>
-          </div>
+          </button>
         )}
         <p className="text-xs text-yoga-text/55 mb-3 leading-snug">
           Tipp: Wenn du einen Yogi <strong>in einen Kurs einbuchen</strong> willst, nutze stattdessen

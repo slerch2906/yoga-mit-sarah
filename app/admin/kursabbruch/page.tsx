@@ -52,13 +52,16 @@ export default function AdminKursabbruchPage() {
               return (
                 <div key={r.id} className="card mb-2">
                   <div className="flex items-center justify-between">
-                    <div>
+                    {/* Sarah-Wunsch: Yogi-Name klickbar → Yogi-Profil */}
+                    <button
+                      onClick={() => router.push(`/admin/yogis/${r.user_id}`)}
+                      className="text-left bg-transparent border-0 p-0 cursor-pointer hover:opacity-70 transition-opacity min-w-0 flex-1">
                       <div className="text-sm font-semibold">
                         {r.profile?.first_name} {r.profile?.last_name}
                       </div>
                       <div className="text-xs text-yoga-text/50">{r.profile?.email || 'Kein Login'}</div>
                       <div className="text-xs text-yoga-text/40 mt-0.5">{r.remaining_sessions} Stunden offen</div>
-                    </div>
+                    </button>
                     <div className="text-right flex-shrink-0 ml-3">
                       {!status && (
                         <span className="text-xs bg-yoga-amber-bg text-yoga-amber-text rounded-full px-2 py-0.5"> Offen</span>

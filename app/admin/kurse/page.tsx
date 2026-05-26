@@ -509,9 +509,12 @@ export default function AdminKursePage() {
       if (newCreditsCount > 0) {
         const expiry2y = new Date()
         expiry2y.setFullYear(expiry2y.getFullYear() + 2)
+        // Sarah-Wunsch 2026-05-26: course_id mitspeichern (Herkunftsangabe
+        // fuer die Credit-Karte: "Guthaben aus Kursabbruch · Kurs: X
+        // abgebrochen am ...").
         const { data: provCred } = await supabase.from('credits').insert({
           user_id: prof.id,
-          course_id: null,
+          course_id: cancellingCourse.id,
           model: 'guthaben',
           source: 'cancellation_choice',
           total: newCreditsCount,

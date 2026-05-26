@@ -288,10 +288,20 @@ export default function MeinePage() {
           </div>
         )}
 
-        {enrollments.length > 0 && (
-          <p className="section-label">{enrollments.length === 1 ? 'Dein Kurs' : 'Deine Kurse'}</p>
+        {/* Sarah-BugFix 2026-05-26: enrollments mit end_date in der Vergangenheit
+            (z.B. krankheitsbedingt ausgetragen) werden NICHT mehr in /meine
+            angezeigt. Yogi sieht stattdessen sein Krankheits-Guthaben in der
+            Credits-Sektion und kann damit einen neuen Kurs buchen. */}
+        {(() => {
+          const todayStr = new Date().toISOString().slice(0, 10)
+          const activeEnrollments = enrollments.filter((e: any) =>
+            !e.end_date || e.end_date > todayStr
+          )
+          return <>
+        {activeEnrollments.length > 0 && (
+          <p className="section-label">{activeEnrollments.length === 1 ? 'Dein Kurs' : 'Deine Kurse'}</p>
         )}
-        {enrollments.map((enrol, idx) => {
+        {activeEnrollments.map((enrol, idx) => {
           const sessions = courseSessions[enrol.course_id] || []
           // Absolviert erst wenn Session zeitlich vorbei ist (date+time+duration), nicht nur date
           const done = sessions.filter(s => isStarted(s) && s.myBooking?.status === 'active').length
@@ -395,6 +405,8 @@ export default function MeinePage() {
             </div>
           )
         })}
+          </>
+        })()}
 
         {/* Einzelstunden — alle Buchungen die NICHT in einem aktiv-enrolled Kurs sind.
             Regel (Sarah 2026-05-22): egal welcher booking.type oder Credit-Modell.

@@ -1758,7 +1758,7 @@ export default function AdminKursePage() {
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">
-                            <div className="text-base font-bold truncate line-through text-yoga-text/60">{s.name || '—'}</div>
+                            <div className="text-base font-bold truncate line-through decoration-2 text-yoga-text/60">{s.name || '—'}</div>
                           </div>
                           <div className="text-sm text-yoga-text/50">
                             {new Date(s.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })}

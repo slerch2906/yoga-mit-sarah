@@ -1653,20 +1653,19 @@ export default function AdminKursePage() {
                       </button>
                     </div>
                     {/* Buttons-Reihe 2: Stunde absagen + Löschen.
-                        Welle 3.5 (Sarah 2026-05-26): gleiche Button-Größe wie
-                        obere Reihe (Bearbeiten/Teilnehmer/Teilen) — kein
-                        Mini-Style mehr. */}
+                        Welle 3.6 (Sarah 2026-05-26): style={{ background:
+                        var(...)}} hat nicht funktioniert (CSS-Var existiert
+                        nicht). Jetzt Tailwind-Klassen bg-yoga-gray /
+                        bg-yoga-red-bg direkt. */}
                     <div className="flex gap-2 mt-2">
                       {activeBookings > 0 && (
                         <button onClick={() => router.push(`/admin/sessions/${s.id}?cancel=1`)}
-                          className="flex-1 text-sm rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer border-0 text-yoga-text/70"
-                          style={{ background: 'var(--yoga-gray)' }}>
+                          className="flex-1 text-sm rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer border-0 text-yoga-text/70 bg-yoga-gray">
                           <i className="ti ti-ban mr-1" />Absagen
                         </button>
                       )}
                       <button onClick={() => deleteContainerSession(s.id, activeBookings)}
-                        className="flex-1 text-sm rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer border-0 text-yoga-red-text"
-                        style={{ background: 'var(--yoga-red-bg)' }}>
+                        className="flex-1 text-sm rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer border-0 text-yoga-red-text bg-yoga-red-bg">
                         <i className="ti ti-trash mr-1" />Löschen
                       </button>
                     </div>
@@ -1720,17 +1719,15 @@ export default function AdminKursePage() {
                           </span>
                         </div>
                       </div>
-                      {/* Beendet: nur Teilnehmer-Ansicht + Löschen (kein Edit, kein Absagen)
-                          Welle 2.11: Modal statt Seite.
-                          Welle 3.5: Button-Größe einheitlich (kein Mini-Style). */}
+                      {/* Beendet: nur Teilnehmer-Ansicht + Löschen
+                          Welle 3.6: Tailwind-Klasse statt CSS-Var. */}
                       <div className="flex gap-2 mt-2">
                         <button onClick={() => loadSessionParticipants(s)}
                           className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70">
                           <i className="ti ti-users mr-1" />Teilnehmer
                         </button>
                         <button onClick={() => deleteContainerSession(s.id, activeBookings)}
-                          className="flex-1 text-sm rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer border-0 text-yoga-red-text"
-                          style={{ background: 'var(--yoga-red-bg)' }}>
+                          className="flex-1 text-sm rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer border-0 text-yoga-red-text bg-yoga-red-bg">
                           <i className="ti ti-trash mr-1" />Löschen
                         </button>
                       </div>

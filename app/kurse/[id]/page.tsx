@@ -274,11 +274,35 @@ export default function SessionDetailPage() {
     // Server-Zeit verwenden statt Browser-Zeit
     const serverNow = await getServerNow()
     const sessionStart = new Date(`${session.date}T${session.time_start}`)
+    const sessType = (session as any)?.session_type
+    const isEventPaid = sessType === 'event_paid'
+    const isEventFree = sessType === 'event_free'
+    const isEvent = isEventPaid || isEventFree
+
+    // Welle 3.6 (Sarah 2026-05-26):
+    // event_paid: 7-Tage-Frist HART. Yogi kann sich NICHT selbst abmelden bei <7d.
+    //   → blockieren mit Hinweis "Wende dich an Sarah / Ersatzkandidat".
+    // event_free: jederzeit kostenlos abmelden, kein 3h-Check.
+    // course_session/single: 3h-Frist mit Credit-Verfall-Confirm (bisheriges Verhalten).
+    if (isEventPaid) {
+      const deadline7d = new Date(sessionStart.getTime() - 7 * 24 * 60 * 60 * 1000)
+      if (serverNow > deadline7d) {
+        alert(
+          'Du bist innerhalb der 7-Tage-Stornofrist.\n\n' +
+          'Eine Selbst-Abmeldung ist jetzt nicht mehr möglich — die volle Gebühr fällt an.\n\n' +
+          'Du kannst aber gerne einen Ersatzkandidaten benennen. Bitte wende dich dafür direkt an Sarah.'
+        )
+        return
+      }
+    }
+
+    // 3h-Check NUR bei nicht-Event Sessions
     const deadline3h = new Date(sessionStart.getTime() - 3 * 60 * 60 * 1000)
-    const late = serverNow > deadline3h
+    const late = !isEvent && serverNow > deadline3h
 
     // Sarah-Wunsch 2026-05-23: Yogi muss bewusst bestätigen wenn er innerhalb
     // der 3h-Frist abmeldet — dann verfällt der Credit ersatzlos.
+    // (Bei Events nicht relevant — die haben eigene Storno-Logik.)
     if (late && !confirm(
       'Du bist innerhalb der 3-Stunden-Frist.\n\n' +
       'Wenn du dich jetzt abmeldest, verfällt dein Credit — du kannst diese Stunde nicht mehr nachholen.\n\n' +
@@ -666,7 +690,11 @@ export default function SessionDetailPage() {
         )}
 
         {/* ABMELDE-BESTÄTIGUNG */}
-        {!past && !session.is_cancelled && myBooking && showCancel && (
+        {!past && !session.is_cancelled && myBooking && showCancel && (() => {
+          // Welle 3.6 (Sarah 2026-05-26): event_paid in 7-Tage-Frist HART blockieren.
+          const sessionStartTs = new Date(`${session.date}T${session.time_start}`).getTime()
+          const within7d = isEventPaid && (sessionStartTs - Date.now()) < 7 * 24 * 60 * 60 * 1000
+          return (
           <>
             {course?.is_free || isEventFree ? (
               // Charity / event_free: kein Credit involviert
@@ -676,12 +704,20 @@ export default function SessionDetailPage() {
                   Möchtest du dich wirklich abmelden?
                 </p>
               </div>
-            ) : isEventPaid ? (
-              // event_paid: 7-Tage-Stornofrist (Hard-Block-Logik kommt in Welle 3)
-              <div className="rounded-yoga p-3 mb-4 bg-yoga-amber-bg text-yoga-amber-text">
-                <p className="text-sm font-semibold mb-1">Verbindliche Buchung</p>
+            ) : within7d ? (
+              // event_paid + innerhalb 7 Tagen: HART blockieren
+              <div className="rounded-yoga p-3 mb-4 bg-yoga-red-bg text-yoga-red-text">
+                <p className="text-sm font-semibold mb-1">Selbst-Abmeldung nicht mehr möglich</p>
                 <p className="text-sm leading-relaxed opacity-90">
-                  Stornofrist: 7 Tage vor dem Event. Bei späterer Abmeldung wende dich bitte an Sarah.
+                  Du bist innerhalb der 7-Tage-Stornofrist. Die volle Gebühr fällt an. Du kannst aber gerne einen <strong>Ersatzkandidaten</strong> benennen — wende dich dafür bitte direkt an <strong>Sarah</strong>.
+                </p>
+              </div>
+            ) : isEventPaid ? (
+              // event_paid, noch vor 7-Tage-Frist
+              <div className="rounded-yoga p-3 mb-4 bg-yoga-green-bg text-yoga-green-text">
+                <p className="text-sm font-semibold mb-1">Rechtzeitige Abmeldung</p>
+                <p className="text-sm leading-relaxed opacity-90">
+                  Du bist noch vor der 7-Tage-Stornofrist — deine Abmeldung ist kostenfrei.
                 </p>
               </div>
             ) : (
@@ -694,12 +730,18 @@ export default function SessionDetailPage() {
                 </p>
               </div>
             )}
-            <button onClick={handleCancel} className="btn-danger mb-2" disabled={actionLoading}>
-              {actionLoading ? 'Wird abgemeldet...' : 'Ja, abmelden'}
+            {/* Ja-Abmelden-Button NUR wenn nicht hart-geblockt */}
+            {!within7d && (
+              <button onClick={handleCancel} className="btn-danger mb-2" disabled={actionLoading}>
+                {actionLoading ? 'Wird abgemeldet...' : 'Ja, abmelden'}
+              </button>
+            )}
+            <button onClick={() => setShowCancel(false)} className="btn-ghost">
+              {within7d ? 'Zurück' : 'Abbrechen'}
             </button>
-            <button onClick={() => setShowCancel(false)} className="btn-ghost">Abbrechen</button>
           </>
-        )}
+          )
+        })()}
 
         {/* NICHT ANGEMELDET + KEIN WARTELISTENEINTRAG */}
         {!past && !session.is_cancelled && !myBooking && !myWaitlist && (

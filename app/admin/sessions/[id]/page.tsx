@@ -37,6 +37,11 @@ export default function AdminSessionPage() {
   const [quickCreditYogi, setQuickCreditYogi] = useState<any>(null)
   // Sarah-Wunsch 2026-05-25: Robustes Modal statt confirm() — Cache-bust + iOS-tauglich
   const [cancelChoice, setCancelChoice] = useState<{ bookingId: string; sessionId: string; within3h: boolean } | null>(null)
+  // Welle 2.5 (Sarah 2026-05-26): Edit-Form für Einzelstunden/Events (nicht für
+  // course_session — die werden über den Kurs verwaltet).
+  const [showEditForm, setShowEditForm] = useState(false)
+  const [editForm, setEditForm] = useState<any>(null)
+  const [savingEdit, setSavingEdit] = useState(false)
 
   useEffect(() => { loadData() }, [id])
 
@@ -182,6 +187,8 @@ export default function AdminSessionPage() {
   async function loadData() {
     const [{ data: sess }, { data: bkgs }, { data: wl }] = await Promise.all([
       // KEIN self-referenzierender Subquery (PostgREST → 400). Replacement separat unten.
+      // Welle 2.5 (Sarah 2026-05-26): bring_along + difficulty + alle session-eigenen
+      // Felder werden via `*` mitgeladen. course bringt nur Container-Metadaten.
       supabase.from('sessions').select('*, course:courses(name, id, is_free, image_url)').eq('id', id).single(),
       supabase.from('bookings')
         .select('*, profile:profiles(email, first_name, last_name)')
@@ -261,6 +268,66 @@ export default function AdminSessionPage() {
     })
     setPromotingWaitlist(null)
     loadData()
+  }
+
+  // Welle 2.5 (Sarah 2026-05-26): Edit-Speichern für Einzelstunden/Events.
+  // Nur für session_type != 'course_session'. Updates name/date/time_start/
+  // duration_min/max_spots/location/description/bring_along/difficulty/image_url,
+  // bei event_paid zusätzlich price_eur.
+  async function handleSaveEdit() {
+    if (!editForm || !session) return
+    setSavingEdit(true)
+    try {
+      const patch: any = {
+        name: editForm.name.trim(),
+        date: editForm.date,
+        time_start: editForm.time_start.length === 5 ? editForm.time_start + ':00' : editForm.time_start,
+        duration_min: editForm.duration_min,
+        max_spots: editForm.max_spots,
+        location: editForm.location || null,
+        description: editForm.description || null,
+        bring_along: editForm.bring_along || null,
+        difficulty: editForm.difficulty || null,
+        image_url: editForm.image_url || null,
+      }
+      if (session.session_type === 'event_paid') {
+        const p = parseFloat(editForm.price_eur)
+        if (!p || p <= 0) { alert('Bitte gültigen Preis angeben'); setSavingEdit(false); return }
+        patch.price_eur = p
+      }
+      const changedKeys = Object.keys(patch).filter(k => (session as any)[k] != patch[k])
+      const { error } = await supabase.from('sessions').update(patch).eq('id', id)
+      if (error) { alert('Fehler: ' + error.message); setSavingEdit(false); return }
+      await supabase.from('audit_log').insert({
+        action: 'single_or_event_updated',
+        details: { session_id: id, session_type: session.session_type, changed_fields_count: changedKeys.length }
+      })
+      setShowEditForm(false)
+      setEditForm(null)
+      loadData()
+    } catch (e: any) {
+      alert('Fehler: ' + (e?.message || e))
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  function openEditForm() {
+    if (!session) return
+    setEditForm({
+      name: session.name ?? '',
+      date: session.date ?? '',
+      time_start: (session.time_start || '').slice(0, 5),
+      duration_min: session.duration_min ?? 75,
+      max_spots: session.max_spots ?? 12,
+      location: session.location ?? '',
+      description: session.description ?? '',
+      bring_along: session.bring_along ?? '',
+      difficulty: session.difficulty ?? 'Alle Level',
+      image_url: session.image_url ?? '',
+      price_eur: session.price_eur != null ? String(session.price_eur) : '',
+    })
+    setShowEditForm(true)
   }
 
   async function handleAddLateReplacement() {
@@ -461,18 +528,34 @@ export default function AdminSessionPage() {
       <AppHeader title="Stunde verwalten" isAdmin />
       <div className="px-4 py-4">
 
-        {/* Session Info */}
+        {/* Session Info — Welle 2.5: session.name Vorrang vor course.name
+            (Container-Kurs zeigt sonst "SYS · Events (bezahlt)" o.ä.). */}
         <div className="card mb-4">
           <div className="flex items-start gap-3">
-            {session?.course?.image_url && (
-              <img src={session.course.image_url} alt="" className="w-14 h-14 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
+            {(session?.image_url || session?.course?.image_url) && (
+              <img src={session?.image_url ?? session.course.image_url} alt="" className="w-14 h-14 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
             )}
             <div className="flex-1 min-w-0">
               <div className="text-base font-bold mb-1">
-                {session?.course?.name}
+                {session?.name ?? session?.course?.name}
                 {session?.course?.is_free && (
                   <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full bg-yoga-green-bg text-yoga-green-text text-xs font-semibold align-middle">
                     Kostenlos
+                  </span>
+                )}
+                {session?.session_type === 'event_free' && (
+                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full bg-yoga-green-bg text-yoga-green-text text-xs font-semibold align-middle">
+                    Event · Kostenlos
+                  </span>
+                )}
+                {session?.session_type === 'event_paid' && (
+                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full bg-yoga-amber-bg text-yoga-amber-text text-xs font-semibold align-middle">
+                    Event · {session.price_eur} €
+                  </span>
+                )}
+                {session?.session_type === 'single' && (
+                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full bg-yoga-gray text-yoga-text/60 text-xs font-semibold align-middle">
+                    Einzelstunde
                   </span>
                 )}
               </div>
@@ -533,6 +616,14 @@ export default function AdminSessionPage() {
               }}
               className="mt-2 w-full text-sm font-semibold bg-yoga-gray hover:bg-yoga-card text-yoga-text border border-yoga-border rounded-yoga py-2">
               <i className="ti ti-share mr-1" /> Stunde teilen (WhatsApp / Email)
+            </button>
+          )}
+          {/* Welle 2.5 (Sarah 2026-05-26): Bearbeiten-Button für Einzelstunden/Events.
+              Block-Kursstunden werden über den Kurs verwaltet — kein Edit hier. */}
+          {!session?.is_cancelled && session?.session_type && session.session_type !== 'course_session' && (
+            <button onClick={openEditForm}
+              className="mt-2 w-full text-sm font-semibold bg-yoga-bg hover:bg-yoga-card text-yoga-text border border-yoga-border2 rounded-yoga py-2">
+              <i className="ti ti-edit mr-1" /> Bearbeiten
             </button>
           )}
           {session?.is_cancelled && (
@@ -823,6 +914,104 @@ export default function AdminSessionPage() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Welle 2.5 (Sarah 2026-05-26): Edit-Modal für Einzelstunden/Events.
+          Bei event_paid zusätzlich Preis-Feld. */}
+      {showEditForm && editForm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay" onClick={() => setShowEditForm(false)}>
+          <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold">
+                {session?.session_type === 'single' ? 'Einzelstunde bearbeiten' : 'Event bearbeiten'}
+              </h3>
+              <button onClick={() => setShowEditForm(false)} className="bg-transparent border-0 cursor-pointer text-yoga-text/40">
+                <i className="ti ti-x text-xl" />
+              </button>
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); handleSaveEdit() }} className="space-y-3">
+              <div>
+                <label className="field-label">Name *</label>
+                <input className="field-input" value={editForm.name}
+                  onChange={e => setEditForm({ ...editForm, name: e.target.value })} required />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label">Datum *</label>
+                  <input className="field-input" type="date" value={editForm.date}
+                    onChange={e => setEditForm({ ...editForm, date: e.target.value })} required />
+                </div>
+                <div>
+                  <label className="field-label">Uhrzeit *</label>
+                  <input className="field-input" type="time" value={editForm.time_start}
+                    onChange={e => setEditForm({ ...editForm, time_start: e.target.value })} required />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label">Dauer (Min.)</label>
+                  <input className="field-input" type="number" value={editForm.duration_min}
+                    onChange={e => setEditForm({ ...editForm, duration_min: parseInt(e.target.value) || 0 })} />
+                </div>
+                <div>
+                  <label className="field-label">Max. Teilnehmer</label>
+                  <input className="field-input" type="number" min={1} max={200} value={editForm.max_spots}
+                    onChange={e => setEditForm({ ...editForm, max_spots: parseInt(e.target.value) || 0 })} />
+                </div>
+              </div>
+              <div>
+                <label className="field-label">Ort</label>
+                <input className="field-input" value={editForm.location}
+                  onChange={e => setEditForm({ ...editForm, location: e.target.value })} />
+              </div>
+              <div>
+                <label className="field-label">Beschreibung</label>
+                <textarea className="field-input" rows={3} value={editForm.description}
+                  onChange={e => setEditForm({ ...editForm, description: e.target.value })} />
+              </div>
+              <div>
+                <label className="field-label">Was mitbringen</label>
+                <input className="field-input" value={editForm.bring_along}
+                  onChange={e => setEditForm({ ...editForm, bring_along: e.target.value })}
+                  placeholder="z.B. Matte, bequeme Kleidung" />
+              </div>
+              <div>
+                <label className="field-label">Schwierigkeitsgrad</label>
+                <select className="field-input" value={editForm.difficulty}
+                  onChange={e => setEditForm({ ...editForm, difficulty: e.target.value })}>
+                  {['Anfänger', 'Mittelstufe', 'Fortgeschritten', 'Alle Level'].map(d => <option key={d}>{d}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="field-label">Bild-URL (optional)</label>
+                <input className="field-input" value={editForm.image_url}
+                  onChange={e => setEditForm({ ...editForm, image_url: e.target.value })}
+                  placeholder="https://..." />
+                {editForm.image_url && (
+                  <img src={editForm.image_url} alt="" className="mt-2 w-20 h-20 rounded-yoga object-cover border border-yoga-border" />
+                )}
+              </div>
+              {session?.session_type === 'event_paid' && (
+                <div>
+                  <label className="field-label">Preis *</label>
+                  <div className="relative">
+                    <input className="field-input pr-10" type="number" min={0.01} step={0.01}
+                      value={editForm.price_eur}
+                      onChange={e => setEditForm({ ...editForm, price_eur: e.target.value })}
+                      required />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-yoga-text/60">€</span>
+                  </div>
+                </div>
+              )}
+              <button type="submit" className="btn-primary" disabled={savingEdit}>
+                {savingEdit ? 'Wird gespeichert...' : 'Änderungen speichern'}
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => setShowEditForm(false)}>
+                Abbrechen
+              </button>
+            </form>
           </div>
         </div>
       )}

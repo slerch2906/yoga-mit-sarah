@@ -226,12 +226,18 @@ test.describe('[E2E] Admin-Sidebar v5 Navigation', () => {
 })
 
 // ────────────────────────────────────────────────────────────────────────────
-// 6) Kurs-Form: "Einzelne Stunde" (nicht mehr "Einzelne Ersatzstunde")
+// 6) Kurs-Form (Welle 2.5 2026-05-26): "Einzelne Stunde" + "Kostenlos" Checkboxen
+//    aus Block-Kurs-Form ENTFERNT. Einzelstunden/Events haben jetzt eigene
+//    Buttons "Einzelstunde anlegen" / "Event anlegen" auf /admin/kurse.
+//    Alter Test prüfte "Einzelne Stunde" Checkbox-Label — diese Checkbox
+//    existiert nicht mehr. Neuer Test stellt sicher: dedizierte Anlege-Buttons
+//    sind vorhanden + altes "Einzelne Ersatzstunde" bleibt entfernt.
 // ────────────────────────────────────────────────────────────────────────────
 test.describe('[E2E] Label-Fix Kurs-Anlegen', () => {
-  test('Checkbox-Label heißt "Einzelne Stunde" (nicht "Einzelne Ersatzstunde")', () => {
+  test('dedizierte Anlege-Buttons + alte "Einzelne Ersatzstunde" Bezeichnung entfernt', () => {
     const src = read('app/admin/kurse/page.tsx')
-    expect(src).toMatch(/>Einzelne Stunde</)
+    expect(src).toMatch(/Einzelstunde anlegen/)
+    expect(src).toMatch(/Event anlegen/)
     expect(src).not.toMatch(/>Einzelne Ersatzstunde</)
   })
 })

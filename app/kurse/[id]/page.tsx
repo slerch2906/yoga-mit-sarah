@@ -72,7 +72,9 @@ export default function SessionDetailPage() {
     setSession(sess ? { ...sess, replacement, origin } : sess)
     setMyBooking(myBook)
     setMyWaitlist(myWait)
-    setFreeSpots(((sess as any)?.course?.max_spots || 0) - (bookingCount || 0))
+    // Welle 2.5: session.max_spots Vorrang (Events/Einzelstunden), Fallback course.
+    const maxSpots = (sess as any)?.max_spots ?? (sess as any)?.course?.max_spots ?? 0
+    setFreeSpots(maxSpots - (bookingCount || 0))
 
     // Freie Credits berechnen: Guthaben (aus Kursabbruch) ist NUR für neue Kurse,
     // nicht für Einzelstunden. Alle anderen Credit-Modelle (course/single/tenpack)
@@ -126,11 +128,18 @@ export default function SessionDetailPage() {
 
   async function handleBook() {
     const isCharity = !!(session as any)?.course?.is_free
-    // Charity-Stunde: kein Credit nötig. Sonst: Credit muss da sein.
-    if (!isCharity && !bestCredit) return
+    // Welle 2.5 (Sarah 2026-05-26): Events (event_free + event_paid) verbrauchen
+    // KEINEN Credit. Buchung ist bei event_paid verbindlich, Zahlung extern. Die
+    // Booking-Logik (Credit-Insert, Cancellation-Frist 7 Tage hard-block) kommt
+    // in Welle 3 — hier nur das UI/no-credit-Verhalten als Brücke.
+    const _sessType: string = (session as any)?.session_type || 'course_session'
+    const isEventTypeNoCredit = _sessType === 'event_free' || _sessType === 'event_paid'
+    const skipCreditCheck = isCharity || isEventTypeNoCredit
+    // Charity / event_free / event_paid: kein Credit nötig. Sonst: Credit muss da sein.
+    if (!skipCreditCheck && !bestCredit) return
     const user = await getCurrentUser()
-    // Wartelisten-Konflikt-Check NUR wenn ein Credit verwendet wird (= nicht charity)
-    const conflicts = isCharity ? [] : await checkWaitlistConflicts(user!.id)
+    // Wartelisten-Konflikt-Check NUR wenn ein Credit verwendet wird (= nicht charity/event)
+    const conflicts = skipCreditCheck ? [] : await checkWaitlistConflicts(user!.id)
     if (conflicts.length > 0 && !showWaitlistConflict) {
       // Modal anzeigen, User muss bestätigen
       setConflictingWaitlists(conflicts)
@@ -167,7 +176,7 @@ export default function SessionDetailPage() {
     let chosenCreditId: string | null = null
     let originSessionId: string | null = null
     let pickUsedModel: string | null = null
-    if (!isCharity) {
+    if (!skipCreditCheck) {
       // Smart Credit-Picker (Sarah-Regel 2026-05-22):
       //   1. Course-Credit zuerst probieren (mit minutengenauem 10d-/8d-Fenster-Check)
       //   2. Falls Fenster nicht passt: Fallback auf Single/Tenpack/Quartal
@@ -193,7 +202,7 @@ export default function SessionDetailPage() {
     const { data: enrolledHere } = await supabase.from('enrollments')
       .select('id').eq('user_id', user!.id).eq('course_id', sessCourseId).maybeSingle()
     const usedIsCourseModel = pickUsedModel === 'course'
-    const bookingType = isCharity ? 'single' : ((enrolledHere || usedIsCourseModel) ? 'course' : 'single')
+    const bookingType = skipCreditCheck ? 'single' : ((enrolledHere || usedIsCourseModel) ? 'course' : 'single')
 
     let error = null
     if (existingBooking) {
@@ -390,6 +399,31 @@ export default function SessionDetailPage() {
   const within3h = isWithin3Hours()
   const deadline = cancelDeadline()
 
+  // Welle 2.5 (Sarah 2026-05-26): session_type bestimmt das Verhalten der Seite.
+  //   course_session  → Reguläre Kursstunde (wie bisher).
+  //   single          → Einzelstunde (Credit-Verbrauch wie heute).
+  //   event_free      → Kostenloses Event (kein Credit, keine Stornofrist-Logik).
+  //   event_paid      → Bezahltes Event (extern, Stornofrist 7 Tage, kein Credit).
+  //   event_credit    → Legacy Event-mit-Credit (= wie single).
+  const sessionType: string = (session as any).session_type || 'course_session'
+  const isCourseSession = sessionType === 'course_session'
+  const isEventPaid = sessionType === 'event_paid'
+  const isEventFree = sessionType === 'event_free'
+  const isEvent = isEventPaid || isEventFree
+  // Für Anzeige: session.name/description haben Vorrang vor course.name/description
+  // (course.name = SYS-Container für event_*/single).
+  const displayName = (session as any).name ?? course?.name
+  const displayDescription = (session as any).description ?? course?.description
+  const displayLocation = (session as any).location ?? course?.location
+  const displayBringAlong = (session as any).bring_along ?? course?.bring_along
+  const displayDifficulty = (session as any).difficulty ?? course?.difficulty
+  const displayImageUrl = (session as any).image_url ?? course?.image_url
+  const displayMaxSpots = (session as any).max_spots ?? course?.max_spots
+  // Bei Events: andere Überschrift für die Description.
+  const descriptionHeader = isEvent ? 'Über dieses Event'
+    : sessionType === 'single' || sessionType === 'event_credit' ? 'Über die Stunde'
+    : 'Über diesen Kurs'
+
   return (
     <div className="max-w-md mx-auto min-h-screen">
       <AppHeader title="" isAdmin={profile?.is_admin} />
@@ -400,13 +434,14 @@ export default function SessionDetailPage() {
           className="flex items-center gap-1 text-sm text-yoga-text/60 mb-2.5 hover:opacity-80">
           <i className="ti ti-arrow-left" /> Zurück
         </button>
-        {/* Charity / Bild — kleines Foto links neben Titel (Variante A) */}
-        {course?.image_url && (
+        {/* Charity / Bild — kleines Foto links neben Titel (Variante A). Welle 2.5:
+            displayImageUrl/displayName mit session-Fallback. */}
+        {displayImageUrl && (
           <div className="flex items-start gap-3 mb-2">
-            <img src={course.image_url} alt="" className="w-16 h-16 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
+            <img src={displayImageUrl} alt="" className="w-16 h-16 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
             <div className="flex-1 min-w-0">
               <h2 className="text-lg font-bold mb-1">
-                {course?.name}
+                {displayName}
                 {(session as any).origin && (
                   <span className="text-yoga-text font-semibold"> · Ersatzstunde</span>
                 )}
@@ -416,18 +451,38 @@ export default function SessionDetailPage() {
                   Kostenlos
                 </span>
               )}
+              {isEventFree && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-yoga-green-bg text-yoga-green-text text-xs font-semibold">
+                  Kostenlos
+                </span>
+              )}
+              {isEventPaid && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-yoga-amber-bg text-yoga-amber-text text-xs font-semibold">
+                  {(session as any).price_eur} €
+                </span>
+              )}
             </div>
           </div>
         )}
-        {!course?.image_url && (
+        {!displayImageUrl && (
           <h2 className="text-lg font-bold mb-1">
-            {course?.name}
+            {displayName}
             {(session as any).origin && (
               <span className="text-yoga-text font-semibold"> · Ersatzstunde</span>
             )}
             {course?.is_free && (
               <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full bg-yoga-green-bg text-yoga-green-text text-xs font-semibold align-middle">
                 Kostenlos
+              </span>
+            )}
+            {isEventFree && (
+              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full bg-yoga-green-bg text-yoga-green-text text-xs font-semibold align-middle">
+                Kostenlos
+              </span>
+            )}
+            {isEventPaid && (
+              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full bg-yoga-amber-bg text-yoga-amber-text text-xs font-semibold align-middle">
+                {(session as any).price_eur} €
               </span>
             )}
           </h2>
@@ -447,11 +502,11 @@ export default function SessionDetailPage() {
             </span>
           </div>
         )}
-        {course?.location && (
-          <p className="text-sm text-yoga-text/50 mb-1"><i className="ti ti-map-pin mr-1" />{course.location}</p>
+        {displayLocation && (
+          <p className="text-sm text-yoga-text/50 mb-1"><i className="ti ti-map-pin mr-1" />{displayLocation}</p>
         )}
-        {course?.difficulty && (
-          <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-yoga-gray text-yoga-text/60 font-semibold">{course.difficulty}</span>
+        {displayDifficulty && (
+          <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-yoga-gray text-yoga-text/60 font-semibold">{displayDifficulty}</span>
         )}
         {past && (
           <span className="inline-block mt-2 text-xs px-2 py-1 rounded-full bg-yoga-gray text-yoga-text/50 font-semibold">
@@ -462,7 +517,9 @@ export default function SessionDetailPage() {
       </div>
 
       <div className="px-4 py-4">
-        {/* Info grid — bei Charity (is_free) nur Plätze + Warteliste, keine Credits/Abmeldefrist */}
+        {/* Info grid — Welle 2.5 (Sarah 2026-05-26): Bei event_paid + event_free
+            werden Credits-Kachel + 3h-Abmeldefrist ausgeblendet (Credits irrelevant,
+            stattdessen: Stornofrist 7 Tage bei event_paid). */}
         <div className="grid grid-cols-2 gap-2 mb-4">
           <div className="info-tile">
             <div className="lbl">{myBooking ? 'Dein Status' : 'Freie Plätze'}</div>
@@ -470,7 +527,7 @@ export default function SessionDetailPage() {
               {myBooking ? 'Angemeldet ' : past ? '—' : freeSpots <= 0 ? 'Ausgebucht' : `${freeSpots} frei`}
             </div>
           </div>
-          {!course?.is_free && (
+          {!course?.is_free && !isEvent && (
             <div className="info-tile">
               <div className="lbl">Abmeldefrist</div>
               <div className={`val ${within3h && !past ? 'text-yoga-amber-text' : ''}`}>
@@ -478,7 +535,13 @@ export default function SessionDetailPage() {
               </div>
             </div>
           )}
-          {!course?.is_free && (
+          {isEventPaid && (
+            <div className="info-tile">
+              <div className="lbl">Stornofrist</div>
+              <div className="val">7 Tage</div>
+            </div>
+          )}
+          {!course?.is_free && !isEvent && (
             <div className="info-tile">
               <div className="lbl">Deine Credits</div>
               <div className={`val ${freeCredits === 0 ? 'text-yoga-red-text' : ''}`}>
@@ -492,19 +555,22 @@ export default function SessionDetailPage() {
           </div>
         </div>
 
-        {/* Kursbeschreibung */}
-        {(course?.description || course?.bring_along) && (
+        {/* Kursbeschreibung — Welle 2.5: session-Werte mit Fallback aus course.
+            Bei Events: "Über dieses Event", bei Einzelstunden: "Über die Stunde",
+            sonst "Über diesen Kurs". WICHTIG: bei single/event_* darf NICHT die
+            Container-Description ("Unsichtbarer Container für ...") gezeigt werden. */}
+        {(displayDescription || displayBringAlong) && (
           <div className="card mb-4">
-            {course?.description && (
+            {displayDescription && (
               <div className="mb-3">
-                <p className="text-xs text-yoga-text/40 uppercase tracking-wider font-bold mb-1">Über diesen Kurs</p>
-                <p className="text-sm text-yoga-text/80 leading-relaxed">{course.description}</p>
+                <p className="text-xs text-yoga-text/40 uppercase tracking-wider font-bold mb-1">{descriptionHeader}</p>
+                <p className="text-sm text-yoga-text/80 leading-relaxed">{displayDescription}</p>
               </div>
             )}
-            {course?.bring_along && (
+            {displayBringAlong && (
               <div>
                 <p className="text-xs text-yoga-text/40 uppercase tracking-wider font-bold mb-1">Was mitbringen</p>
-                <p className="text-sm text-yoga-text/80 leading-relaxed"><i className="ti ti-backpack mr-1" />{course.bring_along}</p>
+                <p className="text-sm text-yoga-text/80 leading-relaxed"><i className="ti ti-backpack mr-1" />{displayBringAlong}</p>
               </div>
             )}
           </div>
@@ -544,8 +610,10 @@ export default function SessionDetailPage() {
           <>
             <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
               <p className="text-sm text-yoga-text/80 leading-relaxed">
-                {course?.is_free
+                {course?.is_free || isEventFree
                   ? 'Du bist angemeldet. Abmeldung jederzeit möglich.'
+                  : isEventPaid
+                  ? 'Du bist angemeldet. Diese Buchung ist verbindlich. Stornofrist: 7 Tage vor dem Event.'
                   : <>Du bist angemeldet. Abmeldung kostenlos bis <strong>{deadline}</strong> – danach gilt die Stunde als wahrgenommen.</>}
               </p>
             </div>
@@ -559,12 +627,20 @@ export default function SessionDetailPage() {
         {/* ABMELDE-BESTÄTIGUNG */}
         {!past && !session.is_cancelled && myBooking && showCancel && (
           <>
-            {course?.is_free ? (
-              // Charity: kein Credit involviert
+            {course?.is_free || isEventFree ? (
+              // Charity / event_free: kein Credit involviert
               <div className="rounded-yoga p-3 mb-4 bg-yoga-green-bg text-yoga-green-text">
                 <p className="text-sm font-semibold mb-1">Abmeldung jederzeit möglich</p>
                 <p className="text-sm leading-relaxed opacity-90">
                   Möchtest du dich wirklich abmelden?
+                </p>
+              </div>
+            ) : isEventPaid ? (
+              // event_paid: 7-Tage-Stornofrist (Hard-Block-Logik kommt in Welle 3)
+              <div className="rounded-yoga p-3 mb-4 bg-yoga-amber-bg text-yoga-amber-text">
+                <p className="text-sm font-semibold mb-1">Verbindliche Buchung</p>
+                <p className="text-sm leading-relaxed opacity-90">
+                  Stornofrist: 7 Tage vor dem Event. Bei späterer Abmeldung wende dich bitte an Sarah.
                 </p>
               </div>
             ) : (
@@ -587,9 +663,10 @@ export default function SessionDetailPage() {
         {/* NICHT ANGEMELDET + KEIN WARTELISTENEINTRAG */}
         {!past && !session.is_cancelled && !myBooking && !myWaitlist && (
           <>
-            {/* Charity-Stunde (is_free): brauchst keinen Credit. Treat als Pseudo-"hat Credit". */}
+            {/* Welle 2.5: Charity + Events brauchen keinen Credit. Treat als Pseudo-"hat Credit".
+                event_paid → "Verbindlich anmelden, Zahlung extern" Hinweis. */}
             {/* Kurs gesperrt für externe Buchungen */}
-            {!course?.is_open && freeSpots > 0 && (freeCredits > 0 || course?.is_free) && (
+            {!course?.is_open && freeSpots > 0 && (freeCredits > 0 || course?.is_free || isEvent) && (
               <div className="bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga p-4 mb-4">
                 <p className="text-sm font-bold text-yoga-amber-text mb-1">
                   <i className="ti ti-lock mr-1" /> Kurs noch nicht freigegeben
@@ -606,9 +683,24 @@ export default function SessionDetailPage() {
                 </p>
               </div>
             )}
-            {course?.is_open && freeSpots > 0 && (freeCredits > 0 || course?.is_free) ? (
+            {isEventFree && freeSpots > 0 && course?.is_open && (
+              <div className="bg-yoga-green-bg border border-yoga-green-text/20 rounded-yoga p-3 mb-4">
+                <p className="text-sm text-yoga-green-text leading-relaxed">
+                  <span className="font-bold">Kostenloses Event</span> — einfach anmelden und teilnehmen.
+                </p>
+              </div>
+            )}
+            {isEventPaid && freeSpots > 0 && course?.is_open && (
+              <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 mb-4">
+                <p className="text-sm text-yoga-amber-text leading-relaxed">
+                  <span className="font-bold">Verbindlich anmelden</span> — Bezahlung extern (PayPal/Bar). Stornofrist: 7 Tage.
+                </p>
+              </div>
+            )}
+            {course?.is_open && freeSpots > 0 && (freeCredits > 0 || course?.is_free || isEvent) ? (
               <>
-                {within3h ? (
+                {/* Welle 2.5: bei Events keine 3h-Frist-Logik anzeigen */}
+                {within3h && !isEvent ? (
                   <>
                     <div className="bg-amber-50 border border-yoga-amber-text/30 rounded-yoga p-3 mb-4">
                       <p className="text-sm font-bold text-yoga-amber-text mb-2">
@@ -635,7 +727,7 @@ export default function SessionDetailPage() {
                 ) : (
                   <>
                     {/* Storno-Hinweis NUR bei Credit-pflichtigen Stunden — bei Charity sinnlos */}
-                    {!course?.is_free && (
+                    {!course?.is_free && !isEvent && (
                       <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
                         <p className="text-sm text-yoga-text/80 leading-relaxed">
                           Abmeldung kostenlos bis <strong>{deadline}</strong> – Credit kommt zurück.
@@ -651,7 +743,7 @@ export default function SessionDetailPage() {
               </>
             ) : (
               <>
-                {freeCredits === 0 && (
+                {freeCredits === 0 && !course?.is_free && !isEvent && (
                   <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
                     <p className="text-sm text-yoga-text/80">
                       Du hast keine freien Credits. Bitte wende dich an Sarah.

@@ -243,9 +243,14 @@ test.describe('[E2E] Charity-Feature: is_free + image_url', () => {
 
   test('app/admin/kurse: Form hat is_free + image_url Felder', async () => {
     const src = read('app/admin/kurse/page.tsx')
+    // Welle 2.5 (2026-05-26): is_free/image_url Checkboxen/Upload sind aus
+    // Block-Kurs-Form entfernt — Charity läuft jetzt über das "Event anlegen"
+    // mit payment_type='free'. emptyForm-Default `is_free: false` bleibt für
+    // bestehende Block-Kurse + image_url im Event-Form ist vorhanden + Bucket
+    // course-images wird vom Event-Form verwendet.
     expect(src).toMatch(/is_free:\s*false/)
     expect(src).toMatch(/image_url:\s*['"]/)
-    expect(src).toMatch(/Kostenlos.*Credit/)
+    expect(src).toMatch(/Kostenlos/)
     expect(src).toMatch(/course-images/)
   })
 
@@ -266,7 +271,9 @@ test.describe('[E2E] Charity-Feature: is_free + image_url', () => {
 
   test('app/kurse: Wochenübersicht zeigt Foto + Kostenlos-Pille', async () => {
     const src = read('app/kurse/page.tsx')
-    expect(src).toMatch(/s\.course\?\.image_url/)
+    // Welle 2.5: image_url wird über display_image_url (session OR course)
+    // gerendert, damit Einzelstunden/Events ihr eigenes Bild anzeigen.
+    expect(src).toMatch(/display_image_url|s\.course\?\.image_url/)
     expect(src).toMatch(/s\.course\?\.is_free/)
     expect(src).toMatch(/Kostenlos/)
   })

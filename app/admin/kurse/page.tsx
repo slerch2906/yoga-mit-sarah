@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Fragment } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Email } from '@/lib/email'
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
@@ -104,11 +104,17 @@ export default function AdminKursePage() {
   const [singleForm, setSingleForm] = useState({
     name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12,
     location: '', description: '',
+    bring_along: '', difficulty: 'Alle Level',
   })
   const [eventForm, setEventForm] = useState({
     name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12,
     location: '', description: '',
-    payment_type: 'free' as 'free' | 'credit' | 'paid',
+    bring_along: '', difficulty: 'Alle Level',
+    // Welle 2.5 (Sarah 2026-05-26): Event-Form hat NUR noch 'free' | 'paid'.
+    // Credit-Verbrauch ist semantisch identisch mit "Einzelstunde anlegen" und
+    // wird daher aus dem Event-Form entfernt. Container SYS · Events (Credit)
+    // bleibt in der DB (kein Schema-Change) — wird nur nicht mehr genutzt.
+    payment_type: 'free' as 'free' | 'paid',
     price_eur: '',
     image_url: '',
   })
@@ -117,6 +123,20 @@ export default function AdminKursePage() {
   const supabase = createClient()
 
   useEffect(() => { loadData() }, [])
+
+  // Welle 2.5 (Sarah 2026-05-26): History-Push beim Öffnen eines Formulars,
+  // damit Handy-Swipe-Back ODER Browser-Back-Button das Formular schließt
+  // (statt zur Dashboard-Seite zurückzugehen).
+  useEffect(() => {
+    if (showForm || showSingleForm || showEventForm) {
+      window.history.pushState({ formOpen: true }, '', window.location.pathname)
+      const onPop = () => {
+        setShowForm(false); setShowSingleForm(false); setShowEventForm(false)
+      }
+      window.addEventListener('popstate', onPop)
+      return () => window.removeEventListener('popstate', onPop)
+    }
+  }, [showForm, showSingleForm, showEventForm])
 
   useEffect(() => {
     if (form.date_start && form.date_end && !form.is_single) {
@@ -235,13 +255,15 @@ export default function AdminKursePage() {
         location: singleForm.location || null,
         description: singleForm.description || null,
         max_spots: singleForm.max_spots,
+        bring_along: singleForm.bring_along || null,
+        difficulty: singleForm.difficulty || null,
       })
       await supabase.from('audit_log').insert({
         action: 'single_session_created',
         details: { name: singleForm.name, date: singleForm.date, time: singleForm.time_start, max_spots: singleForm.max_spots }
       })
       setShowSingleForm(false)
-      setSingleForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '' })
+      setSingleForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', bring_along: '', difficulty: 'Alle Level' })
       await loadData()
     } catch (e: any) {
       alert('Fehler: ' + (e?.message || e))
@@ -250,11 +272,12 @@ export default function AdminKursePage() {
     }
   }
 
-  // Welle 2 (Sarah 2026-05-26): Event anlegen — payment_type entscheidet Container + session_type
+  // Welle 2.5 (Sarah 2026-05-26): Event anlegen — payment_type ist nur noch
+  // 'free' | 'paid'. Credit-Verbrauch ist semantisch "Einzelstunde anlegen"
+  // und wurde aus dem Event-Form entfernt.
   async function handleSaveEvent() {
-    const containerLookup: Record<'free'|'credit'|'paid', string | undefined> = {
+    const containerLookup: Record<'free'|'paid', string | undefined> = {
       free: containerIds?.eventFree,
-      credit: containerIds?.eventCredit,
       paid: containerIds?.eventPaid,
     }
     const courseId = containerLookup[eventForm.payment_type]
@@ -266,9 +289,7 @@ export default function AdminKursePage() {
     }
     setSavingSingleOrEvent(true)
     try {
-      const sessionType = eventForm.payment_type === 'free' ? 'event_free'
-        : eventForm.payment_type === 'credit' ? 'event_credit'
-        : 'event_paid'
+      const sessionType = eventForm.payment_type === 'free' ? 'event_free' : 'event_paid'
       await supabase.from('sessions').insert({
         course_id: courseId,
         session_type: sessionType,
@@ -281,13 +302,15 @@ export default function AdminKursePage() {
         max_spots: eventForm.max_spots,
         image_url: eventForm.image_url || null,
         price_eur: eventForm.payment_type === 'paid' ? parseFloat(eventForm.price_eur) : null,
+        bring_along: eventForm.bring_along || null,
+        difficulty: eventForm.difficulty || null,
       })
       await supabase.from('audit_log').insert({
         action: 'event_created',
         details: { name: eventForm.name, payment_type: eventForm.payment_type, date: eventForm.date, max_spots: eventForm.max_spots, price_eur: eventForm.payment_type === 'paid' ? parseFloat(eventForm.price_eur) : null }
       })
       setShowEventForm(false)
-      setEventForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', payment_type: 'free', price_eur: '', image_url: '' })
+      setEventForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', bring_along: '', difficulty: 'Alle Level', payment_type: 'free', price_eur: '', image_url: '' })
       await loadData()
     } catch (e: any) {
       alert('Fehler: ' + (e?.message || e))
@@ -1188,6 +1211,140 @@ export default function AdminKursePage() {
     loadData()
   }
 
+  // Welle 2.5 (Sarah 2026-05-26): Render-Helper für Kurs-Card (aktive + beendete
+  // Sektion teilen sich exakt das gleiche Markup). `isEnded` nur fuer data-attr.
+  function renderCourseCard(c: any, isEnded: boolean) {
+    return (
+      <div key={c.id} className="card mb-3" data-course-card={isEnded ? 'ended' : 'active'}>
+        <div className="flex items-start justify-between mb-2">
+          <div>
+            <div className="flex items-center gap-2 mb-0.5">
+              <div className="text-base font-bold">{c.name}</div>
+              {(() => {
+                const st = getCourseStatus(c)
+                const styles: Record<string,string> = {
+                  'läuft': 'bg-yoga-green-bg text-yoga-green-text',
+                  'geplant': 'bg-yoga-amber-bg text-yoga-amber-text',
+                  'beendet': 'bg-yoga-gray text-yoga-text/50',
+                  'abgebrochen': 'bg-yoga-red-bg text-yoga-red-text',
+                }
+                return <span className={`text-xs rounded-full px-2 py-0.5 font-semibold ${styles[st] || ''}`}>{st}</span>
+              })()}
+            </div>
+            <div className="text-sm text-yoga-text/50">
+              {c.weekday} · {c.time_start?.slice(0,5)} Uhr · {c.total_units} Einheiten
+            </div>
+            <div className="text-sm font-semibold text-yoga-text/60">
+              {new Date(c.date_start).toLocaleDateString('de-DE')} – {new Date(c.date_end).toLocaleDateString('de-DE')}
+            </div>
+            <div className="text-sm text-yoga-text/60 mt-0.5">
+              Teilnehmer:{' '}
+              <strong className={c.is_overbooked ? 'text-yoga-red-text' : ''}>
+                {c.participant_count ?? (c.enrollments || []).length}
+              </strong>
+              {c.max_spots ? `/${c.max_spots}` : ''}
+              {c.is_overbooked && (
+                <span className="ml-1 text-xs font-semibold text-yoga-red-text">· überbucht</span>
+              )}
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <span className={`badge ${c.is_single ? 'badge-wait' : 'badge-free'}`}>
+              {c.is_single ? 'Einzelstunde' : 'Kurs'}
+            </span>
+            {!c.is_open && (
+              <button onClick={() => toggleOpen(c.id, c.is_open)}
+                className="badge bg-yoga-amber-bg text-yoga-amber-text border-0 cursor-pointer hover:opacity-80"
+                title="Klicken zum Freigeben">
+                <i className="ti ti-lock text-xs mr-0.5" />Gesperrt
+              </button>
+            )}
+            {c.is_open && (
+              <button onClick={() => toggleOpen(c.id, c.is_open)}
+                className="badge bg-yoga-green-bg text-yoga-green-text border-0 cursor-pointer hover:opacity-80"
+                title="Klicken zum Sperren">
+                <i className="ti ti-lock-open text-xs mr-0.5" />Frei
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="flex gap-2 mt-2">
+          <button onClick={() => startEdit(c)}
+            className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer">
+            <i className="ti ti-edit mr-1" />Bearbeiten
+          </button>
+          <button onClick={() => loadSessions(c.id)}
+            className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70">
+            <i className="ti ti-calendar-event mr-1" />Termine
+          </button>
+          <button onClick={() => loadParticipants(c)}
+            className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70">
+            <i className="ti ti-users mr-1" />Teilnehmer
+          </button>
+        </div>
+        {showRolloverButton(c) && (
+          <button onClick={async () => {
+            setFolgekursCourse(c)
+            setFolgekursStep('dates')
+            setFolgekursDateStart('')
+            setFolgekursDateEnd('')
+            setFolgekursExcluded([])
+            setFolgekursForm({
+              name: c.name, weekday: c.weekday, time_start: c.time_start,
+              duration_min: c.duration_min, location: c.location, description: c.description,
+              bring_along: c.bring_along, difficulty: c.difficulty,
+              max_spots: c.max_spots, total_units: c.total_units,
+            })
+            await loadFolgekursMembers(c.id)
+          }}
+            className="w-full mt-2 text-sm bg-yoga-green-bg text-yoga-green-text rounded-full py-2 font-semibold hover:opacity-80 border-0 cursor-pointer">
+            <i className="ti ti-arrows-transfer-down mr-1" />Folgekurs anlegen
+          </button>
+        )}
+        <div className="flex gap-2 mt-2">
+          {(c.enrollments || []).length > 0 && (
+            <button onClick={() => { setCancellingCourse(c); setCancelReason(''); setCancelRefundMode(null) }}
+              className="flex-1 text-xs text-yoga-text/50 border border-yoga-border rounded-full py-1.5 font-semibold border-0 cursor-pointer hover:opacity-80"
+              style={{ background: 'var(--yoga-gray)' }}>
+              <i className="ti ti-ban mr-1" />Abbrechen
+            </button>
+          )}
+          <button onClick={() => archiveCourse(c)}
+            className="flex-1 text-xs text-yoga-text/50 rounded-full py-1.5 font-semibold hover:opacity-80 cursor-pointer border-0"
+            style={{ background: 'var(--yoga-gray)' }}>
+            <i className="ti ti-archive mr-1" />Archivieren
+          </button>
+        </div>
+        {expandedCourse === c.id && courseSessions[c.id] && (
+          <div className="mt-2">
+            {courseSessions[c.id].map(s => (
+              <button key={s.id} onClick={() => router.push(`/admin/sessions/${s.id}`)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-yoga mb-1 text-left cursor-pointer border-0 hover:opacity-80 ${s.is_cancelled ? 'opacity-40' : ''}`}
+                style={{ background: 'var(--yoga-bg)' }}>
+                <span className="text-sm">
+                  {new Date(s.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })}
+                  {' · '}{s.time_start?.slice(0,5)} Uhr
+                  {s.is_cancelled && (s.cancel_reason === 'excluded' ? ' · Ausgeschlossen' : ' · Abgesagt')}
+                  {s.is_replacement && (
+                    <span className="text-yoga-text font-semibold">
+                      {' · Ersatzstunde'}
+                      {s.original_session && (
+                        <span className="text-yoga-text/55 font-normal">
+                          {' (für '}{new Date(s.original_session.date).toLocaleDateString('de-DE', { day:'numeric', month:'short' })}{')'}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </span>
+                <i className="ti ti-chevron-right text-yoga-text/30" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-md mx-auto min-h-screen">
       <AppHeader title="Kurse verwalten" isAdmin />
@@ -1207,212 +1364,29 @@ export default function AdminKursePage() {
                 <i className="ti ti-confetti mr-1" /> Event anlegen
               </button>
             </div>
-            {/* Sarah-Wunsch 2026-05-24: Aktive + Beendete teilen die GLEICHE Render-
-                Logik (identisches Card-Markup, identische Buttons). Implementation:
-                ALLE is_active Kurse in eine sortierte Liste — beendete ans Ende —
-                und vor dem ersten beendeten Kurs eine Zwischenüberschrift einfügen
-                via Fragment. So bleibt das 140-Zeilen-JSX 1:1 und beide Sektionen
-                haben automatisch gleiches Layout. */}
+            {/* Welle 2.5 (Sarah 2026-05-26): Klar getrennte Reihenfolge —
+                1) Aktive Kurse (nur noch nicht beendete)
+                2) Geplante Stunden & Events (Container-Sessions weiter unten)
+                3) Beendete Kurse (eigene Sektion ganz unten)
+                Aktive + Beendete teilen die GLEICHE Render-Logik via inline Helper. */}
             <p className="section-label">Aktive Kurse</p>
-            {courses.filter(c => c.is_active && c.date_end >= new Date().toISOString().split('T')[0]).length === 0 && (
-              <p className="text-sm text-yoga-text/40 text-center py-4">Keine aktiven Kurse</p>
-            )}
             {(() => {
               const today = new Date().toISOString().split('T')[0]
-              return courses
-                .filter(c => c.is_active)
-                .sort((a, b) => {
-                  const aEnded = a.date_end < today ? 1 : 0
-                  const bEnded = b.date_end < today ? 1 : 0
-                  return aEnded - bEnded
-                })
-            })().map((c, idx, arr) => {
-              const today = new Date().toISOString().split('T')[0]
-              const isEnded = c.date_end < today
-              const prevEnded = idx > 0 && arr[idx - 1].date_end < today
-              const showEndedHeader = isEnded && !prevEnded
-              return (
-                <Fragment key={c.id}>
-                  {showEndedHeader && (
-                    <p className="section-label mt-6">Beendete Kurse</p>
-                  )}
-                  <div className="card mb-3" data-course-card={isEnded ? 'ended' : 'active'}>
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <div className="text-base font-bold">{c.name}</div>
-                      {(() => {
-                        const st = getCourseStatus(c)
-                        const styles: Record<string,string> = {
-                          'läuft': 'bg-yoga-green-bg text-yoga-green-text',
-                          'geplant': 'bg-yoga-amber-bg text-yoga-amber-text',
-                          'beendet': 'bg-yoga-gray text-yoga-text/50',
-                          'abgebrochen': 'bg-yoga-red-bg text-yoga-red-text',
-                        }
-                        return <span className={`text-xs rounded-full px-2 py-0.5 font-semibold ${styles[st] || ''}`}>{st}</span>
-                      })()}
-                    </div>
-                    <div className="text-sm text-yoga-text/50">
-                      {c.weekday} · {c.time_start?.slice(0,5)} Uhr · {c.total_units} Einheiten
-                    </div>
-                    <div className="text-sm font-semibold text-yoga-text/60">
-                      {new Date(c.date_start).toLocaleDateString('de-DE')} – {new Date(c.date_end).toLocaleDateString('de-DE')}
-                    </div>
-                    <div className="text-sm text-yoga-text/60 mt-0.5">
-                      Teilnehmer:{' '}
-                      <strong className={c.is_overbooked ? 'text-yoga-red-text' : ''}>
-                        {c.participant_count ?? (c.enrollments || []).length}
-                      </strong>
-                      {c.max_spots ? `/${c.max_spots}` : ''}
-                      {c.is_overbooked && (
-                        <span className="ml-1 text-xs font-semibold text-yoga-red-text">· überbucht</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    {/* "Beendet"-Badge entfernt (redundant zum Status-Pill neben dem Titel).
-                        "Läuft"-Badge war schon raus aus selbem Grund. */}
-                    <span className={`badge ${c.is_single ? 'badge-wait' : 'badge-free'}`}>
-                      {c.is_single ? 'Einzelstunde' : 'Kurs'}
-                    </span>
-                    {/* is_open badge bleibt als Info */}
-                  {!c.is_open && (
-                    <button onClick={() => toggleOpen(c.id, c.is_open)}
-                      className="badge bg-yoga-amber-bg text-yoga-amber-text border-0 cursor-pointer hover:opacity-80"
-                      title="Klicken zum Freigeben">
-                      <i className="ti ti-lock text-xs mr-0.5" />Gesperrt
-                    </button>
-                  )}
-                  {c.is_open && (
-                    <button onClick={() => toggleOpen(c.id, c.is_open)}
-                      className="badge bg-yoga-green-bg text-yoga-green-text border-0 cursor-pointer hover:opacity-80"
-                      title="Klicken zum Sperren">
-                      <i className="ti ti-lock-open text-xs mr-0.5" />Frei
-                    </button>
-                  )}
-                  </div>
-                </div>
-                {/* Hauptaktionen */}
-                <div className="flex gap-2 mt-2">
-                  <button onClick={() => startEdit(c)}
-                    className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer">
-                    <i className="ti ti-edit mr-1" />Bearbeiten
-                  </button>
-                  <button onClick={() => loadSessions(c.id)}
-                    className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70">
-                    <i className="ti ti-calendar-event mr-1" />Termine
-                  </button>
-                  <button onClick={() => loadParticipants(c)}
-                    className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70">
-                    <i className="ti ti-users mr-1" />Teilnehmer
-                  </button>
-                </div>
-                {showRolloverButton(c) && (
-                  <button onClick={async () => {
-                    setFolgekursCourse(c)
-                    setFolgekursStep('dates')
-                    setFolgekursDateStart('')
-                    setFolgekursDateEnd('')
-                    setFolgekursExcluded([])
-                    setFolgekursForm({
-                      name: c.name,
-                      weekday: c.weekday,
-                      time_start: c.time_start,
-                      duration_min: c.duration_min,
-                      location: c.location,
-                      description: c.description,
-                      bring_along: c.bring_along,
-                      difficulty: c.difficulty,
-                      max_spots: c.max_spots,
-                      total_units: c.total_units,
-                    })
-                    await loadFolgekursMembers(c.id)
-                  }}
-                    className="w-full mt-2 text-sm bg-yoga-green-bg text-yoga-green-text rounded-full py-2 font-semibold hover:opacity-80 border-0 cursor-pointer">
-                    <i className="ti ti-arrows-transfer-down mr-1" />Folgekurs anlegen
-                  </button>
-                )}
-                {/* Kurs abbrechen + Archivieren in einer Reihe, grau */}
-                <div className="flex gap-2 mt-2">
-                  {(c.enrollments || []).length > 0 && (
-                    <button onClick={() => { setCancellingCourse(c); setCancelReason(''); setCancelRefundMode(null) }}
-                      className="flex-1 text-xs text-yoga-text/50 border border-yoga-border rounded-full py-1.5 font-semibold border-0 cursor-pointer hover:opacity-80"
-                      style={{ background: 'var(--yoga-gray)' }}>
-                      <i className="ti ti-ban mr-1" />Abbrechen
-                    </button>
-                  )}
-                  <button onClick={() => archiveCourse(c)}
-                    className="flex-1 text-xs text-yoga-text/50 rounded-full py-1.5 font-semibold hover:opacity-80 cursor-pointer border-0"
-                    style={{ background: 'var(--yoga-gray)' }}>
-                    <i className="ti ti-archive mr-1" />Archivieren
-                  </button>
-                </div>
-                {expandedCourse === c.id && courseSessions[c.id] && (
-                  <div className="mt-2">
-                    {courseSessions[c.id].map(s => (
-                      <button key={s.id} onClick={() => router.push(`/admin/sessions/${s.id}`)}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-yoga mb-1 text-left cursor-pointer border-0 hover:opacity-80 ${s.is_cancelled ? 'opacity-40' : ''}`}
-                        style={{ background: 'var(--yoga-bg)' }}>
-                        <span className="text-sm">
-                          {new Date(s.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })}
-                          {' · '}{s.time_start?.slice(0,5)} Uhr
-                          {s.is_cancelled && (s.cancel_reason === 'excluded' ? ' · Ausgeschlossen' : ' · Abgesagt')}
-                          {s.is_replacement && (
-                            <span className="text-yoga-text font-semibold">
-                              {' · Ersatzstunde'}
-                              {s.original_session && (
-                                <span className="text-yoga-text/55 font-normal">
-                                  {' (für '}{new Date(s.original_session.date).toLocaleDateString('de-DE', { day:'numeric', month:'short' })}{')'}
-                                </span>
-                              )}
-                            </span>
-                          )}
-                        </span>
-                        <i className="ti ti-chevron-right text-yoga-text/30" />
-                      </button>
-                    ))}
-                  </div>
-                )}
-                  </div>
-                </Fragment>
-              )
-            })}
-
-            {courses.filter(c => !c.is_active).length > 0 && (
-              <>
-                <p className="section-label mt-6">Archivierte Kurse</p>
-                {courses.filter(c => !c.is_active).map(c => (
-                  <div key={c.id} className="card mb-2 opacity-70 relative">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-bold">{c.name}</div>
-                        <div className="text-xs text-yoga-text/50">{c.weekday} · {c.time_start?.slice(0,5)} Uhr</div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={async () => {
-                          // Kurs reaktivieren + zukünftige Sessions reaktivieren
-                          await supabase.from('courses').update({ is_active: true, is_cancelled: false }).eq('id', c.id)
-                          const today = new Date().toISOString().split('T')[0]
-                          await supabase.from('sessions').update({ is_cancelled: false })
-                            .eq('course_id', c.id).gte('date', today)
-                          loadData()
-                        }}
-                          className="text-xs bg-yoga-bg text-yoga-text border border-yoga-border2 rounded-full px-3 py-1.5 font-semibold cursor-pointer hover:opacity-80">
-                          <i className="ti ti-refresh mr-1" />Reaktivieren
-                        </button>
-                        <button onClick={() => deleteCourse(c.id, c.name)}
-                          className="text-xs bg-yoga-red-bg text-yoga-red-text rounded-full px-3 py-1.5 font-semibold border-0 cursor-pointer hover:opacity-80">
-                          <i className="ti ti-trash mr-1" />Löschen
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
+              const activeCourses = courses.filter(c => c.is_active && c.date_end >= today && !c.is_cancelled)
+              if (activeCourses.length === 0) {
+                return <p className="text-sm text-yoga-text/40 text-center py-4">Keine aktiven Kurse</p>
+              }
+              return null
+            })()}
+            {courses
+              .filter(c => {
+                const today = new Date().toISOString().split('T')[0]
+                return c.is_active && c.date_end >= today && !c.is_cancelled
+              })
+              .map(c => renderCourseCard(c, false))}
 
             {/* Welle 2 (Sarah 2026-05-26): zweite Sektion — Sessions aus den
-                SYS-Containern (Einzelstunden, Events kostenlos/credit/bezahlt).
+                SYS-Containern (Einzelstunden, Events kostenlos/bezahlt).
                 Chronologisch, nur Anzeige + Detail-Navigation. */}
             <p className="section-label mt-6">Geplante Stunden & Events</p>
             {containerSessions.length === 0 ? (
@@ -1454,12 +1428,57 @@ export default function AdminKursePage() {
                 )
               })
             )}
+
+            {/* Welle 2.5 (Sarah 2026-05-26): Beendete Kurse — eigene Sektion
+                unten, gleiche Card-Logik wie aktive. */}
+            {(() => {
+              const today = new Date().toISOString().split('T')[0]
+              const ended = courses.filter(c => c.is_active && (c.date_end < today || c.is_cancelled))
+              if (ended.length === 0) return null
+              return <>
+                <p className="section-label mt-6">Beendete Kurse</p>
+                {ended.map(c => renderCourseCard(c, true))}
+              </>
+            })()}
+
+            {courses.filter(c => !c.is_active).length > 0 && (
+              <>
+                <p className="section-label mt-6">Archivierte Kurse</p>
+                {courses.filter(c => !c.is_active).map(c => (
+                  <div key={c.id} className="card mb-2 opacity-70 relative">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-bold">{c.name}</div>
+                        <div className="text-xs text-yoga-text/50">{c.weekday} · {c.time_start?.slice(0,5)} Uhr</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={async () => {
+                          // Kurs reaktivieren + zukünftige Sessions reaktivieren
+                          await supabase.from('courses').update({ is_active: true, is_cancelled: false }).eq('id', c.id)
+                          const today = new Date().toISOString().split('T')[0]
+                          await supabase.from('sessions').update({ is_cancelled: false })
+                            .eq('course_id', c.id).gte('date', today)
+                          loadData()
+                        }}
+                          className="text-xs bg-yoga-bg text-yoga-text border border-yoga-border2 rounded-full px-3 py-1.5 font-semibold cursor-pointer hover:opacity-80">
+                          <i className="ti ti-refresh mr-1" />Reaktivieren
+                        </button>
+                        <button onClick={() => deleteCourse(c.id, c.name)}
+                          className="text-xs bg-yoga-red-bg text-yoga-red-text rounded-full px-3 py-1.5 font-semibold border-0 cursor-pointer hover:opacity-80">
+                          <i className="ti ti-trash mr-1" />Löschen
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </>
         ) : showSingleForm ? (
           <>
             <button onClick={() => {
               setShowSingleForm(false)
-              setSingleForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '' })
+              setSingleForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', bring_along: '', difficulty: 'Alle Level' })
             }} className="flex items-center gap-1 text-sm text-yoga-text/60 mb-4 hover:opacity-80">
               <i className="ti ti-arrow-left" /> Zurück zur Kursübersicht
             </button>
@@ -1504,12 +1523,25 @@ export default function AdminKursePage() {
                 <textarea className="field-input" rows={3} value={singleForm.description}
                   onChange={e => setSingleForm({ ...singleForm, description: e.target.value })} />
               </div>
+              <div>
+                <label className="field-label">Was mitbringen</label>
+                <input className="field-input" value={singleForm.bring_along}
+                  onChange={e => setSingleForm({ ...singleForm, bring_along: e.target.value })}
+                  placeholder="z.B. Matte, bequeme Kleidung" />
+              </div>
+              <div>
+                <label className="field-label">Schwierigkeitsgrad</label>
+                <select className="field-input" value={singleForm.difficulty}
+                  onChange={e => setSingleForm({ ...singleForm, difficulty: e.target.value })}>
+                  {['Anfänger', 'Mittelstufe', 'Fortgeschritten', 'Alle Level'].map(d => <option key={d}>{d}</option>)}
+                </select>
+              </div>
               <button type="submit" className="btn-primary" disabled={savingSingleOrEvent}>
                 {savingSingleOrEvent ? 'Wird gespeichert...' : 'Anlegen'}
               </button>
               <button type="button" className="btn-ghost" onClick={() => {
                 setShowSingleForm(false)
-                setSingleForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '' })
+                setSingleForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', bring_along: '', difficulty: 'Alle Level' })
               }}>Abbrechen</button>
             </form>
           </>
@@ -1517,7 +1549,7 @@ export default function AdminKursePage() {
           <>
             <button onClick={() => {
               setShowEventForm(false)
-              setEventForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', payment_type: 'free', price_eur: '', image_url: '' })
+              setEventForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', bring_along: '', difficulty: 'Alle Level', payment_type: 'free', price_eur: '', image_url: '' })
             }} className="flex items-center gap-1 text-sm text-yoga-text/60 mb-4 hover:opacity-80">
               <i className="ti ti-arrow-left" /> Zurück zur Kursübersicht
             </button>
@@ -1562,6 +1594,19 @@ export default function AdminKursePage() {
                 <textarea className="field-input" rows={3} value={eventForm.description}
                   onChange={e => setEventForm({ ...eventForm, description: e.target.value })} />
               </div>
+              <div>
+                <label className="field-label">Was mitbringen</label>
+                <input className="field-input" value={eventForm.bring_along}
+                  onChange={e => setEventForm({ ...eventForm, bring_along: e.target.value })}
+                  placeholder="z.B. Matte, bequeme Kleidung" />
+              </div>
+              <div>
+                <label className="field-label">Schwierigkeitsgrad</label>
+                <select className="field-input" value={eventForm.difficulty}
+                  onChange={e => setEventForm({ ...eventForm, difficulty: e.target.value })}>
+                  {['Anfänger', 'Mittelstufe', 'Fortgeschritten', 'Alle Level'].map(d => <option key={d}>{d}</option>)}
+                </select>
+              </div>
               {/* Bild-Upload — gleiche Logik wie Block-Kurs-Form */}
               <div>
                 <label className="field-label">Bild (optional)</label>
@@ -1592,7 +1637,8 @@ export default function AdminKursePage() {
                 {uploadingEventImage && <p className="text-xs text-yoga-text/50 mt-1">Wird hochgeladen…</p>}
                 <p className="text-xs text-yoga-text/50 mt-1">JPG/PNG/WebP · max 5 MB</p>
               </div>
-              {/* 3 Radio-Optionen für payment_type */}
+              {/* Welle 2.5: 2 Radio-Optionen — Credit-Verbrauch entfernt
+                  (das ist "Einzelstunde anlegen"). */}
               <div>
                 <label className="field-label">Bezahlung</label>
                 <div className="space-y-2">
@@ -1602,15 +1648,6 @@ export default function AdminKursePage() {
                       onChange={() => setEventForm({ ...eventForm, payment_type: 'free' })}
                       className="w-5 h-5" />
                     <span className="text-sm">Kostenlos</span>
-                  </label>
-                  <label className="flex items-center gap-3 card cursor-pointer">
-                    <input type="radio" name="event_payment_type" value="credit"
-                      checked={eventForm.payment_type === 'credit'}
-                      onChange={() => setEventForm({ ...eventForm, payment_type: 'credit' })}
-                      className="w-5 h-5" />
-                    <span className="text-sm">
-                      Credit-Verbrauch <span className="text-yoga-text/50">(Yogi verbraucht 1 Credit)</span>
-                    </span>
                   </label>
                   <label className="flex items-center gap-3 card cursor-pointer">
                     <input type="radio" name="event_payment_type" value="paid"
@@ -1638,7 +1675,7 @@ export default function AdminKursePage() {
               </button>
               <button type="button" className="btn-ghost" onClick={() => {
                 setShowEventForm(false)
-                setEventForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', payment_type: 'free', price_eur: '', image_url: '' })
+                setEventForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', bring_along: '', difficulty: 'Alle Level', payment_type: 'free', price_eur: '', image_url: '' })
               }}>Abbrechen</button>
             </form>
           </>
@@ -1664,55 +1701,18 @@ export default function AdminKursePage() {
                 <input className="field-input" value={form.name}
                   onChange={e => setForm({...form, name: e.target.value})} required />
               </div>
-              <label className="flex items-center gap-3 card cursor-pointer" onClick={() => setForm({...form, is_single: !form.is_single})}>
-                <input type="checkbox" checked={form.is_single} readOnly className="w-5 h-5" />
-                <span className="text-sm">Einzelne Stunde</span>
-              </label>
-              <label className="flex items-center gap-3 card cursor-pointer" onClick={() => setForm({...form, is_free: !form.is_free})}>
-                <input type="checkbox" checked={form.is_free} readOnly className="w-5 h-5" />
-                <span className="text-sm">
-                  Kostenlos <span className="text-yoga-text/50">(kein Credit nötig — z.B. Schnupper- oder Spendenstunde)</span>
-                </span>
-              </label>
-              {/* Bild-Upload — sinnvoll v.a. bei is_free, aber für jeden Kurs verfügbar */}
+              {/* Welle 2.5 (Sarah 2026-05-26): "Einzelne Stunde" + "Kostenlos"
+                  Checkboxen sowie Bild-Upload aus Block-Kurs-Form entfernt.
+                  Einzelstunden/Events haben eigene Buttons in der Übersicht.
+                  DB-Spalten is_single/is_free/image_url bleiben für Bestand
+                  unverändert (Default in emptyForm: false bzw. ''). */}
               <div>
-                <label className="field-label">Bild (optional)</label>
-                {form.image_url && (
-                  <div className="mb-2 flex items-center gap-3">
-                    <img src={form.image_url} alt="Vorschau" className="w-20 h-20 rounded-yoga object-cover border border-yoga-border" />
-                    <button type="button" className="btn-secondary text-xs"
-                      onClick={() => setForm({...form, image_url: ''})}>
-                      Entfernen
-                    </button>
-                  </div>
-                )}
-                <input className="field-input text-sm" type="file" accept="image/jpeg,image/png,image/webp"
-                  disabled={uploadingImage}
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0]; if (!file) return
-                    if (file.size > 5 * 1024 * 1024) { alert('Bild zu groß (max 5 MB)'); return }
-                    setUploadingImage(true)
-                    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-                    const path = `${editCourse?.id || 'new'}-${Date.now()}.${ext}`
-                    const { error: upErr } = await supabase.storage.from('course-images').upload(path, file, { upsert: true })
-                    if (upErr) { alert('Upload-Fehler: ' + upErr.message); setUploadingImage(false); return }
-                    const { data: urlData } = supabase.storage.from('course-images').getPublicUrl(path)
-                    setForm({...form, image_url: urlData.publicUrl})
-                    setUploadingImage(false)
-                    e.target.value = ''
-                  }} />
-                {uploadingImage && <p className="text-xs text-yoga-text/50 mt-1">Wird hochgeladen…</p>}
-                <p className="text-xs text-yoga-text/50 mt-1">JPG/PNG/WebP · max 5 MB · wird als kleines Foto neben der Stunde angezeigt</p>
+                <label className="field-label">Wochentag *</label>
+                <select className="field-input" value={form.weekday}
+                  onChange={e => setForm({...form, weekday: e.target.value})}>
+                  {WEEKDAYS.map(d => <option key={d}>{d}</option>)}
+                </select>
               </div>
-              {!form.is_single && (
-                <div>
-                  <label className="field-label">Wochentag *</label>
-                  <select className="field-input" value={form.weekday}
-                    onChange={e => setForm({...form, weekday: e.target.value})}>
-                    {WEEKDAYS.map(d => <option key={d}>{d}</option>)}
-                  </select>
-                </div>
-              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="field-label">Uhrzeit *</label>

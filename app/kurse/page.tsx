@@ -118,9 +118,11 @@ export default function KursePage() {
     const weekStart = addDays(monday, offset * 7)
     const weekEnd = addDays(weekStart, 6)
 
+    // Welle 2.5 (Sarah 2026-05-26): session-eigene Felder mitladen (Einzelstunden/
+    // Events haben eigenen name/max_spots/etc., der Container-Kurs hat NULL/0).
     const { data, error } = await supabase
       .from('sessions')
-      .select(`id, date, time_start, duration_min, course:courses(id, name, max_spots, difficulty, is_free, image_url), bookings!bookings_session_id_fkey(id, user_id, status)`)
+      .select(`id, date, time_start, duration_min, session_type, name, location, description, max_spots, image_url, price_eur, bring_along, difficulty, course:courses(id, name, max_spots, difficulty, is_free, image_url, location, description, bring_along), bookings!bookings_session_id_fkey(id, user_id, status)`)
       .gte('date', weekStart.toISOString().split('T')[0])
       .lte('date', weekEnd.toISOString().split('T')[0])
       .eq('is_cancelled', false)
@@ -143,14 +145,29 @@ export default function KursePage() {
     }
 
     const now = new Date()
-    const enriched = (data || []).map((s: any) => ({
-      ...s,
-      booking_count: s.bookings.filter((b: any) => b.status === 'active').length,
-      my_booking: s.bookings.find((b: any) => b.user_id === userId && b.status === 'active') || null,
-      is_past: new Date(`${s.date}T${s.time_start}`) < now,
-      is_replacement: !!originMap[s.id],
-      original_session: originMap[s.id] || null,
-    }))
+    // Welle 2.5: für Container-Sessions (single/event_*) zeigt course.name den
+    // SYS-Container ("SYS · Events (bezahlt)") — daher session.name als Override.
+    // Gleiche Fallback-Strategie für max_spots, image_url, location, description,
+    // bring_along, difficulty.
+    const enriched = (data || []).map((s: any) => {
+      const display_name = s.name ?? s.course?.name
+      const display_max_spots = s.max_spots ?? s.course?.max_spots
+      const display_image_url = s.image_url ?? s.course?.image_url
+      const display_location = s.location ?? s.course?.location
+      const display_description = s.description ?? s.course?.description
+      const display_bring_along = s.bring_along ?? s.course?.bring_along
+      const display_difficulty = s.difficulty ?? s.course?.difficulty
+      return {
+        ...s,
+        booking_count: s.bookings.filter((b: any) => b.status === 'active').length,
+        my_booking: s.bookings.find((b: any) => b.user_id === userId && b.status === 'active') || null,
+        is_past: new Date(`${s.date}T${s.time_start}`) < now,
+        is_replacement: !!originMap[s.id],
+        original_session: originMap[s.id] || null,
+        display_name, display_max_spots, display_image_url, display_location,
+        display_description, display_bring_along, display_difficulty,
+      }
+    })
     setSessions(enriched)
     setLoading(false)
   }
@@ -162,17 +179,46 @@ export default function KursePage() {
     : offset === -1 ? 'Vorherige Woche'
     : formatWeekRange(weekStart)
 
+  // Welle 2.5 (Sarah 2026-05-26): Events-Sektion oben (mehr Vermarktungs-Wirkung),
+  // dann reguläre Kursstunden. session_type='course_session' → reguläre Stunden;
+  // single/event_* → Events-Sektion.
+  const isEventLike = (s: any) => s.session_type && s.session_type !== 'course_session'
+  const eventSessions = sessions.filter(isEventLike)
+  const courseSessions = sessions.filter((s: any) => !isEventLike(s))
+
   const byDay: Record<string, any[]> = {}
-  sessions.forEach(s => { if (!byDay[s.date]) byDay[s.date] = []; byDay[s.date].push(s) })
+  courseSessions.forEach(s => { if (!byDay[s.date]) byDay[s.date] = []; byDay[s.date].push(s) })
   const myNextSession = sessions.find(s => s.my_booking && !s.is_past)
 
   function getBadge(s: any) {
     if (s.is_past) return <span className="badge bg-yoga-gray text-yoga-text/40">Vergangen</span>
     if (s.my_booking) return <span className="badge badge-mine">Angemeldet</span>
-    const free = (s.course?.max_spots || 0) - s.booking_count
+    // Sarah-BugFix 2026-05-26: max_spots aus session (Container hat 0 → "Ausgebucht").
+    const free = (s.display_max_spots || 0) - s.booking_count
     if (free <= 0) return <span className="badge badge-full">Ausgebucht</span>
     if (free === 1) return <span className="badge badge-wait">1 Platz frei</span>
     return <span className="badge badge-free">{free} Plätze frei</span>
+  }
+
+  // Welle 2.5: Typ-Badge für Events-Sektion (Preis bei paid, "Kostenlos" bei free,
+  // "Einzelstunde" bei single + legacy credit).
+  function getEventBadge(s: any) {
+    if (s.session_type === 'event_paid') return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-yoga-amber-bg text-yoga-amber-text text-[10px] font-semibold">
+        {s.price_eur} €
+      </span>
+    )
+    if (s.session_type === 'event_free') return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-yoga-green-bg text-yoga-green-text text-[10px] font-semibold">
+        Kostenlos
+      </span>
+    )
+    // single + event_credit (legacy)
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-yoga-gray text-yoga-text/60 text-[10px] font-semibold">
+        Einzelstunde
+      </span>
+    )
   }
 
   const goWeek = (delta: number) => {
@@ -247,12 +293,59 @@ export default function KursePage() {
       })()}
 
       <div className="px-4 pb-4 mt-3">
+        {/* Welle 2.5 (Sarah 2026-05-26): Events-Sektion oben — Vermarktungs-Wirkung.
+            Zeigt Einzelstunden + Events (alle session_type != 'course_session'). */}
+        {!loading && eventSessions.length > 0 && (
+          <div className="mb-5">
+            <p className="text-xs font-bold mb-2 mt-1 uppercase tracking-wide text-yoga-text">
+              Events diese Woche
+            </p>
+            {eventSessions.map(s => {
+              const dObj = new Date(s.date)
+              return (
+                <button key={s.id}
+                  onClick={() => { if (!s.is_past && !s.is_cancelled) router.push(`/kurse/${s.id}`) }}
+                  disabled={s.is_past || s.is_cancelled}
+                  className={`w-full flex items-center gap-3 mb-2 text-left transition-colors rounded-yoga border p-3
+                    ${(s.is_past || s.is_cancelled) ? 'opacity-40 cursor-default pointer-events-none' : 'hover:border-yoga-border2 active:scale-[0.98]'}
+                    ${s.my_booking && !s.is_past && !s.is_cancelled ? 'border-2 border-yoga-green-text bg-white' : 'border-yoga-border bg-white'}`}>
+                  <div className="text-center flex-shrink-0 w-12">
+                    <div className={`text-base font-bold ${s.is_past ? 'line-through' : ''}`}>
+                      {s.time_start?.slice(0,5)}
+                    </div>
+                    <div className="text-xs text-yoga-text/40">{s.duration_min} min</div>
+                  </div>
+                  <div className="w-px h-8 bg-yoga-border2 flex-shrink-0" />
+                  {s.display_image_url && (
+                    <img src={s.display_image_url} alt="" className="w-12 h-12 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold truncate">{s.display_name}</div>
+                    <div className="text-xs text-yoga-text/50 mt-0.5">
+                      {dObj.toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })}
+                    </div>
+                    {s.display_difficulty && (
+                      <div className="text-xs text-yoga-text/50 mt-0.5">{s.display_difficulty}</div>
+                    )}
+                    <div className="mt-1">{getEventBadge(s)}</div>
+                  </div>
+                  {getBadge(s)}
+                </button>
+              )
+            })}
+          </div>
+        )}
+        {!loading && courseSessions.length > 0 && (
+          <p className="text-xs font-bold mb-2 uppercase tracking-wide text-yoga-text/70">
+            Stunden diese Woche
+          </p>
+        )}
         {loading ? (
           <div className="text-center py-10 text-yoga-text/40">
             <i className="ti ti-loader-2 animate-spin text-3xl block mb-2" />
             <p className="text-sm">Wird geladen...</p>
           </div>
-        ) : Object.keys(byDay).length === 0 ? (
+        ) : (Object.keys(byDay).length === 0 && eventSessions.length === 0) ? (
           <div className="text-center py-10 text-yoga-text/40">
             <i className="ti ti-moon text-3xl block mb-2" />
             <p className="text-sm">Keine Stunden diese Woche</p>
@@ -287,20 +380,20 @@ export default function KursePage() {
                 </div>
                 <div className="w-px h-8 bg-yoga-border2 flex-shrink-0" />
                 {/* Variante A v2: Bild ZWISCHEN Trenner und Titel (Sarah-Wunsch 2026-05-24) */}
-                {s.course?.image_url && (
-                  <img src={s.course.image_url} alt="" className="w-12 h-12 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
+                {s.display_image_url && (
+                  <img src={s.display_image_url} alt="" className="w-12 h-12 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
                 )}
                 <div className="flex-1 min-w-0">
                   {/* Sarah-Wunsch 2026-05-24: Reihenfolge — Kurstitel,
                       Ersatzstunde-Hinweis (eigene Zeile), Level, Charity-Pille */}
-                  <div className="text-sm font-semibold truncate">{s.course?.name}</div>
+                  <div className="text-sm font-semibold truncate">{s.display_name}</div>
                   {s.is_replacement && s.original_session && (
                     <div className="text-xs text-yoga-text font-semibold mt-0.5">
                       Ersatzstunde für {new Date(s.original_session.date).toLocaleDateString('de-DE', { day:'numeric', month:'short' })} · {s.original_session.time_start?.slice(0,5)} Uhr
                     </div>
                   )}
-                  {s.course?.difficulty && (
-                    <div className="text-xs text-yoga-text/50 mt-0.5">{s.course.difficulty}</div>
+                  {s.display_difficulty && (
+                    <div className="text-xs text-yoga-text/50 mt-0.5">{s.display_difficulty}</div>
                   )}
                   {s.course?.is_free && (
                     <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full bg-yoga-green-bg text-yoga-green-text text-[10px] font-semibold">

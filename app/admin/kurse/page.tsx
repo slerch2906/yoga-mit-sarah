@@ -101,6 +101,12 @@ export default function AdminKursePage() {
   const [containerIds, setContainerIds] = useState<{ single: string; eventFree: string; eventCredit: string; eventPaid: string } | null>(null)
   const [showSingleForm, setShowSingleForm] = useState(false)
   const [showEventForm, setShowEventForm] = useState(false)
+  // Welle 2.11 (Sarah 2026-05-26): Session-Bearbeiten geht jetzt im Modal
+  // (statt /admin/sessions/[id]?edit=1 Seite). Editing-State markiert UPDATE.
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
+  // Welle 2.11: Teilnehmer-Modal fuer Sessions (analog participantsCourse).
+  const [participantsSession, setParticipantsSession] = useState<any>(null)
+  const [sessionBookings, setSessionBookings] = useState<any[]>([])
   const [singleForm, setSingleForm] = useState({
     name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12,
     location: '', description: '',
@@ -132,6 +138,7 @@ export default function AdminKursePage() {
       window.history.pushState({ formOpen: true }, '', window.location.pathname)
       const onPop = () => {
         setShowForm(false); setShowSingleForm(false); setShowEventForm(false)
+        setEditingSessionId(null)
       }
       window.addEventListener('popstate', onPop)
       return () => window.removeEventListener('popstate', onPop)
@@ -240,14 +247,13 @@ export default function AdminKursePage() {
   }
 
   // Welle 2 (Sarah 2026-05-26): Einzelstunde anlegen (in SYS-Container "Einzelstunden")
+  // Welle 2.11: bei editingSessionId UPDATE statt INSERT
   async function handleSaveSingle() {
     if (!containerIds?.single) { alert('Container fehlt'); return }
     if (!singleForm.name || !singleForm.date || !singleForm.time_start) { alert('Pflichtfelder fehlen'); return }
     setSavingSingleOrEvent(true)
     try {
-      await supabase.from('sessions').insert({
-        course_id: containerIds.single,
-        session_type: 'single',
+      const payload = {
         date: singleForm.date,
         time_start: singleForm.time_start,
         duration_min: singleForm.duration_min,
@@ -257,12 +263,26 @@ export default function AdminKursePage() {
         max_spots: singleForm.max_spots,
         bring_along: singleForm.bring_along || null,
         difficulty: singleForm.difficulty || null,
-      })
-      await supabase.from('audit_log').insert({
-        action: 'single_session_created',
-        details: { name: singleForm.name, date: singleForm.date, time: singleForm.time_start, max_spots: singleForm.max_spots }
-      })
+      }
+      if (editingSessionId) {
+        await supabase.from('sessions').update(payload).eq('id', editingSessionId)
+        await supabase.from('audit_log').insert({
+          action: 'single_session_updated',
+          details: { session_id: editingSessionId, name: singleForm.name, date: singleForm.date, time: singleForm.time_start, max_spots: singleForm.max_spots }
+        })
+      } else {
+        await supabase.from('sessions').insert({
+          course_id: containerIds.single,
+          session_type: 'single',
+          ...payload,
+        })
+        await supabase.from('audit_log').insert({
+          action: 'single_session_created',
+          details: { name: singleForm.name, date: singleForm.date, time: singleForm.time_start, max_spots: singleForm.max_spots }
+        })
+      }
       setShowSingleForm(false)
+      setEditingSessionId(null)
       setSingleForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', bring_along: '', difficulty: 'Alle Level' })
       await loadData()
     } catch (e: any) {
@@ -290,9 +310,7 @@ export default function AdminKursePage() {
     setSavingSingleOrEvent(true)
     try {
       const sessionType = eventForm.payment_type === 'free' ? 'event_free' : 'event_paid'
-      await supabase.from('sessions').insert({
-        course_id: courseId,
-        session_type: sessionType,
+      const payload = {
         date: eventForm.date,
         time_start: eventForm.time_start,
         duration_min: eventForm.duration_min,
@@ -304,12 +322,27 @@ export default function AdminKursePage() {
         price_eur: eventForm.payment_type === 'paid' ? parseFloat(eventForm.price_eur) : null,
         bring_along: eventForm.bring_along || null,
         difficulty: eventForm.difficulty || null,
-      })
-      await supabase.from('audit_log').insert({
-        action: 'event_created',
-        details: { name: eventForm.name, payment_type: eventForm.payment_type, date: eventForm.date, max_spots: eventForm.max_spots, price_eur: eventForm.payment_type === 'paid' ? parseFloat(eventForm.price_eur) : null }
-      })
+      }
+      if (editingSessionId) {
+        // Welle 2.11: Bei Event-Update auch course_id mitschreiben falls payment_type wechselt
+        await supabase.from('sessions').update({ ...payload, course_id: courseId, session_type: sessionType }).eq('id', editingSessionId)
+        await supabase.from('audit_log').insert({
+          action: 'event_updated',
+          details: { session_id: editingSessionId, name: eventForm.name, payment_type: eventForm.payment_type, date: eventForm.date, max_spots: eventForm.max_spots, price_eur: payload.price_eur }
+        })
+      } else {
+        await supabase.from('sessions').insert({
+          course_id: courseId,
+          session_type: sessionType,
+          ...payload,
+        })
+        await supabase.from('audit_log').insert({
+          action: 'event_created',
+          details: { name: eventForm.name, payment_type: eventForm.payment_type, date: eventForm.date, max_spots: eventForm.max_spots, price_eur: payload.price_eur }
+        })
+      }
       setShowEventForm(false)
+      setEditingSessionId(null)
       setEventForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', bring_along: '', difficulty: 'Alle Level', payment_type: 'free', price_eur: '', image_url: '' })
       await loadData()
     } catch (e: any) {
@@ -1116,6 +1149,77 @@ export default function AdminKursePage() {
     setParticipantsCourse(course)
   }
 
+  // Welle 2.11 (Sarah 2026-05-26): Session-Bearbeiten direkt im Modal
+  // (statt /admin/sessions/[id]?edit=1 Seite). Diese Funktion bestimmt anhand
+  // session_type ob singleForm oder eventForm geoeffnet wird, und befuellt es.
+  function startEditSession(s: any) {
+    setEditingSessionId(s.id)
+    if (s.session_type === 'single') {
+      setSingleForm({
+        name: s.name || '',
+        date: s.date,
+        time_start: s.time_start?.slice(0, 5) || '18:00',
+        duration_min: s.duration_min || 75,
+        max_spots: s.max_spots || 12,
+        location: s.location || '',
+        description: s.description || '',
+        bring_along: s.bring_along || '',
+        difficulty: s.difficulty || 'Alle Level',
+      })
+      setShowSingleForm(true)
+    } else {
+      // event_free | event_paid | event_credit
+      const payment_type: 'free' | 'paid' = s.session_type === 'event_paid' ? 'paid' : 'free'
+      setEventForm({
+        name: s.name || '',
+        date: s.date,
+        time_start: s.time_start?.slice(0, 5) || '18:00',
+        duration_min: s.duration_min || 75,
+        max_spots: s.max_spots || 12,
+        location: s.location || '',
+        description: s.description || '',
+        bring_along: s.bring_along || '',
+        difficulty: s.difficulty || 'Alle Level',
+        payment_type,
+        price_eur: s.price_eur != null ? String(s.price_eur) : '',
+        image_url: s.image_url || '',
+      })
+      setShowEventForm(true)
+    }
+  }
+
+  // Welle 2.11: Teilnehmer-Modal Loader fuer Sessions
+  async function loadSessionParticipants(s: any) {
+    const { data: bookings } = await supabase
+      .from('bookings')
+      .select('id, status, type, user_id, created_at, profile:profiles(id, first_name, last_name, email, is_dummy)')
+      .eq('session_id', s.id)
+      .eq('status', 'active')
+      .order('created_at')
+    setSessionBookings(bookings || [])
+    setParticipantsSession(s)
+  }
+
+  // Welle 2.11: Teilen-Button auf Karte (Web Share / Copy-Link Fallback)
+  async function shareSession(s: any) {
+    const url = `${window.location.origin}/kurse/${s.id}`
+    const title = s.name || 'Yoga-Stunde'
+    const dateStr = new Date(s.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })
+    const text = `${title} · ${dateStr} · ${s.time_start?.slice(0, 5)} Uhr`
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url })
+      } catch { /* User abgebrochen */ }
+    } else {
+      try {
+        await navigator.clipboard.writeText(`${text}\n${url}`)
+        alert('Link kopiert!')
+      } catch {
+        alert(url)
+      }
+    }
+  }
+
   async function loadFolgekursMembers(courseId: string) {
     const { data } = await supabase
       .from('enrollments')
@@ -1514,22 +1618,32 @@ export default function AdminKursePage() {
                         </button>
                       </div>
                     </div>
-                    {/* Bild — wenn vorhanden ueber den Buttons */}
-                    {s.image_url && (
-                      <img src={s.image_url} alt={s.name || ''} className="w-full h-32 object-cover rounded-yoga mb-2 border border-yoga-border" />
-                    )}
-                    {/* Buttons-Reihe 1: Bearbeiten / Teilnehmer */}
+                    {/* Welle 2.11 (Sarah 2026-05-26): Bild raus aus Karte —
+                        zeigen wir nur noch im Bearbeiten-Modal. Karte bleibt
+                        kompakt und einheitlich. */}
+                    {/* Buttons-Reihe 1: Bearbeiten / Teilnehmer / Teilen
+                        Welle 2.11: Bearbeiten + Teilnehmer oeffnen jetzt Modals
+                        (statt /admin/sessions/[id] Seite). Teilen-Button neu
+                        auf der Karte (analog Kurs-Detail "Stunde teilen"). */}
                     <div className="flex gap-2 mt-2">
-                      <button onClick={() => router.push(`/admin/sessions/${s.id}?edit=1`)}
+                      <button onClick={() => startEditSession(s)}
                         className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer">
                         <i className="ti ti-edit mr-1" />Bearbeiten
                       </button>
-                      <button onClick={() => router.push(`/admin/sessions/${s.id}`)}
+                      <button onClick={() => loadSessionParticipants(s)}
                         className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70">
                         <i className="ti ti-users mr-1" />Teilnehmer
                       </button>
+                      <button onClick={() => shareSession(s)}
+                        className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70">
+                        <i className="ti ti-share mr-1" />Teilen
+                      </button>
                     </div>
-                    {/* Buttons-Reihe 2: Stunde absagen + Loeschen (analog Abbrechen+Archivieren bei Kursen) */}
+                    {/* Buttons-Reihe 2: Stunde absagen + Loeschen (analog Abbrechen+Archivieren bei Kursen)
+                        Welle 2.11: Absagen ist KEIN Yogi-Stunden-Absagen Flow
+                        bei Events (kein Ersatztermin) — bleibt erstmal via
+                        /admin/sessions/[id]?cancel=1 (das Modal dort kennt
+                        bereits die Event-Sonderlogik aus Welle 2.10). */}
                     <div className="flex gap-2 mt-2">
                       {activeBookings > 0 && (
                         <button onClick={() => router.push(`/admin/sessions/${s.id}?cancel=1`)}
@@ -1593,9 +1707,10 @@ export default function AdminKursePage() {
                           </span>
                         </div>
                       </div>
-                      {/* Beendet: nur Teilnehmer-Ansicht + Löschen (kein Edit, kein Absagen) */}
+                      {/* Beendet: nur Teilnehmer-Ansicht + Löschen (kein Edit, kein Absagen)
+                          Welle 2.11: Modal statt Seite. */}
                       <div className="flex gap-2 mt-2">
-                        <button onClick={() => router.push(`/admin/sessions/${s.id}`)}
+                        <button onClick={() => loadSessionParticipants(s)}
                           className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70">
                           <i className="ti ti-users mr-1" />Teilnehmer
                         </button>
@@ -1660,11 +1775,12 @@ export default function AdminKursePage() {
           <>
             <button onClick={() => {
               setShowSingleForm(false)
+              setEditingSessionId(null)
               setSingleForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', bring_along: '', difficulty: 'Alle Level' })
             }} className="flex items-center gap-1 text-sm text-yoga-text/60 mb-4 hover:opacity-80">
               <i className="ti ti-arrow-left" /> Zurück zur Kursübersicht
             </button>
-            <h2 className="text-lg font-bold mb-4">Einzelstunde anlegen</h2>
+            <h2 className="text-lg font-bold mb-4">{editingSessionId ? 'Einzelstunde bearbeiten' : 'Einzelstunde anlegen'}</h2>
             <form onSubmit={(e) => { e.preventDefault(); handleSaveSingle() }} className="space-y-3">
               <div>
                 <label className="field-label">Name *</label>
@@ -1719,10 +1835,11 @@ export default function AdminKursePage() {
                 </select>
               </div>
               <button type="submit" className="btn-primary" disabled={savingSingleOrEvent}>
-                {savingSingleOrEvent ? 'Wird gespeichert...' : 'Anlegen'}
+                {savingSingleOrEvent ? 'Wird gespeichert...' : editingSessionId ? 'Speichern' : 'Anlegen'}
               </button>
               <button type="button" className="btn-ghost" onClick={() => {
                 setShowSingleForm(false)
+                setEditingSessionId(null)
                 setSingleForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', bring_along: '', difficulty: 'Alle Level' })
               }}>Abbrechen</button>
             </form>
@@ -1731,11 +1848,12 @@ export default function AdminKursePage() {
           <>
             <button onClick={() => {
               setShowEventForm(false)
+              setEditingSessionId(null)
               setEventForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', bring_along: '', difficulty: 'Alle Level', payment_type: 'free', price_eur: '', image_url: '' })
             }} className="flex items-center gap-1 text-sm text-yoga-text/60 mb-4 hover:opacity-80">
               <i className="ti ti-arrow-left" /> Zurück zur Kursübersicht
             </button>
-            <h2 className="text-lg font-bold mb-4">Event anlegen</h2>
+            <h2 className="text-lg font-bold mb-4">{editingSessionId ? 'Event bearbeiten' : 'Event anlegen'}</h2>
             <form onSubmit={(e) => { e.preventDefault(); handleSaveEvent() }} className="space-y-3">
               <div>
                 <label className="field-label">Name *</label>
@@ -1853,10 +1971,11 @@ export default function AdminKursePage() {
                 </div>
               )}
               <button type="submit" className="btn-primary" disabled={savingSingleOrEvent}>
-                {savingSingleOrEvent ? 'Wird gespeichert...' : 'Anlegen'}
+                {savingSingleOrEvent ? 'Wird gespeichert...' : editingSessionId ? 'Speichern' : 'Anlegen'}
               </button>
               <button type="button" className="btn-ghost" onClick={() => {
                 setShowEventForm(false)
+                setEditingSessionId(null)
                 setEventForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', bring_along: '', difficulty: 'Alle Level', payment_type: 'free', price_eur: '', image_url: '' })
               }}>Abbrechen</button>
             </form>
@@ -2271,6 +2390,50 @@ export default function AdminKursePage() {
                 </button>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Welle 2.11 (Sarah 2026-05-26): Session-Teilnehmer-Modal
+          Klicken auf "Teilnehmer" bei Einzelstunde/Event oeffnet jetzt dieses
+          Modal — analog dem Kurs-Teilnehmer-Modal oben. Fuer komplexere Aktionen
+          (Yogi hinzufuegen, Buchung verschieben) gibt es weiter den "Stunde
+          verwalten" Link unten. */}
+      {participantsSession && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay" onClick={() => { setParticipantsSession(null); setSessionBookings([]) }}>
+          <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-base font-bold">Teilnehmer</h3>
+              <button onClick={() => { setParticipantsSession(null); setSessionBookings([]) }} className="bg-transparent border-0 cursor-pointer text-yoga-text/40">
+                <i className="ti ti-x text-xl" />
+              </button>
+            </div>
+            <p className="text-sm text-yoga-text/50 mb-3">
+              {participantsSession.name || '—'} · {new Date(participantsSession.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })} · {participantsSession.time_start?.slice(0,5)} Uhr
+            </p>
+            {sessionBookings.length === 0 ? (
+              <p className="text-sm text-yoga-text/40 text-center py-6">Noch keine Buchungen</p>
+            ) : sessionBookings.map((b: any) => (
+              <button key={b.id}
+                onClick={() => { setParticipantsSession(null); setSessionBookings([]); router.push(`/admin/yogis/${b.profile.id}`) }}
+                className="w-full flex items-center justify-between py-3 border-b border-yoga-border text-left hover:opacity-70 transition-opacity bg-transparent border-x-0 border-t-0 cursor-pointer">
+                <div>
+                  <div className="text-sm font-semibold flex items-center gap-2">
+                    {b.profile?.first_name} {b.profile?.last_name}
+                    {b.profile?.is_dummy && (
+                      <span className="text-xs bg-yoga-text text-white rounded-full px-2 py-0.5 font-normal">Dummy</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-yoga-text/50 mt-0.5">{b.profile?.email || 'Kein Login'}</div>
+                </div>
+                <i className="ti ti-chevron-right text-yoga-text/30" />
+              </button>
+            ))}
+            {/* Welle 2.11: Buchungen manuell aendern weiterhin via /admin/sessions/[id] */}
+            <button onClick={() => router.push(`/admin/sessions/${participantsSession.id}`)}
+              className="w-full mt-4 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70 bg-transparent">
+              <i className="ti ti-settings mr-1" />Stunde verwalten (Yogi hinzufuegen / Absagen)
+            </button>
           </div>
         </div>
       )}

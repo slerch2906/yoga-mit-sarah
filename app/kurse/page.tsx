@@ -122,7 +122,7 @@ export default function KursePage() {
     // Events haben eigenen name/max_spots/etc., der Container-Kurs hat NULL/0).
     const { data, error } = await supabase
       .from('sessions')
-      .select(`id, date, time_start, duration_min, session_type, name, location, description, max_spots, image_url, price_eur, bring_along, difficulty, course:courses(id, name, max_spots, difficulty, is_free, image_url, location, description, bring_along), bookings!bookings_session_id_fkey(id, user_id, status)`)
+      .select(`id, date, time_start, duration_min, session_type, name, location, description, max_spots, image_url, price_eur, bring_along, difficulty, external_participants_count, course:courses(id, name, max_spots, difficulty, is_free, image_url, location, description, bring_along), bookings!bookings_session_id_fkey(id, user_id, status)`)
       .gte('date', weekStart.toISOString().split('T')[0])
       .lte('date', weekEnd.toISOString().split('T')[0])
       .eq('is_cancelled', false)
@@ -197,7 +197,8 @@ export default function KursePage() {
     if (s.is_past) return <span className="badge bg-yoga-gray text-yoga-text/40">Vergangen</span>
     if (s.my_booking) return <span className="badge badge-mine">Angemeldet</span>
     // Sarah-BugFix 2026-05-26: max_spots aus session (Container hat 0 → "Ausgebucht").
-    const free = (s.display_max_spots || 0) - s.booking_count
+    // Welle 2.11: external_participants_count auch abziehen.
+    const free = (s.display_max_spots || 0) - s.booking_count - (s.external_participants_count || 0)
     if (free <= 0) return <span className="badge badge-full">Ausgebucht</span>
     if (free === 1) return <span className="badge badge-wait">1 Platz frei</span>
     return <span className="badge badge-free">{free} Plätze frei</span>

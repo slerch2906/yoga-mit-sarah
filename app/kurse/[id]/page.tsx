@@ -74,8 +74,11 @@ export default function SessionDetailPage() {
     setMyBooking(myBook)
     setMyWaitlist(myWait)
     // Welle 2.5: session.max_spots Vorrang (Events/Einzelstunden), Fallback course.
+    // Welle 2.11 (Sarah 2026-05-26): external_participants_count mit abziehen.
+    // Sarah hatte 12 frei gesehen obwohl Admin externe Teilnehmer eingetragen hatte.
     const maxSpots = (sess as any)?.max_spots ?? (sess as any)?.course?.max_spots ?? 0
-    setFreeSpots(maxSpots - (bookingCount || 0))
+    const externalCount = (sess as any)?.external_participants_count ?? 0
+    setFreeSpots(maxSpots - (bookingCount || 0) - externalCount)
 
     // Freie Credits berechnen: Guthaben (aus Kursabbruch) ist NUR für neue Kurse,
     // nicht für Einzelstunden. Alle anderen Credit-Modelle (course/single/tenpack)
@@ -717,7 +720,7 @@ export default function SessionDetailPage() {
             {isEventPaid && freeSpots > 0 && effectiveOpen && (
               <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 mb-4">
                 <p className="text-sm text-yoga-amber-text leading-relaxed">
-                  <span className="font-bold">Verbindlich anmelden</span> — Bezahlung extern (PayPal/Bar). Stornofrist: 7 Tage.
+                  Schön, dass du dabei sein möchtest! Deine Anmeldung ist <span className="font-bold">verbindlich</span> — die Bezahlung läuft direkt mit Sarah (PayPal oder Bar). Bis <strong>7 Tage</strong> vor dem Event kannst du dich kostenfrei wieder abmelden.
                 </p>
               </div>
             )}
@@ -759,7 +762,11 @@ export default function SessionDetailPage() {
                       </div>
                     )}
                     <button onClick={handleBook} className="btn-primary mb-2" disabled={actionLoading}>
-                      {actionLoading ? 'Wird eingetragen...' : 'Für diese Stunde eintragen'}
+                      {actionLoading
+                        ? 'Wird eingetragen...'
+                        : isEvent
+                          ? 'Verbindlich anmelden'
+                          : 'Für diese Stunde eintragen'}
                     </button>
                   </>
                 )}

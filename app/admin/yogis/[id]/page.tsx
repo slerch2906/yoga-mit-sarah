@@ -81,7 +81,8 @@ export default function AdminYogiDetailPage() {
         .eq('user_id', id).order('created_at', { ascending: false }),
       supabase.from('credits').select('*, course:courses(name)').eq('user_id', id).order('created_at', { ascending: false }),
       supabase.from('enrollments').select('*, course:courses(*, sessions(id, date, time_start, is_cancelled, cancel_reason, replacement_session_id, course_id))').eq('user_id', id),
-      supabase.from('courses').select('*, sessions(date, is_cancelled, cancel_reason), enrollments(id)').eq('is_active', true).order('name'),
+      // Welle 1 (Sarah 2026-05-26): SYS-Container-Kurse nicht im "In Kurs einbuchen"-Dropdown.
+      supabase.from('courses').select('*, sessions(date, is_cancelled, cancel_reason), enrollments(id)').eq('is_active', true).eq('is_system_container', false).order('name'),
       // Sarah-Wunsch 2026-05-26: yogi-bezogenes Protokoll (audit_log).
       // Filter: user_id = yogi ODER details.target_user_id ODER details.user_id.
       supabase.from('audit_log')

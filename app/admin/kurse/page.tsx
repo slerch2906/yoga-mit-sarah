@@ -111,8 +111,11 @@ export default function AdminKursePage() {
   }, [form.weekday, form.date_start, form.date_end, excludedDates, form.is_single, editCourse])
 
   async function loadData() {
+    // Welle 1 (Sarah 2026-05-26): SYS-Container-Kurse (Einzelstunden/Events)
+    // sind in den Admin-Kurslisten unsichtbar — sie sind nur DB-Container.
     const { data } = await supabase.from('courses')
       .select('*, sessions(date, is_cancelled, cancel_reason), enrollments(id, end_date, end_reason)')
+      .eq('is_system_container', false)
       .order('date_start', { ascending: true })
     const withParticipants = (data || []).map((c: any) => {
       // Counter zeigt NUR aktiv eingebuchte Kurs-Teilnehmer (enrollments OHNE

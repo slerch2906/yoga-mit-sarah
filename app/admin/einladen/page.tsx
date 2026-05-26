@@ -28,9 +28,12 @@ function EinladenInner() {
   useEffect(() => { loadCourses(); loadInvitations() }, [])
 
   async function loadCourses() {
+    // Welle 1 (Sarah 2026-05-26): SYS-Container-Kurse sind nicht einladbar.
     const { data } = await supabase.from('courses')
       .select('id, name, weekday, total_units, date_start, date_end, is_single, sessions(id, date, is_cancelled)')
-      .eq('is_active', true).order('name')
+      .eq('is_active', true)
+      .eq('is_system_container', false)
+      .order('name')
     setCourses(data || [])
   }
 

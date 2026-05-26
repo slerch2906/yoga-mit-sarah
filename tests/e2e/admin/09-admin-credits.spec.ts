@@ -27,11 +27,23 @@ test.describe('Credits verwalten: Read-only und Editierbarkeit', () => {
   })
 
   test('Kurs-Credits zeigen "Nur Lesezugriff", keine Edit/Delete-Buttons', async ({ page }) => {
+    // 2026-05-26: Test braucht einen Course-Credit auf yogi1 — sonst wird die
+    // "Credits / Guthaben verwalten"-Sektion nicht gerendert (visibleCredits.length===0).
+    // Das war in der vollen Suite zufällig vorhanden (vorheriger Test), in isoliertem
+    // Lauf nicht — daher jetzt explizit als Setup.
+    const db = await getAdminClient()
+    const exp = new Date(); exp.setDate(exp.getDate() + 60)
+    const { data: testCredit } = await db.from('credits').insert({
+      user_id: yogi1Id, model: 'course', total: 5, used: 0,
+      course_id: null, expires_at: exp.toISOString(),
+    }).select('id').single()
+
     await page.goto(`/admin/yogis/${yogi1Id}`)
     await page.waitForLoadState('networkidle')
 
     // Credits-Bereich sichtbar
-    await expect(page.getByText('Credits verwalten').first()).toBeVisible({ timeout: 8_000 })
+    // 2026-05-26: Überschrift umbenannt zu "Credits / Guthaben verwalten"
+    await expect(page.getByText(/Credits.*verwalten|Guthaben.*verwalten/).first()).toBeVisible({ timeout: 8_000 })
 
     // Kurs-Credit-Karte finden
     const courseCard = page.locator('.card', { hasText: 'Credits aus Kurs' }).first()
@@ -39,6 +51,9 @@ test.describe('Credits verwalten: Read-only und Editierbarkeit', () => {
       await expect(courseCard.getByText('Nur Lesezugriff')).toBeVisible()
       await expect(courseCard.locator('[data-testid="edit-credit"], .ti-edit').first()).not.toBeVisible()
     }
+
+    // Cleanup
+    if (testCredit?.id) await db.from('credits').delete().eq('id', testCredit.id)
   })
 
   test('Guthaben-Credits sind LÖSCHBAR (für Auszahlung) — Sarah-Wunsch Welle A', async ({ page }) => {
@@ -50,7 +65,8 @@ test.describe('Credits verwalten: Read-only und Editierbarkeit', () => {
     await page.goto(`/admin/yogis/${yogi1Id}`)
     await page.waitForLoadState('networkidle')
 
-    await expect(page.getByText('Credits verwalten').first()).toBeVisible({ timeout: 8_000 })
+    // 2026-05-26: Überschrift umbenannt zu "Credits / Guthaben verwalten"
+    await expect(page.getByText(/Credits.*verwalten|Guthaben.*verwalten/).first()).toBeVisible({ timeout: 8_000 })
 
     const guthabenCard = page.locator('.card', { hasText: 'Guthaben aus Kursabbruch' }).first()
     await expect(guthabenCard).toBeVisible({ timeout: 5_000 })
@@ -74,7 +90,8 @@ test.describe('Credits verwalten: Read-only und Editierbarkeit', () => {
     await page.goto(`/admin/yogis/${yogi1Id}`)
     await page.waitForLoadState('networkidle')
 
-    await expect(page.getByText('Credits verwalten').first()).toBeVisible({ timeout: 8_000 })
+    // 2026-05-26: Überschrift umbenannt zu "Credits / Guthaben verwalten"
+    await expect(page.getByText(/Credits.*verwalten|Guthaben.*verwalten/).first()).toBeVisible({ timeout: 8_000 })
 
     const tenpackCard = page.locator('.card', { hasText: 'Punktekarte' }).first()
     await expect(tenpackCard).toBeVisible({ timeout: 5_000 })

@@ -188,7 +188,7 @@ export default function AdminKursePage() {
     }
     // Sessions: alle die NICHT 'course_session' sind (= aus Containern)
     const { data: cs } = await supabase.from('sessions')
-      .select('id, name, date, time_start, duration_min, max_spots, location, description, session_type, price_eur, image_url, is_cancelled, course_id, external_participants_count, bookings!bookings_session_id_fkey(id, status)')
+      .select('id, name, date, time_start, duration_min, max_spots, location, description, session_type, price_eur, image_url, is_cancelled, is_open, course_id, external_participants_count, bookings!bookings_session_id_fkey(id, status)')
       .neq('session_type', 'course_session')
       .order('date', { ascending: true })
     setContainerSessions((cs || []).filter((s: any) => !s.is_cancelled))
@@ -483,6 +483,18 @@ export default function AdminKursePage() {
 
   async function toggleOpen(id: string, currentlyOpen: boolean) {
     await supabase.from('courses').update({ is_open: !currentlyOpen }).eq('id', id)
+    loadData()
+  }
+
+  // Welle 2.7 (Sarah 2026-05-26): Frei/Gesperrt-Pille fuer Einzelstunden + Events.
+  // sessions.is_open ist eigenes Flag (NULL/true = offen). Container-Kurse erlauben
+  // keine globale Sperre — daher pro Session.
+  async function toggleSessionOpen(sessionId: string, currentlyOpen: boolean) {
+    await supabase.from('sessions').update({ is_open: !currentlyOpen }).eq('id', sessionId)
+    await supabase.from('audit_log').insert({
+      action: 'session_open_toggled',
+      details: { session_id: sessionId, new_value: !currentlyOpen },
+    })
     loadData()
   }
 
@@ -1401,17 +1413,29 @@ export default function AdminKursePage() {
                   : s.session_type === 'event_credit' ? { label: 'Credit', cls: 'bg-yoga-amber-bg text-yoga-amber-text' }
                   : s.session_type === 'event_paid' ? { label: `${s.price_eur} €`, cls: 'bg-yoga-amber-bg text-yoga-amber-text' }
                   : { label: s.session_type, cls: 'bg-yoga-gray text-yoga-text/70' }
+                // Welle 2.7: Frei/Gesperrt-Pille (sessions.is_open NULL/true = offen)
+                const isOpen = s.is_open !== false
                 return (
-                  <button key={s.id} onClick={() => router.push(`/admin/sessions/${s.id}`)}
-                    className="card mb-3 w-full text-left cursor-pointer hover:opacity-80 border-0 block">
+                  <div key={s.id} className="card mb-3">
                     <div className="flex items-start gap-3">
                       {s.image_url && (
                         <img src={s.image_url} alt="" className="w-14 h-14 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
                       )}
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 cursor-pointer" onClick={() => router.push(`/admin/sessions/${s.id}`)}>
                         <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                           <div className="text-base font-bold truncate">{s.name || '—'}</div>
                           <span className={`text-xs rounded-full px-2 py-0.5 font-semibold ${typeBadge.cls}`}>{typeBadge.label}</span>
+                          {/* Frei/Gesperrt-Pille — toggle ohne Navigation */}
+                          <button
+                            type="button"
+                            onClick={(ev) => { ev.stopPropagation(); toggleSessionOpen(s.id, isOpen) }}
+                            className={`text-xs rounded-full px-2 py-0.5 font-semibold border-0 cursor-pointer hover:opacity-80 ${
+                              isOpen ? 'bg-yoga-green-bg text-yoga-green-text' : 'bg-yoga-amber-bg text-yoga-amber-text'
+                            }`}
+                            title={isOpen ? 'Klicken zum Sperren' : 'Klicken zum Freigeben'}>
+                            <i className={`ti ${isOpen ? 'ti-lock-open' : 'ti-lock'} text-xs mr-0.5`} />
+                            {isOpen ? 'Frei' : 'Gesperrt'}
+                          </button>
                         </div>
                         <div className="text-sm text-yoga-text/60">
                           {new Date(s.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })}
@@ -1422,9 +1446,10 @@ export default function AdminKursePage() {
                           {ext > 0 && <span className="text-xs text-yoga-text/50"> (inkl. {ext} extern)</span>}
                         </div>
                       </div>
-                      <i className="ti ti-chevron-right text-yoga-text/30 flex-shrink-0 mt-1" />
+                      <i className="ti ti-chevron-right text-yoga-text/30 flex-shrink-0 mt-1 cursor-pointer"
+                        onClick={() => router.push(`/admin/sessions/${s.id}`)} />
                     </div>
-                  </button>
+                  </div>
                 )
               })
             )}

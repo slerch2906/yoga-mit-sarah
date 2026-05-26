@@ -11,6 +11,7 @@ import { selectCreditForBooking } from '@/lib/credit-selector'
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
+import { sessionDisplayName } from '@/lib/session-display'
 
 export default function SessionDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -804,9 +805,7 @@ export default function SessionDetailPage() {
               <div className="bg-yoga-bg rounded-yoga p-3 mb-4">
                 {conflictingWaitlists.map((w: any) => (
                   <div key={w.id} className="text-sm py-1 border-b last:border-b-0 border-yoga-border">
-                    <strong>{w.session?.session_type && w.session.session_type !== 'course_session'
-                      ? `Event · ${w.session.name ?? 'Unbenannt'}`
-                      : (w.session?.name ?? w.session?.course?.name)}</strong> · {new Date(w.session?.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })} · {w.session?.time_start?.slice(0,5)} Uhr
+                    <strong>{sessionDisplayName(w.session)}</strong> · {new Date(w.session?.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })} · {w.session?.time_start?.slice(0,5)} Uhr
                   </div>
                 ))}
               </div>

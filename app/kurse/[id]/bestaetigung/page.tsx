@@ -7,6 +7,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { Email } from '@/lib/email'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
+import { sessionDisplayName } from '@/lib/session-display'
 
 function BestaetigungInner() {
   const { id } = useParams<{ id: string }>()
@@ -108,11 +109,8 @@ function BestaetigungInner() {
 
   if (!session) return null
 
-  // Welle 2.6 (Sarah 2026-05-26): SYS-Container-Name unterdrücken.
-  // Bei Events/Einzelstunden steht der echte Titel in session.name.
-  const displayName = session.session_type && session.session_type !== 'course_session'
-    ? `Event · ${session.name ?? 'Unbenannt'}`
-    : (session.name ?? session.course?.name ?? '')
+  // Welle 2.7: zentraler Helper differenziert Einzelstunde / Event / Kursname
+  const displayName = sessionDisplayName(session)
 
   const sessionDate = new Date(`${session.date}T${session.time_start}`)
   const within3h = (sessionDate.getTime() - Date.now()) < 3 * 60 * 60 * 1000

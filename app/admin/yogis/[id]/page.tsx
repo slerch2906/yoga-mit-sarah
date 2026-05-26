@@ -8,6 +8,7 @@ import { isActive, isStarted, countActiveFutureUnits, isExcluded } from '@/lib/s
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
+import { sessionDisplayName } from '@/lib/session-display'
 
 export default function AdminYogiDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -816,11 +817,9 @@ export default function AdminYogiDetailPage() {
       ? fmtDateTime(d.session_date, d.session_time)
       : (sess ? fmtDateTime(sess.date, sess.time_start) : '')
     // Kurs-Name: details → session.course → course-lookup → '—'
-    // Welle 2.6: bei Einzelstunden/Events steht der echte Titel in sess.name,
-    // course.name wäre der SYS-Container — daher session.name bevorzugen.
-    const sessDisplayName = sess?.session_type && sess.session_type !== 'course_session'
-      ? sess?.name
-      : (sess?.name ?? sess?.course?.name)
+    // Welle 2.7: zentraler Helper — differenziert Einzelstunde/Event/Kursname.
+    // Im audit_log nutzen wir nur den nackten Namen ohne Prefix.
+    const sessDisplayName = sess?.name ?? sess?.course?.name
     const courseName =
       d.course_name
       || d.original_course_name
@@ -1526,11 +1525,9 @@ export default function AdminYogiDetailPage() {
                   </div>
                   <div className="w-px h-8 bg-yoga-border2 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    {/* Welle 2.6: SYS-Container-Name unterdrücken */}
+                    {/* Welle 2.7: zentraler Helper */}
                     <div className="text-sm font-semibold truncate">
-                      {b.session?.session_type && b.session.session_type !== 'course_session'
-                        ? `Event · ${b.session.name ?? 'Unbenannt'}`
-                        : (b.session?.name ?? b.session?.course?.name ?? '—')}
+                      {sessionDisplayName(b.session)}
                     </div>
                     <div className="text-xs text-yoga-text/45">{b.session.time_start?.slice(0,5)} · Einzelstunde · {b.session?.duration_min || 75} min</div>
                   </div>
@@ -1574,9 +1571,7 @@ export default function AdminYogiDetailPage() {
                 <div className="flex-1 min-w-0">
                   {/* Welle 2.6: SYS-Container-Name unterdrücken */}
                   <div className="text-sm font-semibold truncate">
-                    {b.session?.session_type && b.session.session_type !== 'course_session'
-                      ? `Event · ${b.session.name ?? 'Unbenannt'}`
-                      : (b.session?.name ?? b.session?.course?.name)}
+                    {sessionDisplayName(b.session)}
                   </div>
                   <div className="text-xs text-yoga-text/40">{b.session?.time_start?.slice(0,5)} · {b.type === 'single' ? 'Einzelstunde' : 'Kursstunde'}</div>
                 </div>

@@ -6,6 +6,7 @@ import { getCurrentUser } from '@/lib/auth'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import { getCurrentAgbVersion } from '@/lib/agb-version'
+import { sessionDisplayName } from '@/lib/session-display'
 
 export default function WartelistePage() {
   const [profile, setProfile] = useState<any>(null)
@@ -60,11 +61,9 @@ export default function WartelistePage() {
             <p className="section-label">Du stehst auf der Warteliste</p>
             {waitlistItems.map(w => (
               <div key={w.id} className="card mb-3">
-                {/* Welle 2.6: bei Events/Einzelstunden session.name statt SYS-Container */}
+                {/* Welle 2.7: zentraler Helper */}
                 <div className="text-base font-bold mb-1">
-                  {w.session?.session_type && w.session.session_type !== 'course_session'
-                    ? `Event · ${w.session.name ?? 'Unbenannt'}`
-                    : (w.session?.name ?? w.session?.course?.name)}
+                  {sessionDisplayName(w.session)}
                 </div>
                 <div className="text-sm text-yoga-text/55 mb-3">
                   {new Date(w.session?.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · {w.session?.time_start?.slice(0,5)} Uhr

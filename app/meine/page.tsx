@@ -8,6 +8,7 @@ import { isActive, isExcluded, isCancelled, isStarted } from '@/lib/session-stat
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import { getCurrentAgbVersion } from '@/lib/agb-version'
+import { sessionDisplayName } from '@/lib/session-display'
 
 export default function MeinePage() {
   const [profile, setProfile] = useState<any>(null)
@@ -449,12 +450,9 @@ export default function MeinePage() {
                 </div>
                 <div className="w-px h-6 bg-yoga-border2 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  {/* Welle 2.6 (Sarah 2026-05-26): session.name Vorrang vor SYS-course.name.
-                      Bei Events Prefix "Event · " zur visuellen Unterscheidung. */}
+                  {/* Welle 2.7: zentraler Helper differenziert Einzelstunde/Event/Kursname */}
                   <div className="text-sm font-semibold truncate">
-                    {b.session?.session_type && b.session.session_type !== 'course_session' && b.session.session_type !== 'single'
-                      ? `Event · ${b.session.name ?? 'Unbenannt'}`
-                      : (b.session?.name ?? b.session?.course?.name)}
+                    {sessionDisplayName(b.session)}
                   </div>
                   <div className="text-xs text-yoga-text/45">
                     {b.session?.session_type === 'event_paid' ? 'Event'

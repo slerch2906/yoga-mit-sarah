@@ -11,6 +11,7 @@ import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import WeekPickerPopover from '@/components/WeekPickerPopover'
 import AdminAnnouncementBubble from '@/components/AdminAnnouncementBubble'
+import { sessionDisplayName } from '@/lib/session-display'
 
 const WEEKDAYS = ['So','Mo','Di','Mi','Do','Fr','Sa']
 const MONTHS = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']
@@ -576,10 +577,8 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-base font-bold">
-                    {/* Welle 2.6: SYS-Container-Name unterdrücken */}
-                    {selectedSession.session_type && selectedSession.session_type !== 'course_session'
-                      ? `Event · ${selectedSession.name ?? 'Unbenannt'}`
-                      : (selectedSession.name ?? selectedSession.course?.name)}
+                    {/* Welle 2.7: Differenziert "Einzelstunde · X" / "Event · X" / Kursname */}
+                    {sessionDisplayName(selectedSession)}
                     {selectedSession.is_replacement && (
                       <span className="text-yoga-text font-semibold"> · Ersatzstunde</span>
                     )}
@@ -748,10 +747,8 @@ export default function AdminDashboard() {
             <div className="bg-yoga-bg w-full max-w-md mx-auto rounded-t-2xl p-5">
               <h3 className="text-base font-bold mb-1">Stunde absagen</h3>
               <p className="text-sm text-yoga-text/55 mb-4">
-                {/* Welle 2.6: SYS-Name-Override */}
-                {selectedSession.session_type && selectedSession.session_type !== 'course_session'
-                  ? `Event · ${selectedSession.name ?? 'Unbenannt'}`
-                  : (selectedSession.name ?? selectedSession.course?.name)}
+                {/* Welle 2.7: differenziert Einzelstunde/Event/Kursname */}
+                {sessionDisplayName(selectedSession)}
                 {' · '}{new Date(selectedSession.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })}
               </p>
 
@@ -942,11 +939,8 @@ export default function AdminDashboard() {
                 <div className="w-px h-9 bg-yoga-border2 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-bold truncate">
-                    {/* Welle 2.6 (Sarah 2026-05-26): SYS-Container-Name nicht durchschlagen
-                        lassen. Für Events/Einzelstunden: "Event · <Titel>". */}
-                    {s.session_type && s.session_type !== 'course_session'
-                      ? `Event · ${s.name ?? 'Unbenannt'}`
-                      : (s.name ?? s.course?.name)}
+                    {/* Welle 2.7 (2026-05-26): differenziert Einzelstunde/Event/Kursname */}
+                    {sessionDisplayName(s)}
                     {s.is_replacement && (
                       <span className="text-yoga-text font-semibold"> · Ersatzstunde</span>
                     )}

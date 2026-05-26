@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Email } from '@/lib/email'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
+import { sessionDisplayName } from '@/lib/session-display'
 
 function AnwesenheitInner() {
   const [session, setSession] = useState<any>(null)
@@ -94,10 +95,8 @@ function AnwesenheitInner() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-bold">
-                    {/* Welle 2.6: SYS-Container-Name unterdrücken */}
-                    {s.session_type && s.session_type !== 'course_session'
-                      ? `Event · ${s.name ?? 'Unbenannt'}`
-                      : (s.name ?? s.course?.name)}
+                    {/* Welle 2.7: zentraler Helper differenziert Einzelstunde/Event/Kursname */}
+                    {sessionDisplayName(s)}
                   </div>
                   <div className="text-sm text-yoga-text/50">{s.time_start?.slice(0,5)} Uhr</div>
                 </div>
@@ -117,10 +116,8 @@ function AnwesenheitInner() {
       <div className="px-4 py-4">
         <div className="card mb-4">
           <div className="text-base font-bold mb-1">
-            {/* Welle 2.6: SYS-Container-Name unterdrücken */}
-            {(session as any)?.session_type && (session as any).session_type !== 'course_session'
-              ? `Event · ${(session as any).name ?? 'Unbenannt'}`
-              : ((session as any)?.name ?? (session as any)?.course?.name)}
+            {/* Welle 2.7: zentraler Helper */}
+            {sessionDisplayName(session as any)}
           </div>
           <div className="text-sm text-yoga-text/50">
             {(session as any)?.time_start?.slice(0,5)} Uhr · {bookings.length} von {(session as any)?.course?.max_spots} angemeldet

@@ -51,10 +51,13 @@ test.describe('Kurs abbrechen – Option 1: Geld zurück (all_refund)', () => {
     const enrollment = await getEnrollment(yogi1Id, courseId)
     expect(enrollment, 'Enrollment sollte gelöscht sein').toBeNull()
 
-    // Kurs-Credits gelöscht
+    // Kurs-Credits (model='course') gelöscht. Provisorisches Guthaben
+    // (model='guthaben', source='cancellation_choice') ist seit
+    // Sarah-Wunsch 2026-05-26 auch mit course_id verknüpft als
+    // Herkunfts-Info — wir filtern deshalb explizit auf model.
     const { data: credits } = await db.from('credits')
-      .select('id').eq('user_id', yogi1Id).eq('course_id', courseId)
-    expect(credits?.length ?? 0, 'Kurs-Credits sollten gelöscht sein').toBe(0)
+      .select('id').eq('user_id', yogi1Id).eq('course_id', courseId).eq('model', 'course')
+    expect(credits?.length ?? 0, 'Kurs-Credits (model=course) sollten gelöscht sein').toBe(0)
 
     // Aktive Buchungen storniert
     const sessionIds = sessions?.map(s => s as any)

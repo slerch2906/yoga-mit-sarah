@@ -44,6 +44,11 @@ export default function AdminYogiDetailPage() {
   // ODER details.user_id, max 24 Monate (DSGVO-Aufbewahrungsfrist gem. AGB).
   const [auditLog, setAuditLog] = useState<any[]>([])
   const [auditOpen, setAuditOpen] = useState(false)
+  // Lookup-Maps fuer Kontext (Kurs-Name + Session-Datum/Zeit) — wird aus
+  // sessions/courses tabellen waehrend loadData() befuellt, damit jeder
+  // Protokoll-Eintrag konkret zeigen kann WAS, WANN, IN WELCHEM KURS.
+  const [auditSessionMap, setAuditSessionMap] = useState<Map<string, any>>(new Map())
+  const [auditCourseMap, setAuditCourseMap] = useState<Map<string, string>>(new Map())
   const router = useRouter()
   const supabase = createClient()
 
@@ -86,9 +91,38 @@ export default function AdminYogiDetailPage() {
         .order('created_at', { ascending: false })
         .limit(200),
     ])
+
+    // Sarah-Wunsch 2026-05-26: Yogi-Protokoll soll bei JEDEM Eintrag den
+    // Kurs- und Stunden-Kontext zeigen, nicht nur die nackte action. Viele
+    // audit_log-Eintraege speichern aber nur session_id / course_id ohne
+    // Klartext. Daher zur Render-Zeit zusammensammeln und in 2 Lookup-Queries
+    // aufloesen — robust gegen alte Eintraege die kein course_name etc. haben.
+    const sessionIds = new Set<string>()
+    const courseIds = new Set<string>()
+    for (const a of (al || [])) {
+      const d = a.details || {}
+      if (d.session_id) sessionIds.add(d.session_id)
+      if (d.original_session_id) sessionIds.add(d.original_session_id)
+      if (d.replacement_session_id) sessionIds.add(d.replacement_session_id)
+      if (d.course_id) courseIds.add(d.course_id)
+    }
+    const [{ data: sLookup }, { data: cLookup }] = await Promise.all([
+      sessionIds.size > 0
+        ? supabase.from('sessions').select('id, date, time_start, course:courses(name)').in('id', Array.from(sessionIds))
+        : Promise.resolve({ data: [] as any[] }),
+      courseIds.size > 0
+        ? supabase.from('courses').select('id, name').in('id', Array.from(courseIds))
+        : Promise.resolve({ data: [] as any[] }),
+    ])
+    const sessMap = new Map<string, any>()
+    ;(sLookup || []).forEach((s: any) => sessMap.set(s.id, s))
+    const courseMap = new Map<string, string>()
+    ;(cLookup || []).forEach((c: any) => courseMap.set(c.id, c.name))
+
     setYogi(y); setBookings(b || []); setCredits(c || [])
     setEnrollments(e || []); setCourses(courseList || [])
     setAuditLog(al || [])
+    setAuditSessionMap(sessMap); setAuditCourseMap(courseMap)
     setLoading(false)
   }
 
@@ -761,62 +795,144 @@ export default function AdminYogiDetailPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" /></div>
   if (!yogi) return null
 
-  // Sarah-Wunsch 2026-05-26: yogi-bezogenes Protokoll mit lesbaren Texten.
-  // Mapping action+details → kurzer Satz. Fallback zeigt action-string.
+  // Sarah-Wunsch 2026-05-26: jeder Protokoll-Eintrag MUSS nachvollziehbar
+  // sein — Welcher Kurs? Welche Stunde? Wieviele Credits? Daher cascading
+  // Fallbacks: details.course_name → auditCourseMap[course_id] → "—".
+  // Session-Lookup fuer Termin (Datum + Uhrzeit) inkl. originaler/Ersatz-Session.
   const formatAuditEntry = (entry: any): { text: string; subject?: string } => {
     const d = entry.details || {}
-    const date = d.session_date ? new Date(d.session_date).toLocaleDateString('de-DE', { day:'numeric', month:'short', year:'numeric' }) : null
-    const time = d.session_time ? String(d.session_time).slice(0,5) : null
-    const dateTime = date && time ? `${date} um ${time} Uhr` : (date || '')
-    const courseName = d.course_name || d.original_course_name || null
-    const reason = d.reason ? ` (${d.reason})` : ''
+    // Helper: Termin aus session-Lookup oder details.session_date/time
+    const fmtDateTime = (dateStr?: string, timeStr?: string) => {
+      if (!dateStr) return ''
+      const dt = new Date(dateStr).toLocaleDateString('de-DE', { day:'numeric', month:'short', year:'numeric' })
+      const tm = timeStr ? ` um ${String(timeStr).slice(0,5)} Uhr` : ''
+      return `${dt}${tm}`
+    }
+    const sessLookup = (sid?: string) => sid ? auditSessionMap.get(sid) : null
+    // Termin der primaeren Session: zuerst details, dann lookup
+    const sess = sessLookup(d.session_id)
+    const sessDateTime = d.session_date
+      ? fmtDateTime(d.session_date, d.session_time)
+      : (sess ? fmtDateTime(sess.date, sess.time_start) : '')
+    // Kurs-Name: details → session.course → course-lookup → '—'
+    const courseName =
+      d.course_name
+      || d.original_course_name
+      || d.von_kurs_name
+      || sess?.course?.name
+      || (d.course_id ? auditCourseMap.get(d.course_id) : null)
+      || (d.von_kurs_id ? auditCourseMap.get(d.von_kurs_id) : null)
+      || null
+    const courseLabel = courseName ? `„${courseName}"` : 'Kurs unbekannt'
+    const reason = d.reason && d.reason !== 'no_choice_within_7d_default_refund' ? ` — Grund: ${d.reason}` : ''
+    // Termin + Kurs in eine Zeile zusammenfassen fuer subject
+    const termin = sessDateTime ? `${sessDateTime}${courseName ? ` · ${courseName}` : ''}` : (courseName || '')
+
     switch (entry.action) {
-      case 'booking_created':
-        return { text: `Yogi hat Stunde gebucht${courseName ? ` (${courseName})` : ''}`, subject: dateTime }
-      case 'booking_cancelled':
-        return { text: `Yogi hat Stunde abgemeldet${d.late ? ' (Spät-Abmeldung, kein Credit zurück)' : ''}`, subject: dateTime }
-      case 'booking_cancelled_by_admin':
-        return { text: `Admin hat Yogi von Stunde abgemeldet${d.credit_returned === false ? ' (Credit verfallen)' : ''}`, subject: dateTime }
-      case 'admin_added_yogi_to_session':
-        return { text: 'Admin hat Yogi in Stunde eingetragen', subject: dateTime }
-      case 'admin_illness_credit':
-        return { text: `Admin hat Yogi krankheitsbedingt ausgetragen — ${d.hours_credited || '?'} Stunden Guthaben (10 Monate)`, subject: d.attest_date ? `Attest vom ${new Date(d.attest_date).toLocaleDateString('de-DE')}` : '' }
-      case 'yogi_enrolled_by_admin':
-        return { text: `Admin hat Yogi in Kurs eingebucht${d.credits ? ` — ${d.credits} Credits` : ''}${d.guthaben_verrechnet ? `, davon ${d.guthaben_verrechnet} aus Guthaben` : ''}`, subject: courseName || '' }
-      case 'yogi_removed_from_course':
-        return { text: 'Admin hat Yogi aus Kurs entfernt', subject: courseName || '' }
-      case 'yogi_course_cancellation_choice':
-        return { text: `Yogi hat zum Kursabbruch geantwortet: ${d.choice === 'guthaben' ? 'Guthaben behalten' : 'Geld zurück'}`, subject: courseName || '' }
-      case 'course_cancelled':
-        return { text: 'Admin hat Kurs abgebrochen', subject: courseName || '' }
+      case 'booking_created': {
+        const typeLbl = d.type === 'single' ? ' (Einzelstunde)' : ''
+        return { text: `Yogi hat gebucht${typeLbl}`, subject: termin }
+      }
+      case 'booking_cancelled': {
+        const lateStr = d.late ? ' — Spät-Abmeldung, Credit verfallen' : ' — Credit zurück'
+        return { text: `Yogi hat sich abgemeldet${lateStr}`, subject: termin }
+      }
+      case 'booking_cancelled_by_admin': {
+        const wStr = d.within_3h ? ' (innerhalb 3h-Frist)' : ''
+        const cStr = d.credit_returned === false ? ' — Credit verfallen' : ' — Credit zurück'
+        return { text: `Admin hat Yogi abgemeldet${wStr}${cStr}`, subject: termin }
+      }
+      case 'admin_added_yogi_to_session': {
+        const oStr = d.origin_session_id ? ' (als Vorhol-/Nachholbuchung)' : ''
+        return { text: `Admin hat Yogi in Stunde eingetragen${oStr}`, subject: termin }
+      }
+      case 'admin_illness_credit': {
+        const attest = d.attest_date ? new Date(d.attest_date).toLocaleDateString('de-DE') : '?'
+        const hrs = d.hours_credited ?? '?'
+        const vh = d.vorhol_cancelled_count > 0 ? `, ${d.vorhol_cancelled_count} Vorhol-/Nachholbuchung${d.vorhol_cancelled_count === 1 ? '' : 'en'} ersatzlos storniert` : ''
+        return {
+          text: `Admin hat Yogi krankheitsbedingt aus ${courseLabel} ausgetragen — ${hrs} Stunden Krankheits-Guthaben (10 Monate gültig)${vh}`,
+          subject: `Attest vom ${attest}`
+        }
+      }
+      case 'yogi_enrolled_by_admin': {
+        const cr = d.credits ?? d.neue_credits ?? '?'
+        const gh = d.guthaben_verrechnet > 0 ? `, davon ${d.guthaben_verrechnet} aus Guthaben verrechnet` : ''
+        return { text: `Admin hat Yogi in ${courseLabel} eingebucht — ${cr} Stunden${gh}`, subject: '' }
+      }
+      case 'yogi_removed_from_course': {
+        const dc = d.delete_credits ? ' (inkl. Credit-Löschung)' : ''
+        return { text: `Admin hat Yogi aus ${courseLabel} entfernt${dc}`, subject: '' }
+      }
+      case 'yogi_course_cancellation_choice': {
+        const choice = d.choice === 'guthaben' ? 'Guthaben behalten' : 'Geld zurück (Erstattung)'
+        const sess = d.remaining_sessions ?? '?'
+        return { text: `Yogi hat zum Abbruch von ${courseLabel} geantwortet: ${choice} — betrifft ${sess} Stunden`, subject: '' }
+      }
+      case 'course_cancelled': {
+        const sess = d.remaining_sessions ?? '?'
+        const mode = d.refund_mode === 'all_refund' ? 'alle Erstattung' : 'Yogi-Wahl Guthaben/Erstattung'
+        return { text: `Admin hat ${courseLabel} abgebrochen — ${sess} Stunden entfallen, ${mode}${reason}`, subject: '' }
+      }
       case 'session_cancelled':
-        return { text: `Admin hat Stunde abgesagt${reason}`, subject: dateTime }
-      case 'replacement_session_added':
-        return { text: 'Admin hat Ersatztermin angelegt', subject: dateTime }
-      case 'cascade_replacement_cancelled':
-        return { text: 'Ursprungs-Stunde wurde abgesagt — Ersatztermin damit auch hinfällig', subject: dateTime }
+        return { text: `Admin hat Stunde abgesagt${reason}`, subject: termin }
+      case 'replacement_session_added': {
+        const orig = sessLookup(d.original_session_id)
+        const origStr = orig ? `Ersatz für ${fmtDateTime(orig.date, orig.time_start)}` : 'Neuer Ersatztermin'
+        const yEnrolled = d.yogis_enrolled != null ? ` — ${d.yogis_enrolled} Yogis automatisch eingebucht` : ''
+        return { text: `Admin hat Ersatztermin angelegt: ${origStr}${yEnrolled}`, subject: termin }
+      }
+      case 'cascade_replacement_cancelled': {
+        const cnt = d.cancelled_booking_count ?? '?'
+        return { text: `Ursprungs-Stunde abgesagt — ${cnt} bereits gebuchte Ersatztermin-Buchung${cnt === 1 ? '' : 'en'} damit hinfällig`, subject: courseName || '' }
+      }
       case 'waitlist_offer_late_accepted':
-        return { text: 'Yogi hat 90-Min-Wartelisten-Angebot angenommen', subject: dateTime }
-      case 'admin_promoted_waitlist_yogi':
-        return { text: 'Admin hat Yogi von der Warteliste nachgerückt', subject: dateTime }
-      case 'credit_assigned':
-        return { text: `Admin hat ${d.credits || '?'} Credits vergeben${d.model ? ` (${d.model})` : ''}` }
-      case 'credit_adjusted':
-        return { text: `Admin hat Credits angepasst${d.from && d.to ? ` (${d.from} → ${d.to})` : ''}` }
-      case 'credit_deleted':
-        return { text: 'Admin hat Credit gelöscht (z.B. für Auszahlung)' }
-      case 'guthaben_2y_auto_refund':
-        return { text: `Guthaben nach 2 Jahren automatisch verfallen — ${d.unused_credits || '?'} Credits, Sarah muss erstatten` }
-      case 'token_expired_auto_refund':
-        return { text: 'Yogi hat 7-Tage-Wahl-Frist nicht eingehalten — Default: Erstattung', subject: courseName || '' }
+        return { text: `Yogi hat 90-Min-Wartelisten-Angebot angenommen${termin ? ` für ${termin}` : ''}`, subject: termin }
+      case 'admin_promoted_waitlist_yogi': {
+        const ob = d.was_overbooking ? ' (mit Überbuchung)' : ''
+        return { text: `Admin hat Yogi manuell von der Warteliste nachgerückt${ob}`, subject: termin }
+      }
+      case 'credit_assigned': {
+        const m = d.model || '?'
+        const amt = d.amount ?? '?'
+        const exp = d.expires_at ? ` (verfällt ${new Date(d.expires_at).toLocaleDateString('de-DE')})` : ''
+        const vf = d.valid_from ? `, nutzbar ab ${new Date(d.valid_from).toLocaleDateString('de-DE')}` : ''
+        return { text: `Admin hat ${amt} ${m}-Credits vergeben${exp}${vf}`, subject: '' }
+      }
+      case 'credit_adjusted': {
+        const o = d.old_total ?? '?'
+        const n = d.new_total ?? '?'
+        return { text: `Admin hat Credit-Gesamtzahl angepasst: ${o} → ${n}`, subject: '' }
+      }
+      case 'credit_deleted': {
+        const ub = d.unlinked_bookings > 0 ? ` (${d.unlinked_bookings} Buchungen entkoppelt)` : ''
+        return { text: `Admin hat Credit gelöscht — z.B. für Auszahlung${ub}`, subject: '' }
+      }
+      case 'guthaben_2y_auto_refund': {
+        const uc = d.unused_credits ?? '?'
+        return { text: `Guthaben nach 2 Jahren automatisch verfallen — ${uc} ungenutzte Credits, Sarah muss Geldbetrag erstatten`, subject: courseName || '' }
+      }
+      case 'token_expired_auto_refund': {
+        const rs = d.remaining_sessions ?? '?'
+        return { text: `Yogi hat 7-Tage-Wahl-Frist verstreichen lassen — Default: Erstattung für ${rs} Stunden in ${courseLabel}`, subject: '' }
+      }
       case 'yogi_anonymized_dsgvo':
-        return { text: 'Yogi-Account DSGVO-konform gelöscht (anonymisiert)' }
-      case 'course_rollover':
-        return { text: 'Admin hat Kurs verlängert (Rollover)', subject: courseName || '' }
-      case 'admin_bulk_mail':
-        return { text: 'Admin hat Bulk-Mail an Yogis verschickt' }
+        return { text: 'Yogi-Account DSGVO-konform gelöscht — alle Stammdaten anonymisiert, Buchungshistorie entfernt', subject: '' }
+      case 'course_rollover': {
+        const von = d.von_kurs_name || courseName
+        const folge = d.folgekurs_name || '?'
+        const tn = d.anzahl_teilnehmer ? ` mit ${d.anzahl_teilnehmer} Teilnehmer${d.anzahl_teilnehmer === 1 ? '' : 'n'}` : ''
+        const ds = d.datum_start ? new Date(d.datum_start).toLocaleDateString('de-DE') : '?'
+        const de = d.datum_ende ? new Date(d.datum_ende).toLocaleDateString('de-DE') : '?'
+        return { text: `Admin hat Kurs verlängert — „${von}" → „${folge}" (${ds}–${de})${tn}`, subject: '' }
+      }
+      case 'admin_bulk_mail': {
+        const subj = d.subject ? `: „${d.subject}"` : ''
+        const sent = d.sent != null ? ` (an ${d.sent} Empfänger${d.failed > 0 ? `, ${d.failed} fehlgeschlagen` : ''})` : ''
+        return { text: `Admin hat Bulk-Mail an Yogis verschickt${subj}${sent}`, subject: '' }
+      }
       default:
-        return { text: entry.action }
+        return { text: `${entry.action} — keine lesbare Beschreibung verfügbar (bitte Mapping ergänzen)`, subject: '' }
     }
   }
 
@@ -825,9 +941,23 @@ export default function AdminYogiDetailPage() {
   // extrahiert, damit er an einer Stelle gerendert und an der alten Stelle
   // (unter Letzte Buchungen) entfernt werden kann.
   const renderCreditsManageSection = () => {
-    const visibleCredits = credits.filter((c: any) =>
-      c.model === 'course' || Math.max(0, c.total - c.used) > 0
+    // Sarah-Wunsch 2026-05-26: Course-Credits AUSBLENDEN, wenn das zugehörige
+    // Enrollment beendet ist (z.B. krankheitsbedingt ausgetragen, end_date in
+    // der Vergangenheit). Sonst sieht der Admin eine "0 frei"-Karte für einen
+    // Kurs in dem der Yogi gar nicht mehr ist — verwirrend. Guthaben (illness
+    // & cancellation_choice) bleiben sichtbar.
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const endedCourseIds = new Set(
+      enrollments
+        .filter((e: any) => e.end_date && e.end_date <= todayStr)
+        .map((e: any) => e.course_id)
     )
+    const visibleCredits = credits.filter((c: any) => {
+      // Course-Credit fuer beendeten Kurs → raus
+      if (c.model === 'course' && endedCourseIds.has(c.course_id)) return false
+      // Sonst alte Regel: course immer; andere nur wenn noch frei.
+      return c.model === 'course' || Math.max(0, c.total - c.used) > 0
+    })
     if (visibleCredits.length === 0) return null
     return (
       <>
@@ -1451,7 +1581,7 @@ export default function AdminYogiDetailPage() {
           {auditOpen && (
             <div className="mt-2">
               <p className="text-xs text-yoga-text/50 mb-2 px-1">
-                Letzte 24 Monate (wird gemäß AGB nach 24 Monaten automatisch gelöscht)
+                Letzte 24 Monate · gemäß Datenschutzerklärung § 9d werden Einträge nach max. 24 Monaten automatisch gelöscht (cron <code className="text-[10px]">delete_old_audit_logs</code>).
               </p>
               {auditLog.length === 0 ? (
                 <p className="text-sm text-yoga-text/40 text-center py-4">Keine Einträge</p>

@@ -112,13 +112,19 @@ export default function AdminKursePage() {
 
   async function loadData() {
     const { data } = await supabase.from('courses')
-      .select('*, sessions(date, is_cancelled, cancel_reason), enrollments(id)')
+      .select('*, sessions(date, is_cancelled, cancel_reason), enrollments(id, end_date, end_reason)')
       .order('date_start', { ascending: true })
     const withParticipants = (data || []).map((c: any) => {
-      // Counter zeigt NUR Kurs-Teilnehmer (enrollments). Drop-Ins (Einzelstunden-
-      // Buchungen in einzelne Sessions des Kurses) zählen hier explizit NICHT mit —
-      // die sind Stunden-Gäste, keine Kurs-Teilnehmer. Sarah-Klarstellung 21.5.
-      const enrolledCount = (c.enrollments || []).length
+      // Counter zeigt NUR aktiv eingebuchte Kurs-Teilnehmer (enrollments OHNE
+      // end_date in der Vergangenheit). Drop-Ins (Einzelstunden-Buchungen in
+      // einzelne Sessions des Kurses) zählen hier explizit NICHT mit — die sind
+      // Stunden-Gäste, keine Kurs-Teilnehmer. Sarah-Klarstellung 21.5.
+      // Sarah-BugFix 2026-05-26: beendete enrollments (z.B. krankheitsbedingt
+      // ausgetragen) belegen KEINEN Platz mehr.
+      const todayStr = new Date().toISOString().slice(0, 10)
+      const enrolledCount = (c.enrollments || []).filter((e: any) =>
+        !e.end_date || e.end_date > todayStr
+      ).length
       const isOverbooked = c.max_spots != null && enrolledCount > c.max_spots
       return { ...c, participant_count: enrolledCount, is_overbooked: isOverbooked }
     })

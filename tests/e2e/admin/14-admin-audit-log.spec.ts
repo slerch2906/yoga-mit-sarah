@@ -173,4 +173,45 @@ test.describe('[E2E] Yogi-Protokoll: kein Action-Drift', () => {
       `Diese Action-Strings sind im App-Code aber NICHT in formatAuditEntry (app/admin/yogis/[id]/page.tsx) gemappt. Bitte case-Statement ergänzen: ${missing.join(', ')}`
     ).toEqual([])
   })
+
+  test('formatAuditEntry-Texte enthalten konkreten Kontext (Kurs/Stunde/Anzahl)', async () => {
+    // Sarah-Wunsch 2026-05-26 (zweite Welle): Jeder Eintrag MUSS nachvollziehbar
+    // sein. Wir pruefen dass kein case-Block einen reinen Statisch-Satz ohne
+    // Variablen-Interpolation (${...}) zurueckgibt — sonst ist der Eintrag
+    // "Yogi hat Stunde abgemeldet" statt "Yogi hat sich abgemeldet · 16. Juni
+    // um 18:30 · Body & Mind".
+    const fs = await import('fs')
+    const path = await import('path')
+    const src = fs.readFileSync(
+      path.join(process.cwd(), 'app/admin/yogis/[id]/page.tsx'), 'utf8'
+    )
+    // Extrahiere alle case-Bloecke. Ein case ohne Termin/Kurs/Anzahl-Interpolation
+    // gilt als "vage". Whitelist: yogi_anonymized_dsgvo hat keinen sinnvollen
+    // Kontext (Account ist weg).
+    const WHITELIST_VAGE = new Set(['yogi_anonymized_dsgvo'])
+    // Slice von "switch (entry.action)" bis "default:"
+    const swStart = src.indexOf("switch (entry.action)")
+    const swEnd = src.indexOf("default:", swStart)
+    expect(swStart, 'switch-Block in formatAuditEntry muss existieren').toBeGreaterThan(0)
+    expect(swEnd, 'default-Case muss existieren').toBeGreaterThan(swStart)
+    const switchBody = src.substring(swStart, swEnd)
+    const caseRe = /case '([a-z0-9_]+)':[\s\S]*?(?=case '|default:)/g
+    let m: RegExpExecArray | null
+    const vague: string[] = []
+    while ((m = caseRe.exec(switchBody)) !== null) {
+      const actionName = m[1]
+      const body = m[0]
+      if (WHITELIST_VAGE.has(actionName)) continue
+      // Heuristik: Body muss mind. EINE Template-Literal-Interpolation `${...}`
+      // ENTHALTEN, die nicht nur ein Helper-Aufruf ohne Detail ist.
+      const hasInterpolation = /\$\{[^}]+\}/.test(body)
+      if (!hasInterpolation) {
+        vague.push(actionName)
+      }
+    }
+    expect(
+      vague,
+      `Diese Action-Cases liefern KEINE konkreten Details (keine Variablen-Interpolation im Text). Bitte Termin/Kurs/Anzahl ergänzen damit der Admin nachvollziehen kann WAS passiert ist: ${vague.join(', ')}`
+    ).toEqual([])
+  })
 })

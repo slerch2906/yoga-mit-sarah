@@ -17,12 +17,12 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8')
 test.describe('[E2E-Text] Charity-Konsistenz — kein Credit-Hinweis bei is_free', () => {
   test('Bestaetigungs-Page: Charity-Branch zeigt "jederzeit moeglich" und im sichtbaren Text kein "Credit"', async () => {
     const src = read('app/kurse/[id]/bestaetigung/page.tsx')
-    // Den is_free-Block (JSX-Render) extrahieren — Kommentare werden bewusst akzeptiert
-    const charityBlock = src.match(/is_free\s*\?\s*\(?[\s\S]{0,400}?\)?\s*:\s*within3h/)
+    // Welle 3.6 (2026-05-26): IIFE-Struktur mit if/return statt Ternary.
+    // Charity-Branch: `if (session.course?.is_free || isEventFree) { return ... 'jederzeit' ... }`
+    const charityBlock = src.match(/is_free\s*\|\|\s*isEventFree\)\s*\{[\s\S]{0,400}?\}/)
     expect(charityBlock).not.toBeNull()
-    // "jederzeit möglich" muss als sichtbarer User-Text drin sein
     expect(charityBlock![0]).toMatch(/jederzeit/i)
-    // Sichtbarer JSX-Text-Inhalt (zwischen <p>…</p>) prüfen — KEIN "Credit"-Wort
+    // Sichtbarer JSX-Text-Inhalt im Block — KEIN "Credit"-Wort
     const pTagText = charityBlock![0].match(/<p[^>]*>([\s\S]*?)<\/p>/)
     expect(pTagText).not.toBeNull()
     expect(pTagText![1]).not.toMatch(/Credit/i)

@@ -608,10 +608,11 @@ test.describe('[E2E] Restliche Email-Templates (Coverage-Check)', () => {
 //  - Dummy-Pille: bg-yoga-text text-white an 4 Stellen
 test.describe('[E2E] Welle F: heutige UI-Fixes', () => {
   // 3h-Modal Refactor — sessions/[id]/page.tsx
+  // Welle 4 (2026-05-26): setCancelChoice nimmt jetzt zusaetzlich sessionType
   test('3h-Modal sessions/[id]: cancelChoice-State + confirmCancelBooking-Funktion', async () => {
     const src = read('app/admin/sessions/[id]/page.tsx')
     expect(src).toMatch(/cancelChoice/)
-    expect(src).toMatch(/setCancelChoice\(\{\s*bookingId,\s*sessionId,\s*within3h\s*\}\)/)
+    expect(src).toMatch(/setCancelChoice\(\{\s*bookingId,\s*sessionId,\s*within3h(?:,\s*sessionType[^}]*)?\s*\}\)/)
     expect(src).toMatch(/async function confirmCancelBooking\(creditReturned:\s*boolean\)/)
   })
 
@@ -624,8 +625,9 @@ test.describe('[E2E] Welle F: heutige UI-Fixes', () => {
   test('3h-Modal sessions/[id]: Session-Zeit FRISCH aus DB geladen', async () => {
     const src = read('app/admin/sessions/[id]/page.tsx')
     // cancelBookingForYogi laedt frische Session statt state zu nutzen
+    // Welle 4 (2026-05-26): SELECT erweitert um session_type/price_eur/name
     expect(src).toMatch(/freshSession/)
-    expect(src).toMatch(/from\(['"]sessions['"]\)[\s\S]{0,200}\.select\(['"]date,\s*time_start['"]\)/)
+    expect(src).toMatch(/from\(['"]sessions['"]\)[\s\S]{0,200}\.select\(['"]date,\s*time_start[^'"]*['"]\)/)
   })
 
   test('3h-Modal sessions/[id]: 3-Button-UI innerhalb 3h (Credit zurueck / verfaellt / Abbrechen)', async () => {
@@ -652,7 +654,8 @@ test.describe('[E2E] Welle F: heutige UI-Fixes', () => {
 
   test('3h-Modal dashboard: Session-Zeit FRISCH aus DB geladen', async () => {
     const src = read('app/admin/dashboard/page.tsx')
-    expect(src).toMatch(/from\(['"]sessions['"]\)[\s\S]{0,200}\.select\(['"]date,\s*time_start['"]\)/)
+    // Welle 4: SELECT erweitert um session_type/price_eur/name
+    expect(src).toMatch(/from\(['"]sessions['"]\)[\s\S]{0,200}\.select\(['"]date,\s*time_start[^'"]*['"]\)/)
   })
 
   test('3h-Modal dashboard: 3-Button-UI innerhalb 3h', async () => {

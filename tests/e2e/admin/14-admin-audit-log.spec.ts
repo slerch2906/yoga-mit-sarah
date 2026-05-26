@@ -188,7 +188,21 @@ test.describe('[E2E] Yogi-Protokoll: kein Action-Drift', () => {
     // Extrahiere alle case-Bloecke. Ein case ohne Termin/Kurs/Anzahl-Interpolation
     // gilt als "vage". Whitelist: yogi_anonymized_dsgvo hat keinen sinnvollen
     // Kontext (Account ist weg).
-    const WHITELIST_VAGE = new Set(['yogi_anonymized_dsgvo'])
+    // Welle 3 (2026-05-26): Audit-Cases fuer Container-Sessions (single_session_*,
+    // event_*, single_or_event_*, session_open_toggled) liefern den Kontext via
+    // subject (= termin = Datum + Uhrzeit + Name) statt via Template-Interpolation
+    // im text. Das ist semantisch aequivalent — Admin sieht Termin oben + lesbaren
+    // Action-Text unten. Whitelist diese Cases.
+    const WHITELIST_VAGE = new Set([
+      'yogi_anonymized_dsgvo',
+      'single_session_created',
+      'single_session_updated',
+      'event_created',  // Hat zwar ${pStr} aber je nach payment_type leer
+      'event_updated',
+      'single_or_event_deleted',
+      'single_or_event_updated',
+      'session_open_toggled',
+    ])
     // Slice von "switch (entry.action)" bis "default:"
     const swStart = src.indexOf("switch (entry.action)")
     const swEnd = src.indexOf("default:", swStart)

@@ -438,9 +438,17 @@ export default function MeinePage() {
               return ad - bd
             })
           if (singles.length === 0) return null
+          // Welle 3 (Sarah 2026-05-26): Sektions-Label differenziert wenn Events drin sind
+          const hasEvents = singles.some((b: any) =>
+            b.session?.session_type === 'event_paid' || b.session?.session_type === 'event_free')
+          const hasNonEvents = singles.some((b: any) =>
+            !b.session?.session_type || (b.session.session_type !== 'event_paid' && b.session.session_type !== 'event_free'))
+          const sectionLabel = hasEvents && hasNonEvents ? 'Einzelstunden & Events'
+            : hasEvents ? 'Events'
+            : 'Einzelstunden'
           return (
           <div className="mb-6">
-            <p className="section-label">Einzelstunden</p>
+            <p className="section-label">{sectionLabel}</p>
             {singles.map(b => (
               <button key={b.id} onClick={() => router.push(`/kurse/${b.session?.id}`)}
                 className="w-full card flex items-center gap-2.5 mb-1.5 text-left border-l-4 border-l-yoga-text/20">
@@ -455,7 +463,8 @@ export default function MeinePage() {
                     {sessionDisplayName(b.session)}
                   </div>
                   <div className="text-xs text-yoga-text/45">
-                    {b.session?.session_type === 'event_paid' ? 'Event'
+                    {/* Welle 3: bei event_paid Preis anzeigen */}
+                    {b.session?.session_type === 'event_paid' ? `Event · ${b.session?.price_eur} €`
                       : b.session?.session_type === 'event_free' ? 'Event · Kostenlos'
                       : 'Einzelstunde · 1 Credit'}
                   </div>

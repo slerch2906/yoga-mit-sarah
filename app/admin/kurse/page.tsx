@@ -1778,7 +1778,7 @@ export default function AdminKursePage() {
               setEditingSessionId(null)
               setSingleForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', bring_along: '', difficulty: 'Alle Level' })
             }} className="flex items-center gap-1 text-sm text-yoga-text/60 mb-4 hover:opacity-80">
-              <i className="ti ti-arrow-left" /> Zurück zur Kursübersicht
+              <i className="ti ti-arrow-left" /> Zurück zur Übersicht
             </button>
             <h2 className="text-lg font-bold mb-4">{editingSessionId ? 'Einzelstunde bearbeiten' : 'Einzelstunde anlegen'}</h2>
             <form onSubmit={(e) => { e.preventDefault(); handleSaveSingle() }} className="space-y-3">
@@ -1851,7 +1851,7 @@ export default function AdminKursePage() {
               setEditingSessionId(null)
               setEventForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', bring_along: '', difficulty: 'Alle Level', payment_type: 'free', price_eur: '', image_url: '' })
             }} className="flex items-center gap-1 text-sm text-yoga-text/60 mb-4 hover:opacity-80">
-              <i className="ti ti-arrow-left" /> Zurück zur Kursübersicht
+              <i className="ti ti-arrow-left" /> Zurück zur Übersicht
             </button>
             <h2 className="text-lg font-bold mb-4">{editingSessionId ? 'Event bearbeiten' : 'Event anlegen'}</h2>
             <form onSubmit={(e) => { e.preventDefault(); handleSaveEvent() }} className="space-y-3">

@@ -364,6 +364,10 @@ export default function AdminDashboard() {
     }
 
     // Emails an alle betroffenen Yogis
+    // Welle 3 (Sarah 2026-05-26): courseName fuer Container-Sessions = session.name
+    const cancelMailName = (selectedSession.session_type && selectedSession.session_type !== 'course_session')
+      ? (selectedSession.name || '')
+      : (selectedSession.course?.name || '')
     for (const b of activeBookings) {
       const userEmail = b.profile?.email || b.email
       const firstName = b.profile?.first_name || b.first_name || 'Yogi'
@@ -371,7 +375,7 @@ export default function AdminDashboard() {
         await Email.sessionCancelled({
           email: userEmail,
           firstName,
-          courseName: selectedSession.course?.name || '',
+          courseName: cancelMailName,
           date: selectedSession.date || '',
           timeStart: selectedSession.time_start || '',
           replacementDate: replacementDate || undefined,
@@ -381,7 +385,7 @@ export default function AdminDashboard() {
           await Email.bookingConfirmed({
             email: userEmail,
             firstName,
-            courseName: selectedSession.course?.name || '',
+            courseName: cancelMailName,
             date: replacementDate,
             timeStart: replacementTime,
             durationMin: selectedSession.duration_min || 75,
@@ -464,7 +468,10 @@ export default function AdminDashboard() {
         await Email.sessionAdded({
           email: booking.profile.email,
           firstName: booking.profile.first_name || 'Yogi',
-          courseName: selectedSession.course?.name || '',
+          // Welle 3: bei Container-Sessions session.name in der Mail
+          courseName: (selectedSession.session_type && selectedSession.session_type !== 'course_session')
+            ? (selectedSession.name || '')
+            : (selectedSession.course?.name || ''),
           date: lateReplacementDate,
           timeStart: lateReplacementTime,
           durationMin: selectedSession.duration_min || 60,
@@ -559,7 +566,8 @@ export default function AdminDashboard() {
             <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10">
               {cancelChoice.within3h ? (
                 <>
-                  <h3 className="text-base font-bold mb-2">Stunde beginnt in weniger als 3 Stunden</h3>
+                  {/* Welle 3 (Sarah 2026-05-26): neutraler — gilt fuer Kursstunden + Einzelstunden */}
+                  <h3 className="text-base font-bold mb-2">Beginn in weniger als 3 Stunden</h3>
                   <p className="text-sm text-yoga-text/70 mb-3 leading-snug">
                     Der Platz wird in beiden Fällen freigegeben und der Warteliste angeboten.
                     Wähle, was mit dem Credit passieren soll:
@@ -630,8 +638,10 @@ export default function AdminDashboard() {
                 </button>
               </div>
 
-              {/* Bei ABGESAGTER Stunde: Ersatzstunde anlegen (sofern noch keine verknüpft ist) */}
-              {selectedSession.is_cancelled && !selectedSession.replacement_session_id && !showAddReplacement && (
+              {/* Bei ABGESAGTER Stunde: Ersatzstunde anlegen (sofern noch keine verknüpft ist).
+                  Welle 3 (Sarah 2026-05-26): Ersatzstunden machen nur fuer course_session
+                  Sinn — bei Einzelstunden/Events gibt es keinen Kurs-Kontext. */}
+              {selectedSession.is_cancelled && !selectedSession.replacement_session_id && !showAddReplacement && selectedSession.session_type === 'course_session' && (
                 <button onClick={() => setShowAddReplacement(true)}
                   className="w-full btn-secondary text-sm mb-3 flex items-center justify-center gap-2">
                   <i className="ti ti-calendar-plus" />Ersatzstunde anlegen
@@ -657,6 +667,9 @@ export default function AdminDashboard() {
                     Alle ausgetragenen Yogis werden automatisch in den Ersatztermin eingebucht
                     und per Email informiert. Die Kurs-Einheiten ändern sich nicht.
                   </p>
+                  {/* Welle 3: Kurs-Einheiten-Satz nur fuer course_session anzeigen — andere
+                      Pfade kommen ohnehin nicht hier rein (Button bei != course_session
+                      ausgeblendet). */}
                   <div className="flex gap-2">
                     <button onClick={handleAddLateReplacementFromDashboard}
                       disabled={!lateReplacementDate || !lateReplacementTime || addingReplacement}
@@ -759,18 +772,38 @@ export default function AdminDashboard() {
 
               {!selectedSession.is_cancelled && (
                 <button onClick={() => setShowCancelForm(true)} className="btn-danger mt-4">
-                  <i className="ti ti-calendar-x mr-1" /> Stunde absagen
+                  {/* Welle 3 (Sarah 2026-05-26): Button-Text differenziert */}
+                  <i className="ti ti-calendar-x mr-1" />
+                  {selectedSession.session_type === 'event_free' || selectedSession.session_type === 'event_paid'
+                    ? ' Event absagen'
+                    : ' Stunde absagen'}
                 </button>
               )}
             </div>
           </div>
         )}
 
-        {/* Cancel Form Modal */}
-        {showCancelForm && selectedSession && (
+        {/* Cancel Form Modal
+            Welle 3 (Sarah 2026-05-26): session_type-aware — Events haben kein
+            Credit-Refund, keinen Ersatztermin, andere Headline. */}
+        {showCancelForm && selectedSession && (() => {
+          const st = selectedSession.session_type
+          const isEvent = st === 'event_free' || st === 'event_paid'
+          const isSingle = st === 'single'
+          const activeCount = sessionBookings.filter(b => b._type === 'booking' && b.status === 'active').length
+          const headline = isEvent ? 'Event absagen' : 'Stunde absagen'
+          // Hinweis-Text: Events ohne Credit-Logik, Kursstunde mit Refund + Ersatzbuchung
+          const infoText = st === 'event_free'
+            ? `Alle ${activeCount} angemeldeten Yogis werden per Email informiert. Da das Event kostenlos war, gibt es keinen Credit-Refund.`
+            : st === 'event_paid'
+            ? `Alle ${activeCount} angemeldeten Yogis werden per Email informiert. Eine eventuell schon geleistete Bezahlung musst du extern (PayPal/Bar) erstatten.`
+            : isSingle
+            ? `Alle ${activeCount} angemeldeten Yogis bekommen ihren Credit zurück.`
+            : `Alle ${activeCount} angemeldeten Yogis bekommen ihren Credit zurück. Wenn du einen Ersatztermin einträgst, wird der Credit direkt wieder verbucht.`
+          return (
           <div className="fixed inset-0 bg-black/40 z-50 flex items-end modal-overlay">
             <div className="bg-yoga-bg w-full max-w-md mx-auto rounded-t-2xl p-5">
-              <h3 className="text-base font-bold mb-1">Stunde absagen</h3>
+              <h3 className="text-base font-bold mb-1">{headline}</h3>
               <p className="text-sm text-yoga-text/55 mb-4">
                 {/* Welle 2.7: differenziert Einzelstunde/Event/Kursname */}
                 {sessionDisplayName(selectedSession)}
@@ -778,41 +811,53 @@ export default function AdminDashboard() {
               </p>
 
               <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 mb-4">
-                <p className="text-sm text-yoga-amber-text leading-relaxed">
-                  Alle {sessionBookings.filter(b => b._type === 'booking' && b.status === 'active').length} angemeldeten Yogis bekommen ihren Credit zurück. Wenn du einen Ersatztermin einträgst, wird der Credit direkt wieder verbucht.
-                </p>
+                <p className="text-sm text-yoga-amber-text leading-relaxed">{infoText}</p>
               </div>
 
-              <p className="section-label">Ersatztermin (optional)</p>
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div>
-                  <label className="field-label">Datum</label>
-                  <input className="field-input" type="date" value={replacementDate}
-                    onChange={e => setReplacementDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]} />
-                </div>
-                <div>
-                  <label className="field-label">Uhrzeit</label>
-                  <input className="field-input" type="time" value={replacementTime}
-                    onChange={e => setReplacementTime(e.target.value)} />
-                </div>
-              </div>
+              {/* Ersatztermin nur bei course_session (Welle 3) */}
+              {st === 'course_session' && (
+                <>
+                  <p className="section-label">Ersatztermin (optional)</p>
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div>
+                      <label className="field-label">Datum</label>
+                      <input className="field-input" type="date" value={replacementDate}
+                        onChange={e => setReplacementDate(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]} />
+                    </div>
+                    <div>
+                      <label className="field-label">Uhrzeit</label>
+                      <input className="field-input" type="time" value={replacementTime}
+                        onChange={e => setReplacementTime(e.target.value)} />
+                    </div>
+                  </div>
 
-              {replacementDate && (
-                <div className="bg-yoga-green-bg border border-yoga-green-text/20 rounded-yoga p-3 mb-4">
-                  <p className="text-sm text-yoga-green-text">
-                    Ersatztermin am {new Date(replacementDate + 'T00:00:00').toLocaleDateString('de-DE', { weekday:'long', day:'numeric', month:'long' })} wird angelegt. Credits werden direkt wieder verbucht.
-                  </p>
-                </div>
+                  {replacementDate && (
+                    <div className="bg-yoga-green-bg border border-yoga-green-text/20 rounded-yoga p-3 mb-4">
+                      <p className="text-sm text-yoga-green-text">
+                        Ersatztermin am {new Date(replacementDate + 'T00:00:00').toLocaleDateString('de-DE', { weekday:'long', day:'numeric', month:'long' })} wird angelegt. Credits werden direkt wieder verbucht.
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
 
               <button onClick={cancelSession} disabled={cancelling} className="btn-danger mb-2">
-                {cancelling ? 'Wird abgesagt...' : replacementDate ? 'Absagen & Ersatztermin anlegen' : 'Stunde absagen (Credits freigeben)'}
+                {cancelling
+                  ? 'Wird abgesagt...'
+                  : replacementDate && st === 'course_session'
+                  ? 'Absagen & Ersatztermin anlegen'
+                  : isEvent
+                  ? 'Event absagen'
+                  : isSingle
+                  ? 'Einzelstunde absagen (Credits freigeben)'
+                  : 'Stunde absagen (Credits freigeben)'}
               </button>
               <button onClick={() => setShowCancelForm(false)} className="btn-ghost">Abbrechen</button>
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* Admin Benachrichtigungen — Sarah-Wunsch 2026-05-24: ausgebaut mit
             8 neuen Typen (refund_pending, cron_silent_24h, brevo_quota_warning,

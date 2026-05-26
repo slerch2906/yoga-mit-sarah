@@ -5,32 +5,82 @@ import { createClient } from '@/lib/supabase/client'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
+// Welle 3 (Sarah 2026-05-26): Vollständige Action-Map inkl. der neuen
+// Welle-2-Actions (Events / Einzelstunden / Container-Sessions). Vorher
+// fielen viele Aktionen durch zum Roh-String — Sarah konnte nicht lesen
+// was passiert ist.
 const ACTION_LABELS: Record<string, { label: string; color: string }> = {
-  booking_created:          { label: 'Stunde gebucht',          color: 'text-yoga-green-text' },
-  booking_cancelled:        { label: 'Stunde storniert',         color: 'text-yoga-amber-text' },
-  credit_assigned:          { label: 'Credits vergeben',         color: 'text-yoga-green-text' },
-  session_cancelled:        { label: 'Stunde abgesagt (Admin)',  color: 'text-yoga-red-text' },
-  yogi_enrolled_by_admin:   { label: 'In Kurs eingetragen',      color: 'text-yoga-green-text' },
-  yogi_removed_from_course: { label: 'Aus Kurs ausgetragen',     color: 'text-yoga-red-text' },
-  yogi_deleted:             { label: 'User gelöscht',            color: 'text-yoga-red-text' },
-  legal_accepted:           { label: 'AGB bestätigt',            color: 'text-yoga-green-text' },
-  waitlist_joined:          { label: 'Warteliste eingetragen',   color: 'text-yoga-amber-text' },
-  waitlist_promoted:        { label: 'Warteliste nachgerückt',   color: 'text-yoga-green-text' },
+  booking_created:                { label: 'Stunde gebucht',                 color: 'text-yoga-green-text' },
+  booking_cancelled:              { label: 'Stunde storniert',               color: 'text-yoga-amber-text' },
+  credit_assigned:                { label: 'Credits vergeben',               color: 'text-yoga-green-text' },
+  credit_adjusted:                { label: 'Credit angepasst',               color: 'text-yoga-amber-text' },
+  credit_deleted:                 { label: 'Credit gelöscht',                color: 'text-yoga-red-text' },
+  session_cancelled:              { label: 'Stunde abgesagt (Admin)',        color: 'text-yoga-red-text' },
+  yogi_enrolled_by_admin:         { label: 'In Kurs eingetragen',            color: 'text-yoga-green-text' },
+  yogi_removed_from_course:       { label: 'Aus Kurs ausgetragen',           color: 'text-yoga-red-text' },
+  yogi_deleted:                   { label: 'User gelöscht',                  color: 'text-yoga-red-text' },
+  yogi_anonymized_dsgvo:          { label: 'Yogi anonymisiert (DSGVO)',      color: 'text-yoga-red-text' },
+  legal_accepted:                 { label: 'AGB bestätigt',                  color: 'text-yoga-green-text' },
+  waitlist_joined:                { label: 'Warteliste eingetragen',         color: 'text-yoga-amber-text' },
+  waitlist_promoted:              { label: 'Warteliste nachgerückt',         color: 'text-yoga-green-text' },
+  waitlist_offer_late_accepted:   { label: 'Warteliste — Spät-Angebot angenommen', color: 'text-yoga-green-text' },
+  // ── Welle 2: Events / Einzelstunden / Container-Sessions ─────────────
+  single_session_created:         { label: 'Einzelstunde angelegt',          color: 'text-yoga-green-text' },
+  single_session_updated:         { label: 'Einzelstunde bearbeitet',        color: 'text-yoga-amber-text' },
+  event_created:                  { label: 'Event angelegt',                 color: 'text-yoga-green-text' },
+  event_updated:                  { label: 'Event bearbeitet',               color: 'text-yoga-amber-text' },
+  single_or_event_deleted:        { label: 'Einzelstunde / Event gelöscht',  color: 'text-yoga-red-text' },
+  single_or_event_updated:        { label: 'Einzelstunde / Event geändert',  color: 'text-yoga-amber-text' },
+  external_participants_changed:  { label: 'Externe Teilnehmer geändert',    color: 'text-yoga-amber-text' },
+  admin_added_yogi_to_event:      { label: 'Yogi zu Event hinzugefügt',      color: 'text-yoga-green-text' },
+  admin_added_yogi_to_session:    { label: 'Yogi zu Stunde hinzugefügt',     color: 'text-yoga-green-text' },
+  admin_promoted_waitlist_yogi:   { label: 'Waitlist-Yogi nachgerückt (Admin)', color: 'text-yoga-green-text' },
+  session_open_toggled:           { label: 'Stunde/Event freigegeben/gesperrt', color: 'text-yoga-amber-text' },
+  // ── Welle 1: Ersatzstunden / Kursabbruch ─────────────────────────────
+  replacement_session_added:      { label: 'Ersatzstunde angelegt',          color: 'text-yoga-green-text' },
+  cascade_replacement_cancelled:  { label: 'Ersatzstunde (Cascade) abgesagt',color: 'text-yoga-red-text' },
+  course_cancelled:               { label: 'Kurs abgebrochen',               color: 'text-yoga-red-text' },
+  course_rollover:                { label: 'Folgekurs angelegt (Rollover)',  color: 'text-yoga-green-text' },
+  yogi_course_cancellation_choice:{ label: 'Yogi-Wahl bei Kursabbruch',      color: 'text-yoga-amber-text' },
+  token_expired_auto_refund:      { label: 'Token abgelaufen — Auto-Refund', color: 'text-yoga-amber-text' },
+  guthaben_2y_auto_refund:        { label: 'Guthaben 2J abgelaufen — Refund',color: 'text-yoga-amber-text' },
+  admin_illness_credit:           { label: 'Krankheits-Guthaben vergeben',   color: 'text-yoga-green-text' },
+  admin_bulk_mail:                { label: 'Bulk-Mail versendet',            color: 'text-yoga-amber-text' },
+  admin_dsgvo_deletion:           { label: 'DSGVO-Löschung durch Admin',     color: 'text-yoga-red-text' },
+}
+
+const SESSION_TYPE_LABEL: Record<string, string> = {
+  course_session: 'Kursstunde',
+  single:         'Einzelstunde',
+  event_free:     'Event (kostenlos)',
+  event_paid:     'Event (bezahlt)',
+  event_credit:   'Event (Credit)',
 }
 
 function formatDetails(action: string, details: any): string[] {
   if (!details) return []
   const lines: string[] = []
   if (details.session_date) lines.push(`Datum: ${new Date(details.session_date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short', year:'numeric' })}`)
+  if (details.date && !details.session_date) lines.push(`Datum: ${new Date(details.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short', year:'numeric' })}`)
   if (details.session_time) lines.push(`Uhrzeit: ${details.session_time?.slice(0,5)} Uhr`)
+  if (details.time && !details.session_time) lines.push(`Uhrzeit: ${String(details.time).slice(0,5)} Uhr`)
   if (details.course_name) lines.push(`Kurs: ${details.course_name}`)
+  // Welle 3: Name der Einzelstunde/des Events
+  if (details.name && !details.course_name) lines.push(`Name: ${details.name}`)
+  if (details.session_type) lines.push(`Typ: ${SESSION_TYPE_LABEL[details.session_type] || details.session_type}`)
+  if (details.payment_type) lines.push(`Bezahlung: ${details.payment_type === 'free' ? 'Kostenlos' : 'Extern (PayPal/Bar)'}`)
+  if (details.price_eur != null) lines.push(`Preis: ${details.price_eur} €`)
+  if (details.max_spots) lines.push(`Max. Teilnehmer: ${details.max_spots}`)
   if (details.affected_yogis) lines.push(`Betroffene Yogis: ${details.affected_yogis}`)
   if (details.replacement_date) lines.push(`Ersatztermin: ${new Date(details.replacement_date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })}`)
   if (details.amount) lines.push(`Credits: ${details.amount}`)
   if (details.model) lines.push(`Modell: ${details.model}`)
+  if (details.credit_used === false) lines.push('Kein Credit verbraucht')
   if (details.late !== undefined) lines.push(details.late ? 'Spät storniert (kein Credit zurück)' : 'Rechtzeitig storniert')
   if (details.email) lines.push(`User: ${details.email}`)
-  if (details.type) lines.push(`Typ: ${details.type}`)
+  if (details.type && !details.session_type) lines.push(`Typ: ${details.type}`)
+  if (details.old_count != null && details.new_count != null) lines.push(`Externe Teilnehmer: ${details.old_count} → ${details.new_count}`)
+  if (details.is_open !== undefined) lines.push(details.is_open ? 'Status: Freigegeben' : 'Status: Gesperrt')
   return lines
 }
 
@@ -103,7 +153,7 @@ export default function ProtokolPage() {
       <div className="px-4 py-4">
         <input
           className="field-input mb-4"
-          placeholder="Suche nach Yogi, Aktion, Kurs..."
+          placeholder="Suche nach Yogi, Aktion, Stunde, Event..."
           value={search}
           onChange={e => setSearch(e.target.value)}
         />

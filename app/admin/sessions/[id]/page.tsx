@@ -552,7 +552,10 @@ export default function AdminSessionPage() {
         await Email.sessionAdded({
           email: booking.profile.email,
           firstName: booking.profile.first_name || 'Yogi',
-          courseName: session?.course?.name || '',
+          // Welle 3: bei Container-Sessions session.name (sonst landet "SYS · ..." in der Mail)
+          courseName: (session?.session_type && session.session_type !== 'course_session')
+            ? (session?.name || '')
+            : (session?.course?.name || ''),
           date: lateReplacementDate,
           timeStart: lateReplacementTime,
           durationMin: session?.duration_min || 60,
@@ -584,7 +587,11 @@ export default function AdminSessionPage() {
   }
 
   async function handleCancelSession() {
-    if (!confirm(`Stunde wirklich absagen? ${bookings.length} Yogis werden informiert.`)) return
+    // Welle 3 (Sarah 2026-05-26): Confirm-Text session_type-aware
+    const sessType = session?.session_type
+    const isEvent = sessType === 'event_free' || sessType === 'event_paid'
+    const subject = isEvent ? 'Event' : 'Stunde'
+    if (!confirm(`${subject} wirklich absagen? ${bookings.length} Yogi${bookings.length === 1 ? '' : 's'} werden informiert.`)) return
     setCancelling(true)
 
     let replacementSessionId: string | null = null
@@ -639,10 +646,14 @@ export default function AdminSessionPage() {
 
       // Email an Yogi
       if (booking.profile?.email) {
+        // Welle 3: courseName fuer Mails ist session.name bei Container-Sessions
+        const mailName = (session?.session_type && session.session_type !== 'course_session')
+          ? (session?.name || '')
+          : (session?.course?.name || '')
         await Email.sessionCancelled({
           email: booking.profile.email,
           firstName: booking.profile.first_name || 'Yogi',
-          courseName: session?.course?.name || '',
+          courseName: mailName,
           date: session?.date || '',
           timeStart: session?.time_start || '',
           reason: reason || undefined,
@@ -651,11 +662,12 @@ export default function AdminSessionPage() {
         })
 
         // Falls Ersatztermin: auch Buchungsbestätigung für neuen Termin
+        // (Ersatztermin gibt es nur bei course_session — siehe Welle 2.10)
         if (replacementSessionId) {
           await Email.bookingConfirmed({
             email: booking.profile.email,
             firstName: booking.profile.first_name || 'Yogi',
-            courseName: session?.course?.name || '',
+            courseName: mailName,
             date: replacementDate,
             timeStart: replacementTime,
             durationMin: session?.duration_min || 60,

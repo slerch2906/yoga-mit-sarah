@@ -250,12 +250,14 @@ export default function KursePage() {
           nicht fuer Admins (Admins haben i.d.R. keine eigenen Credits zu tracken) */}
       {!profile?.is_admin && <YogiCreditExpiryBanner />}
 
-      {/* Neu-Yogi-Hinweis: noch keine einzige Buchung in der Historie */}
+      {/* Neu-Yogi-Hinweis: noch keine einzige Buchung in der Historie.
+          Welle 3 (Sarah 2026-05-26): jetzt auch Einzelstunden + Events erwähnen,
+          damit es für Yogis ohne Kursbuchung nicht irreführend wirkt. */}
       {isNewYogi && (
         <div className="mx-4 mt-3 bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga px-4 py-3 flex items-start gap-2">
           <i className="ti ti-info-circle text-yoga-amber-text text-base mt-0.5 flex-shrink-0" />
           <p className="text-sm text-yoga-text/80 leading-snug">
-            Sarah trägt dich nach der Bezahlung in deinen Kurs ein.
+            Sarah trägt dich nach der Bezahlung in deinen Kurs ein. Einzelstunden &amp; Events kannst du direkt selbst buchen.
           </p>
         </div>
       )}

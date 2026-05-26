@@ -13,6 +13,21 @@ import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import { sessionDisplayName } from '@/lib/session-display'
 
+// Welle 3 (Sarah 2026-05-26): Helper für Emails — bei Einzelstunden/Events
+// soll NICHT der SYS-Container-Name ("SYS · Einzelstunden") in der Mail
+// landen, sondern der eigene session.name. Bei course_session bleibt
+// course.name massgeblich.
+function mailCourseName(s: any): string {
+  const st = s?.session_type
+  if (st && st !== 'course_session') return s?.name || ''
+  return s?.course?.name || ''
+}
+function isSingleForEmail(s: any): boolean {
+  const st = s?.session_type
+  if (st === 'single' || st === 'event_free' || st === 'event_paid' || st === 'event_credit') return true
+  return !!s?.course?.is_single
+}
+
 export default function SessionDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [session, setSession] = useState<any>(null)
@@ -237,11 +252,11 @@ export default function SessionDetailPage() {
         if (prof && prof.notify_booking_confirmations !== false) await Email.bookingConfirmed({
           email: prof.email,
           firstName: prof.first_name || 'Yogi',
-          courseName: session?.course?.name || '',
+          courseName: mailCourseName(session),
           date: session?.date || '',
           timeStart: session?.time_start || '',
           durationMin: session?.duration_min || 60,
-          isSingle: !!(session as any)?.course?.is_single,
+          isSingle: isSingleForEmail(session),
         })
       } catch(e) {}
       router.push(`/kurse/${id}/bestaetigung`)
@@ -290,12 +305,12 @@ export default function SessionDetailPage() {
         await Email.bookingCancelled({
           email: prof.email,
           firstName: prof.first_name || 'Yogi',
-          courseName: session?.course?.name || '',
+          courseName: mailCourseName(session),
           date: session?.date || '',
           timeStart: session?.time_start || '',
           durationMin: session?.duration_min || 75,
           creditReturned: !late,
-          isSingle: !!(session as any)?.course?.is_single,
+          isSingle: isSingleForEmail(session),
         })
       }
     } catch (e) { console.error('Cancel email error:', e) }
@@ -376,12 +391,12 @@ export default function SessionDetailPage() {
         await Email.waitlistJoined({
           email: prof.email,
           firstName: prof.first_name || 'Yogi',
-          courseName: session?.course?.name || '',
+          courseName: mailCourseName(session),
           date: session?.date || '',
           timeStart: session?.time_start || '',
           position,
           unsubscribeToken,
-          isSingle: !!(session as any)?.course?.is_single,
+          isSingle: isSingleForEmail(session),
         })
       } catch(e) {}
     }
@@ -734,7 +749,8 @@ export default function SessionDetailPage() {
                         <i className="ti ti-alert-triangle mr-1" /> Innerhalb der 3-Stunden-Frist
                       </p>
                       <p className="text-sm text-yoga-amber-text/90 leading-relaxed">
-                        Kurs beginnt in weniger als 3 Stunden. Abmeldung danach <strong>nicht möglich</strong> – Credit verfällt auch bei Nichterscheinen.
+                        {/* Welle 3 (Sarah 2026-05-26): "Kurs" passt nicht bei Einzelstunde */}
+                        {isCourseSession ? 'Kurs beginnt' : 'Stunde beginnt'} in weniger als 3 Stunden. Abmeldung danach <strong>nicht möglich</strong> – Credit verfällt auch bei Nichterscheinen.
                       </p>
                     </div>
                     <div className="bg-yoga-red-bg border border-yoga-red-text/20 rounded-yoga p-3 mb-4">

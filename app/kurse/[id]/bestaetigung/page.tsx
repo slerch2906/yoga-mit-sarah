@@ -156,7 +156,7 @@ function BestaetigungInner() {
             <i className="ti ti-x mr-1" /> Doch wieder austragen
           </button>
           <button onClick={() => router.back()} className="btn-ghost">
-            Zurück zur Kursübersicht
+            Zurück zur Übersicht
           </button>
         </div>
       </div>
@@ -185,7 +185,7 @@ function BestaetigungInner() {
           </div>
 
           <button onClick={() => router.back()} className="btn-primary">
-            Zurück zur Kursübersicht
+            Zurück zur Übersicht
           </button>
         </div>
       </div>
@@ -201,36 +201,59 @@ function BestaetigungInner() {
           <i className="ti ti-check text-2xl text-yoga-green-text" />
         </div>
         <h2 className="text-lg font-bold mb-2">Du bist dabei!</h2>
-        <p className="text-sm text-yoga-text/60 mb-1">{displayName}{session.session_type === 'course_session' ? ' · Einzelstunde' : ''}</p>
+        {/* Welle 3 (Sarah 2026-05-26): invertierte Logik gefixt — Suffix war
+            faelschlicherweise bei course_session statt single. Helper liefert
+            jetzt schon "Einzelstunde · Name" bzw "Event · Name". */}
+        <p className="text-sm text-yoga-text/60 mb-1">{displayName}</p>
         <p className="text-sm text-yoga-text/60 mb-5">
           {sessionDate.toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · {session.time_start?.slice(0,5)} Uhr
         </p>
 
-        {session.course?.is_free ? (
-          // Charity: kein Credit → keine Frist
-          <div className="bg-yoga-card border border-yoga-border rounded-yoga p-3 text-left mb-5">
-            <p className="text-sm text-yoga-text/70 leading-relaxed">
-              Abmeldung jederzeit möglich.
-            </p>
-          </div>
-        ) : within3h ? (
-          <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 text-left mb-5">
-            <p className="text-sm text-yoga-amber-text leading-relaxed">
-              <strong>Kurzfristige Buchung:</strong> Abmeldung nicht mehr möglich. Dein Credit ist verbraucht – viel Freude!
-            </p>
-          </div>
-        ) : (
-          <div className="bg-yoga-card border border-yoga-border rounded-yoga p-3 text-left mb-5">
-            <p className="text-sm text-yoga-text/70 leading-relaxed">
-              Abmeldung kostenlos bis <strong>{deadline}</strong>. Danach gilt die Stunde als wahrgenommen.
-            </p>
-          </div>
-        )}
+        {(() => {
+          // Welle 3: Hinweistext differenziert nach session_type
+          const st = session.session_type
+          const isEventFree = st === 'event_free'
+          const isEventPaid = st === 'event_paid'
+          const isEvent = isEventFree || isEventPaid
+          if (session.course?.is_free || isEventFree) {
+            return (
+              <div className="bg-yoga-card border border-yoga-border rounded-yoga p-3 text-left mb-5">
+                <p className="text-sm text-yoga-text/70 leading-relaxed">Abmeldung jederzeit möglich.</p>
+              </div>
+            )
+          }
+          if (isEventPaid) {
+            return (
+              <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 text-left mb-5">
+                <p className="text-sm text-yoga-amber-text leading-relaxed">
+                  Verbindliche Anmeldung — Bezahlung extern (PayPal/Bar). Abmeldung kostenfrei bis <strong>7 Tage vor dem Event</strong>.
+                </p>
+              </div>
+            )
+          }
+          if (within3h && !isEvent) {
+            return (
+              <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 text-left mb-5">
+                <p className="text-sm text-yoga-amber-text leading-relaxed">
+                  <strong>Kurzfristige Buchung:</strong> Abmeldung nicht mehr möglich. Dein Credit ist verbraucht – viel Freude!
+                </p>
+              </div>
+            )
+          }
+          return (
+            <div className="bg-yoga-card border border-yoga-border rounded-yoga p-3 text-left mb-5">
+              <p className="text-sm text-yoga-text/70 leading-relaxed">
+                Abmeldung kostenlos bis <strong>{deadline}</strong>. Danach gilt die Stunde als wahrgenommen.
+              </p>
+            </div>
+          )
+        })()}
 
         <button onClick={generateICS} className="btn-primary mb-2">
           <i className="ti ti-calendar-plus mr-1" /> Zum Kalender hinzufügen
         </button>
-        {!within3h && (
+        {/* Welle 3: bei event_paid Buchung rückgängig zurückhaltend zeigen (verbindlich) */}
+        {!within3h && session.session_type !== 'event_paid' && (
           <button onClick={handleUndo} className="btn-danger mb-2">
             <i className="ti ti-arrow-back-up mr-1" /> Buchung rückgängig machen
           </button>

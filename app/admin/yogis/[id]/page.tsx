@@ -851,6 +851,34 @@ export default function AdminYogiDetailPage() {
         const oStr = d.origin_session_id ? ' (als Vorhol-/Nachholbuchung)' : ''
         return { text: `Admin hat Yogi in Stunde eingetragen${oStr}`, subject: termin }
       }
+      // Welle 3 (Sarah 2026-05-26): neue Audit-Actions sauber gemappt
+      case 'admin_added_yogi_to_event': {
+        const priceStr = d.price_eur ? ` (${d.price_eur} €, Bezahlung extern)` : ' (kostenlos)'
+        return { text: `Admin hat Yogi zu Event hinzugefügt${priceStr} — kein Credit verbraucht`, subject: termin }
+      }
+      case 'single_session_created':
+        return { text: `Admin hat Einzelstunde angelegt`, subject: termin }
+      case 'single_session_updated':
+        return { text: `Admin hat Einzelstunde bearbeitet`, subject: termin }
+      case 'event_created': {
+        const pStr = d.payment_type === 'paid' ? ` (${d.price_eur} €, Bezahlung extern)` : ' (kostenlos)'
+        return { text: `Admin hat Event angelegt${pStr}`, subject: termin }
+      }
+      case 'event_updated': {
+        const pStr = d.payment_type === 'paid' ? ` (${d.price_eur} €)` : ''
+        return { text: `Admin hat Event bearbeitet${pStr}`, subject: termin }
+      }
+      case 'single_or_event_deleted':
+        return { text: `Admin hat Einzelstunde / Event gelöscht`, subject: termin }
+      case 'single_or_event_updated':
+        return { text: `Admin hat Einzelstunde / Event geändert`, subject: termin }
+      case 'external_participants_changed': {
+        const o = d.old_count ?? '?'
+        const n = d.new_count ?? '?'
+        return { text: `Externe Teilnehmer geändert: ${o} → ${n}`, subject: termin }
+      }
+      case 'session_open_toggled':
+        return { text: d.is_open ? 'Stunde/Event freigegeben' : 'Stunde/Event gesperrt', subject: termin }
       case 'admin_illness_credit': {
         const attest = d.attest_date ? new Date(d.attest_date).toLocaleDateString('de-DE') : '?'
         const hrs = d.hours_credited ?? '?'
@@ -1508,9 +1536,19 @@ export default function AdminYogiDetailPage() {
             return aKey.localeCompare(bKey)
           })
           if (futureSingles.length === 0) return null
+          // Welle 3 (Sarah 2026-05-26): Sektions-Header differenziert wenn auch
+          // Events drin sind — die landen aktuell mit b.type='single' im selben
+          // Topf, gehoeren aber semantisch zu "Events".
+          const hasEvents = futureSingles.some((b: any) =>
+            b.session?.session_type === 'event_free' || b.session?.session_type === 'event_paid')
+          const hasSingles = futureSingles.some((b: any) =>
+            !b.session?.session_type || b.session.session_type === 'single' || b.session.session_type === 'course_session')
+          const sectionHeader = hasEvents && hasSingles ? 'Eingebuchte Einzelstunden & Events'
+            : hasEvents ? 'Eingebuchte Events'
+            : 'Eingebuchte Einzelstunden'
           return (
             <>
-              <p className="section-label">Eingebuchte Einzelstunden</p>
+              <p className="section-label">{sectionHeader}</p>
               {futureSingles.map((b: any) => (
                 <button key={b.id} onClick={() => router.push(`/admin/sessions/${b.session.id}`)}
                   className="w-full card mb-2 flex items-center gap-2.5 text-left hover:border-yoga-border2 cursor-pointer">
@@ -1573,7 +1611,15 @@ export default function AdminYogiDetailPage() {
                   <div className="text-sm font-semibold truncate">
                     {sessionDisplayName(b.session)}
                   </div>
-                  <div className="text-xs text-yoga-text/40">{b.session?.time_start?.slice(0,5)} · {b.type === 'single' ? 'Einzelstunde' : 'Kursstunde'}</div>
+                  <div className="text-xs text-yoga-text/40">{b.session?.time_start?.slice(0,5)} · {(() => {
+                    // Welle 3 (Sarah 2026-05-26): differenziert nach session.session_type,
+                    // damit event_free/event_paid Buchungen nicht als "Einzelstunde" erscheinen.
+                    const st = b.session?.session_type
+                    if (st === 'event_free') return 'Event · Kostenlos'
+                    if (st === 'event_paid') return `Event${b.session?.price_eur ? ` · ${b.session.price_eur} €` : ''}`
+                    if (st === 'single' || b.type === 'single') return 'Einzelstunde'
+                    return 'Kursstunde'
+                  })()}</div>
                 </div>
                 {getStatusBadge(b)}
               </div>

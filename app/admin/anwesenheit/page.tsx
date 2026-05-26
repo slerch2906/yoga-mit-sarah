@@ -49,10 +49,23 @@ function AnwesenheitInner() {
 
   async function cancelSession() {
     if (!sessionId) return
-    if (!confirm('Diese Stunde wirklich absagen? Alle Teilnehmer bekommen ihren Credit zurück.')) return
+    // Welle 3 (Sarah 2026-05-26): Confirm + Mail-courseName session_type-aware
+    const sessType = (session as any)?.session_type
+    const isEvent = sessType === 'event_free' || sessType === 'event_paid'
+    const isContainerSession = sessType && sessType !== 'course_session'
+    const subject = isEvent ? 'Dieses Event' : 'Diese Stunde'
+    const refundNote = isEvent
+      ? ' Alle Teilnehmer werden informiert.'
+      : ' Alle Teilnehmer bekommen ihren Credit zurück.'
+    if (!confirm(`${subject} wirklich absagen?${refundNote}`)) return
     setCancelling(true)
 
     await supabase.from('sessions').update({ is_cancelled: true }).eq('id', sessionId)
+
+    // Welle 3: bei Container-Sessions session.name statt course.name (SYS · ...)
+    const mailName = isContainerSession
+      ? ((session as any)?.name || '')
+      : ((session as any)?.course?.name || '')
 
     for (const b of bookings) {
       await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString() }).eq('id', b.id)
@@ -62,7 +75,7 @@ function AnwesenheitInner() {
         await Email.sessionCancelled({
           email: b.profile.email,
           firstName: b.profile.first_name || 'Yogi',
-          courseName: (session as any)?.course?.name || '',
+          courseName: mailName,
           date: (session as any)?.date || '',
           timeStart: (session as any)?.time_start || '',
         })
@@ -140,7 +153,12 @@ function AnwesenheitInner() {
         <button onClick={cancelSession} disabled={cancelling}
           className="btn-danger mt-4">
           <i className="ti ti-calendar-x mr-1" />
-          {cancelling ? 'Wird abgesagt...' : 'Diese Stunde absagen'}
+          {/* Welle 3: differenzierter Button-Text */}
+          {cancelling
+            ? 'Wird abgesagt...'
+            : ((session as any)?.session_type === 'event_free' || (session as any)?.session_type === 'event_paid')
+              ? 'Dieses Event absagen'
+              : 'Diese Stunde absagen'}
         </button>
       </div>
       <BottomNav isAdmin />

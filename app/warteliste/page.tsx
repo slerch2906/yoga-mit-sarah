@@ -60,7 +60,12 @@ export default function WartelistePage() {
             <p className="section-label">Du stehst auf der Warteliste</p>
             {waitlistItems.map(w => (
               <div key={w.id} className="card mb-3">
-                <div className="text-base font-bold mb-1">{w.session?.course?.name}</div>
+                {/* Welle 2.6: bei Events/Einzelstunden session.name statt SYS-Container */}
+                <div className="text-base font-bold mb-1">
+                  {w.session?.session_type && w.session.session_type !== 'course_session'
+                    ? `Event · ${w.session.name ?? 'Unbenannt'}`
+                    : (w.session?.name ?? w.session?.course?.name)}
+                </div>
                 <div className="text-sm text-yoga-text/55 mb-3">
                   {new Date(w.session?.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · {w.session?.time_start?.slice(0,5)} Uhr
                 </div>

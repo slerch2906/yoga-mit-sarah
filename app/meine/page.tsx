@@ -449,8 +449,18 @@ export default function MeinePage() {
                 </div>
                 <div className="w-px h-6 bg-yoga-border2 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold truncate">{b.session?.course?.name}</div>
-                  <div className="text-xs text-yoga-text/45">Einzelstunde · 1 Credit</div>
+                  {/* Welle 2.6 (Sarah 2026-05-26): session.name Vorrang vor SYS-course.name.
+                      Bei Events Prefix "Event · " zur visuellen Unterscheidung. */}
+                  <div className="text-sm font-semibold truncate">
+                    {b.session?.session_type && b.session.session_type !== 'course_session' && b.session.session_type !== 'single'
+                      ? `Event · ${b.session.name ?? 'Unbenannt'}`
+                      : (b.session?.name ?? b.session?.course?.name)}
+                  </div>
+                  <div className="text-xs text-yoga-text/45">
+                    {b.session?.session_type === 'event_paid' ? 'Event'
+                      : b.session?.session_type === 'event_free' ? 'Event · Kostenlos'
+                      : 'Einzelstunde · 1 Credit'}
+                  </div>
                 </div>
                 {new Date(`${b.session?.date}T${b.session?.time_start}`) < new Date()
                   ? <span className="badge badge-done">Teilgenommen </span>

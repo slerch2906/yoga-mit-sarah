@@ -42,6 +42,9 @@ export default function AdminSessionPage() {
   const [showEditForm, setShowEditForm] = useState(false)
   const [editForm, setEditForm] = useState<any>(null)
   const [savingEdit, setSavingEdit] = useState(false)
+  // Welle 2.6 (Sarah 2026-05-26): Lösch-Button für Einzelstunden/Events.
+  // Hartes DELETE wenn keine aktiven Bookings; sonst Hinweis "vorher absagen".
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => { loadData() }, [id])
 
@@ -295,6 +298,11 @@ export default function AdminSessionPage() {
         if (!p || p <= 0) { alert('Bitte gültigen Preis angeben'); setSavingEdit(false); return }
         patch.price_eur = p
       }
+      // Welle 2.6 (Sarah 2026-05-26): Externe Teilnehmer editierbar.
+      // Clamp 0..max_spots; eigener audit_log Eintrag bei Aenderung.
+      const newExternal = Math.max(0, Math.min(Number(editForm.external_participants_count) || 0, patch.max_spots || 200))
+      const oldExternal = Number((session as any).external_participants_count) || 0
+      patch.external_participants_count = newExternal
       const changedKeys = Object.keys(patch).filter(k => (session as any)[k] != patch[k])
       const { error } = await supabase.from('sessions').update(patch).eq('id', id)
       if (error) { alert('Fehler: ' + error.message); setSavingEdit(false); return }
@@ -302,6 +310,12 @@ export default function AdminSessionPage() {
         action: 'single_or_event_updated',
         details: { session_id: id, session_type: session.session_type, changed_fields_count: changedKeys.length }
       })
+      if (newExternal !== oldExternal) {
+        await supabase.from('audit_log').insert({
+          action: 'external_participants_changed',
+          details: { session_id: id, old: oldExternal, new: newExternal }
+        })
+      }
       setShowEditForm(false)
       setEditForm(null)
       loadData()
@@ -326,8 +340,51 @@ export default function AdminSessionPage() {
       difficulty: session.difficulty ?? 'Alle Level',
       image_url: session.image_url ?? '',
       price_eur: session.price_eur != null ? String(session.price_eur) : '',
+      external_participants_count: session.external_participants_count ?? 0,
     })
     setShowEditForm(true)
+  }
+
+  // Welle 2.6 (Sarah 2026-05-26): Hard-DELETE einer Einzelstunde/Event.
+  // Voraussetzungen:
+  //  - session_type != 'course_session' (echte Kursstunden werden ueber Kurs verwaltet)
+  //  - keine aktiven Bookings (sonst muss vorher abgesagt werden; Yogis informieren)
+  // Audit-Log: single_or_event_deleted. Anschliessend zurueck zu /admin/kurse.
+  async function handleDeleteSession() {
+    if (!session) return
+    if (session.session_type === 'course_session') {
+      alert('Kursstunden werden über den Kurs verwaltet, nicht einzeln gelöscht.')
+      return
+    }
+    const activeBookings = bookings.filter((b: any) => b.status === 'active')
+    if (activeBookings.length > 0) {
+      alert(`Sage zuerst die Stunde ab (${activeBookings.length} Yogi${activeBookings.length === 1 ? '' : 's'} müssen informiert werden).`)
+      return
+    }
+    if (!confirm('Wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) return
+    setDeleting(true)
+    try {
+      // Vorab Warteliste + alle (auch gecancelten) Bookings entfernen, damit FK-Cascade
+      // sauber durchläuft (FK ohne ON DELETE CASCADE würde sonst blockieren).
+      await supabase.from('waitlist').delete().eq('session_id', id)
+      await supabase.from('bookings').delete().eq('session_id', id)
+      const { error } = await supabase.from('sessions').delete().eq('id', id)
+      if (error) { alert('Fehler beim Löschen: ' + error.message); setDeleting(false); return }
+      await supabase.from('audit_log').insert({
+        action: 'single_or_event_deleted',
+        details: {
+          session_id: id,
+          session_type: session.session_type,
+          name: session.name,
+          date: session.date,
+          time_start: session.time_start,
+        }
+      })
+      router.push('/admin/kurse')
+    } catch (e: any) {
+      alert('Fehler: ' + (e?.message || e))
+      setDeleting(false)
+    }
   }
 
   async function handleAddLateReplacement() {
@@ -624,6 +681,15 @@ export default function AdminSessionPage() {
             <button onClick={openEditForm}
               className="mt-2 w-full text-sm font-semibold bg-yoga-bg hover:bg-yoga-card text-yoga-text border border-yoga-border2 rounded-yoga py-2">
               <i className="ti ti-edit mr-1" /> Bearbeiten
+            </button>
+          )}
+          {/* Welle 2.6 (Sarah 2026-05-26): Löschen für Einzelstunden/Events.
+              Sichtbar auch im abgesagten Zustand (dann sind keine aktiven Bookings mehr da
+              und das Element kann sauber aus der DB entfernt werden). */}
+          {session?.session_type && session.session_type !== 'course_session' && (
+            <button onClick={handleDeleteSession} disabled={deleting}
+              className="mt-2 w-full text-sm font-semibold bg-yoga-red-bg text-yoga-red-text border border-yoga-red-text/20 rounded-yoga py-2 disabled:opacity-40">
+              <i className="ti ti-trash mr-1" /> {deleting ? 'Wird gelöscht...' : 'Löschen'}
             </button>
           )}
           {session?.is_cancelled && (
@@ -992,6 +1058,25 @@ export default function AdminSessionPage() {
                 {editForm.image_url && (
                   <img src={editForm.image_url} alt="" className="mt-2 w-20 h-20 rounded-yoga object-cover border border-yoga-border" />
                 )}
+              </div>
+              {/* Welle 2.6 (Sarah 2026-05-26): Externe Teilnehmer +/- Counter.
+                  Werden in der Yogi-Plätze-Anzeige draufgerechnet (active + extern). */}
+              <div>
+                <label className="field-label">Externe Teilnehmer</label>
+                <div className="flex items-center gap-3">
+                  <button type="button"
+                    onClick={() => setEditForm({ ...editForm, external_participants_count: Math.max(0, (Number(editForm.external_participants_count) || 0) - 1) })}
+                    className="w-9 h-9 rounded-full border border-yoga-border2 bg-yoga-bg text-yoga-text font-bold flex items-center justify-center cursor-pointer hover:bg-yoga-card">
+                    <i className="ti ti-minus" />
+                  </button>
+                  <div className="text-base font-bold w-8 text-center">{Number(editForm.external_participants_count) || 0}</div>
+                  <button type="button"
+                    onClick={() => setEditForm({ ...editForm, external_participants_count: Math.min(Number(editForm.max_spots) || 200, (Number(editForm.external_participants_count) || 0) + 1) })}
+                    className="w-9 h-9 rounded-full border border-yoga-border2 bg-yoga-bg text-yoga-text font-bold flex items-center justify-center cursor-pointer hover:bg-yoga-card">
+                    <i className="ti ti-plus" />
+                  </button>
+                  <span className="text-xs text-yoga-text/50 ml-2">z.B. Drop-Ins, Barzahler</span>
+                </div>
               </div>
               {session?.session_type === 'event_paid' && (
                 <div>

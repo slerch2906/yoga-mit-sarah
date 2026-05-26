@@ -22,6 +22,7 @@ function BestaetigungInner() {
       const user = await getCurrentUser()
       const [{ data: sess }, { data: prof }] = await Promise.all([
         supabase.from('sessions').select('*, course:courses(name, is_free)').eq('id', id).single(),
+        // Welle 2.6: session.name + session_type via `*` — overriden den SYS-Container-Namen.
         user ? supabase.from('profiles').select('*').eq('id', user.id).single() : Promise.resolve({ data: null }),
       ])
       setSession(sess)
@@ -90,7 +91,11 @@ function BestaetigungInner() {
     const dt = new Date(`${session.date}T${session.time_start}`)
     const dtEnd = new Date(dt.getTime() + session.duration_min * 60000)
     const fmt = (d: Date) => d.toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z'
-    const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nSUMMARY:${session.course?.name}\r\nDTSTART:${fmt(dt)}\r\nDTEND:${fmt(dtEnd)}\r\nEND:VEVENT\r\nEND:VCALENDAR`
+    // Welle 2.6: bei Events/Einzelstunden session.name in der Kalender-Summary statt SYS-Container.
+    const icsTitle = session.session_type && session.session_type !== 'course_session'
+      ? (session.name ?? 'Yoga-Event')
+      : (session.name ?? session.course?.name ?? 'Yoga')
+    const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nSUMMARY:${icsTitle}\r\nDTSTART:${fmt(dt)}\r\nDTEND:${fmt(dtEnd)}\r\nEND:VEVENT\r\nEND:VCALENDAR`
     // Data URI statt Blob URL - funktioniert auf Android/Google Kalender
     const encoded = encodeURIComponent(ics)
     const a = document.createElement('a')
@@ -102,6 +107,12 @@ function BestaetigungInner() {
   }
 
   if (!session) return null
+
+  // Welle 2.6 (Sarah 2026-05-26): SYS-Container-Name unterdrücken.
+  // Bei Events/Einzelstunden steht der echte Titel in session.name.
+  const displayName = session.session_type && session.session_type !== 'course_session'
+    ? `Event · ${session.name ?? 'Unbenannt'}`
+    : (session.name ?? session.course?.name ?? '')
 
   const sessionDate = new Date(`${session.date}T${session.time_start}`)
   const within3h = (sessionDate.getTime() - Date.now()) < 3 * 60 * 60 * 1000
@@ -126,7 +137,7 @@ function BestaetigungInner() {
             <i className="ti ti-list text-2xl text-yoga-amber-text" />
           </div>
           <h2 className="text-lg font-bold mb-2">Du stehst auf der Warteliste!</h2>
-          <p className="text-sm text-yoga-text/60 mb-1">{session.course?.name}</p>
+          <p className="text-sm text-yoga-text/60 mb-1">{displayName}</p>
           <p className="text-sm text-yoga-text/60 mb-5">
             {sessionDate.toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · {session.time_start?.slice(0,5)} Uhr
           </p>
@@ -164,7 +175,7 @@ function BestaetigungInner() {
             <i className="ti ti-bell text-2xl text-yoga-green-text" />
           </div>
           <h2 className="text-lg font-bold mb-2">Benachrichtigung aktiviert!</h2>
-          <p className="text-sm text-yoga-text/60 mb-1">{session.course?.name}</p>
+          <p className="text-sm text-yoga-text/60 mb-1">{displayName}</p>
           <p className="text-sm text-yoga-text/60 mb-5">
             {sessionDate.toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · {session.time_start?.slice(0,5)} Uhr
           </p>
@@ -192,7 +203,7 @@ function BestaetigungInner() {
           <i className="ti ti-check text-2xl text-yoga-green-text" />
         </div>
         <h2 className="text-lg font-bold mb-2">Du bist dabei!</h2>
-        <p className="text-sm text-yoga-text/60 mb-1">{session.course?.name} · Einzelstunde</p>
+        <p className="text-sm text-yoga-text/60 mb-1">{displayName}{session.session_type === 'course_session' ? ' · Einzelstunde' : ''}</p>
         <p className="text-sm text-yoga-text/60 mb-5">
           {sessionDate.toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · {session.time_start?.slice(0,5)} Uhr
         </p>

@@ -26,6 +26,7 @@ function AnwesenheitInner() {
       const { data: sessions } = await supabase
         .from('sessions')
         .select('*, course:courses(name, max_spots)')
+        // Welle 2.6: session.name + session_type via `*` schon dabei.
         .eq('date', today)
         .eq('is_cancelled', false)
         .order('time_start')
@@ -35,6 +36,7 @@ function AnwesenheitInner() {
     }
 
     const [{ data: sess }, { data: bookingData }] = await Promise.all([
+      // Welle 2.6: session.name + session_type via `*` schon dabei.
       supabase.from('sessions').select('*, course:courses(name, max_spots)').eq('id', sessionId).single(),
       supabase.from('bookings').select('*, profile:profiles(first_name, last_name, email), credits(total, used)')
         .eq('session_id', sessionId).eq('status', 'active'),
@@ -91,7 +93,12 @@ function AnwesenheitInner() {
               className="w-full card mb-3 text-left hover:border-yoga-border2">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm font-bold">{s.course?.name}</div>
+                  <div className="text-sm font-bold">
+                    {/* Welle 2.6: SYS-Container-Name unterdrücken */}
+                    {s.session_type && s.session_type !== 'course_session'
+                      ? `Event · ${s.name ?? 'Unbenannt'}`
+                      : (s.name ?? s.course?.name)}
+                  </div>
                   <div className="text-sm text-yoga-text/50">{s.time_start?.slice(0,5)} Uhr</div>
                 </div>
                 <i className="ti ti-chevron-right text-base opacity-40" />
@@ -109,7 +116,12 @@ function AnwesenheitInner() {
       <AppHeader title="Anwesenheit" isAdmin />
       <div className="px-4 py-4">
         <div className="card mb-4">
-          <div className="text-base font-bold mb-1">{(session as any)?.course?.name}</div>
+          <div className="text-base font-bold mb-1">
+            {/* Welle 2.6: SYS-Container-Name unterdrücken */}
+            {(session as any)?.session_type && (session as any).session_type !== 'course_session'
+              ? `Event · ${(session as any).name ?? 'Unbenannt'}`
+              : ((session as any)?.name ?? (session as any)?.course?.name)}
+          </div>
           <div className="text-sm text-yoga-text/50">
             {(session as any)?.time_start?.slice(0,5)} Uhr · {bookings.length} von {(session as any)?.course?.max_spots} angemeldet
           </div>

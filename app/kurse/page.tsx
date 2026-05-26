@@ -302,6 +302,9 @@ export default function KursePage() {
             </p>
             {eventSessions.map(s => {
               const dObj = new Date(s.date)
+              // Welle 2.6 (Sarah 2026-05-26): Foto VORNE, Uhrzeit+Dauer als Fließtext
+              // in der Mitte. So unterscheiden sich Events optisch von Kursstunden
+              // (die ihre Uhrzeit links groß tragen).
               return (
                 <button key={s.id}
                   onClick={() => { if (!s.is_past && !s.is_cancelled) router.push(`/kurse/${s.id}`) }}
@@ -309,25 +312,28 @@ export default function KursePage() {
                   className={`w-full flex items-center gap-3 mb-2 text-left transition-colors rounded-yoga border p-3
                     ${(s.is_past || s.is_cancelled) ? 'opacity-40 cursor-default pointer-events-none' : 'hover:border-yoga-border2 active:scale-[0.98]'}
                     ${s.my_booking && !s.is_past && !s.is_cancelled ? 'border-2 border-yoga-green-text bg-white' : 'border-yoga-border bg-white'}`}>
-                  <div className="text-center flex-shrink-0 w-12">
-                    <div className={`text-base font-bold ${s.is_past ? 'line-through' : ''}`}>
-                      {s.time_start?.slice(0,5)}
+                  {s.display_image_url ? (
+                    <img src={s.display_image_url} alt="" className="w-16 h-16 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-yoga bg-yoga-card flex items-center justify-center flex-shrink-0 border border-yoga-border">
+                      <i className="ti ti-confetti text-yoga-text/40 text-2xl" />
                     </div>
-                    <div className="text-xs text-yoga-text/40">{s.duration_min} min</div>
-                  </div>
-                  <div className="w-px h-8 bg-yoga-border2 flex-shrink-0" />
-                  {s.display_image_url && (
-                    <img src={s.display_image_url} alt="" className="w-12 h-12 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold truncate">{s.display_name}</div>
-                    <div className="text-xs text-yoga-text/50 mt-0.5">
-                      {dObj.toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })}
+                    <div className={`text-sm font-bold truncate ${s.is_past ? 'line-through' : ''}`}>
+                      {s.display_name}
                     </div>
-                    {s.display_difficulty && (
-                      <div className="text-xs text-yoga-text/50 mt-0.5">{s.display_difficulty}</div>
-                    )}
-                    <div className="mt-1">{getEventBadge(s)}</div>
+                    <div className="text-xs text-yoga-text/55 mt-0.5">
+                      {dObj.toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })}
+                      {' · '}{s.time_start?.slice(0,5)}
+                      {' · '}{s.duration_min} min
+                    </div>
+                    <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                      {getEventBadge(s)}
+                      {s.display_difficulty && (
+                        <span className="text-xs text-yoga-text/50">{s.display_difficulty}</span>
+                      )}
+                    </div>
                   </div>
                   {getBadge(s)}
                 </button>

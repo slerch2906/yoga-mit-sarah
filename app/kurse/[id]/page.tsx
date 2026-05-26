@@ -115,7 +115,7 @@ export default function SessionDetailPage() {
   // Falls nicht: gibt die zu entfernenden Wartelisten zurück (älteste zuerst).
   async function checkWaitlistConflicts(userId: string): Promise<any[]> {
     const { data: waitlists } = await supabase.from('waitlist')
-      .select('id, position, created_at, session_id, session:sessions(date, time_start, course:courses(name))')
+      .select('id, position, created_at, session_id, session:sessions(date, time_start, name, session_type, course:courses(name))')
       .eq('user_id', userId).eq('type', 'waitlist').order('created_at')
     if (!waitlists || waitlists.length === 0) return []
     // Wieviele Credits stehen NACH dieser Buchung noch zur Verfügung?
@@ -804,7 +804,9 @@ export default function SessionDetailPage() {
               <div className="bg-yoga-bg rounded-yoga p-3 mb-4">
                 {conflictingWaitlists.map((w: any) => (
                   <div key={w.id} className="text-sm py-1 border-b last:border-b-0 border-yoga-border">
-                    <strong>{w.session?.course?.name}</strong> · {new Date(w.session?.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })} · {w.session?.time_start?.slice(0,5)} Uhr
+                    <strong>{w.session?.session_type && w.session.session_type !== 'course_session'
+                      ? `Event · ${w.session.name ?? 'Unbenannt'}`
+                      : (w.session?.name ?? w.session?.course?.name)}</strong> · {new Date(w.session?.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'short' })} · {w.session?.time_start?.slice(0,5)} Uhr
                   </div>
                 ))}
               </div>

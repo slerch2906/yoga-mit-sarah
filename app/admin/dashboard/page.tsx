@@ -101,6 +101,8 @@ export default function AdminDashboard() {
     const { data: sessionData } = await supabase
       .from('sessions')
       .select('*, course:courses(name, max_spots, is_active), bookings!bookings_session_id_fkey(id, status, user_id, profile:profiles(first_name, last_name))')
+      // Welle 2.6: session.name + session_type sind via `*` mit dabei — Display-Name
+      // bevorzugt session.name (SYS-Container-Name würde sonst durchschlagen).
       .gte('date', weekStart.toISOString().split('T')[0])
       .lte('date', weekEnd.toISOString().split('T')[0])
       .order('date').order('time_start')
@@ -574,7 +576,10 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-base font-bold">
-                    {selectedSession.course?.name}
+                    {/* Welle 2.6: SYS-Container-Name unterdrücken */}
+                    {selectedSession.session_type && selectedSession.session_type !== 'course_session'
+                      ? `Event · ${selectedSession.name ?? 'Unbenannt'}`
+                      : (selectedSession.name ?? selectedSession.course?.name)}
                     {selectedSession.is_replacement && (
                       <span className="text-yoga-text font-semibold"> · Ersatzstunde</span>
                     )}
@@ -743,7 +748,11 @@ export default function AdminDashboard() {
             <div className="bg-yoga-bg w-full max-w-md mx-auto rounded-t-2xl p-5">
               <h3 className="text-base font-bold mb-1">Stunde absagen</h3>
               <p className="text-sm text-yoga-text/55 mb-4">
-                {selectedSession.course?.name} · {new Date(selectedSession.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })}
+                {/* Welle 2.6: SYS-Name-Override */}
+                {selectedSession.session_type && selectedSession.session_type !== 'course_session'
+                  ? `Event · ${selectedSession.name ?? 'Unbenannt'}`
+                  : (selectedSession.name ?? selectedSession.course?.name)}
+                {' · '}{new Date(selectedSession.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })}
               </p>
 
               <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 mb-4">
@@ -933,7 +942,11 @@ export default function AdminDashboard() {
                 <div className="w-px h-9 bg-yoga-border2 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-bold truncate">
-                    {s.course?.name}
+                    {/* Welle 2.6 (Sarah 2026-05-26): SYS-Container-Name nicht durchschlagen
+                        lassen. Für Events/Einzelstunden: "Event · <Titel>". */}
+                    {s.session_type && s.session_type !== 'course_session'
+                      ? `Event · ${s.name ?? 'Unbenannt'}`
+                      : (s.name ?? s.course?.name)}
                     {s.is_replacement && (
                       <span className="text-yoga-text font-semibold"> · Ersatzstunde</span>
                     )}
@@ -946,15 +959,20 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  {s.is_cancelled ? (
-                    <span className="badge badge-full">Abgesagt</span>
-                  ) : isPast ? (
-                    <span className="badge bg-yoga-gray text-yoga-text/40">Vergangen</span>
-                  ) : (
-                    <span className={`badge ${s.active_count >= s.course?.max_spots ? 'badge-full' : 'badge-free'}`}>
-                      {s.active_count}/{s.course?.max_spots}
-                    </span>
-                  )}
+                  {(() => {
+                    if (s.is_cancelled) return <span className="badge badge-full">Abgesagt</span>
+                    if (isPast) return <span className="badge bg-yoga-gray text-yoga-text/40">Vergangen</span>
+                    // Welle 2.6: bei Events/Einzelstunden max_spots aus Session,
+                    // sonst aus Container-Kurs (Kursstunden).
+                    const maxS = (s.session_type && s.session_type !== 'course_session')
+                      ? (s.max_spots ?? s.course?.max_spots)
+                      : s.course?.max_spots
+                    return (
+                      <span className={`badge ${maxS && s.active_count >= maxS ? 'badge-full' : 'badge-free'}`}>
+                        {s.active_count}/{maxS ?? '?'}
+                      </span>
+                    )
+                  })()}
                   <i className="ti ti-chevron-right text-sm text-yoga-text/30" />
                 </div>
               </div>

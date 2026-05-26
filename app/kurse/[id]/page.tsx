@@ -689,10 +689,14 @@ export default function SessionDetailPage() {
             {!effectiveOpen && freeSpots > 0 && (freeCredits > 0 || course?.is_free || isEvent) && (
               <div className="bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga p-4 mb-4">
                 <p className="text-sm font-bold text-yoga-amber-text mb-1">
-                  <i className="ti ti-lock mr-1" /> Kurs noch nicht freigegeben
+                  <i className="ti ti-lock mr-1" /> {isEvent ? 'Event noch nicht freigegeben' : isCourseSession ? 'Kurs noch nicht freigegeben' : 'Stunde noch nicht freigegeben'}
                 </p>
                 <p className="text-sm text-yoga-amber-text/90 leading-relaxed">
-                  Dieser Kurs ist noch nicht für Einzelstunden-Buchungen freigegeben. Bitte wende dich an Sarah.
+                  {isEvent
+                    ? 'Dieses Event ist noch nicht für Buchungen freigegeben. Bitte wende dich an Sarah.'
+                    : isCourseSession
+                    ? 'Dieser Kurs ist noch nicht für Einzelstunden-Buchungen freigegeben. Bitte wende dich an Sarah.'
+                    : 'Diese Stunde ist noch nicht für Buchungen freigegeben. Bitte wende dich an Sarah.'}
                 </p>
               </div>
             )}

@@ -284,5 +284,11 @@ export async function cleanupAllE2EData() {
     await db.from('audit_log').delete().eq('user_id', profile.id)
   }
 
-  console.log('✅ Alle E2E-Testdaten bereinigt')
+  // Sarah-Wunsch 2026-05-26 Welle 2.10: admin_notifications aus Tests blieben
+  // im Dashboard sichtbar — Sarah musste sie manuell wegklicken. Jetzt zentral
+  // im Teardown loeschen (greift breit auf alle E2E-Marker).
+  await db.from('admin_notifications').delete()
+    .or(`message.ilike.%[E2E]%,message.ilike.%e2e.%,message.ilike.%Test Yogi%,message.ilike.%e2e-%`)
+
+  console.log('✅ Alle E2E-Testdaten bereinigt (inkl. admin_notifications)')
 }

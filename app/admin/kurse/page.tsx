@@ -1435,12 +1435,24 @@ export default function AdminKursePage() {
 
             {/* Welle 2 (Sarah 2026-05-26): zweite Sektion — Sessions aus den
                 SYS-Containern (Einzelstunden, Events kostenlos/bezahlt).
-                Chronologisch, nur Anzeige + Detail-Navigation. */}
+                Chronologisch, nur Anzeige + Detail-Navigation.
+                Welle 2.10 (Sarah 2026-05-26): Aufgeteilt in "Geplante" (date >= heute)
+                und "Beendete Stunden & Events" (date < heute, eigene Sektion unten). */}
             <p className="section-label mt-6">Geplante Stunden & Events</p>
-            {containerSessions.length === 0 ? (
-              <p className="text-sm text-yoga-text/40 text-center py-4">Noch keine geplanten Stunden oder Events</p>
-            ) : (
-              containerSessions.map((s: any) => {
+            {(() => {
+              const today = new Date().toISOString().split('T')[0]
+              const upcoming = containerSessions.filter((s: any) => s.date >= today)
+              if (upcoming.length === 0) {
+                return <p className="text-sm text-yoga-text/40 text-center py-4">Noch keine geplanten Stunden oder Events</p>
+              }
+              return null
+            })()}
+            {containerSessions
+              .filter((s: any) => {
+                const today = new Date().toISOString().split('T')[0]
+                return s.date >= today
+              })
+              .map((s: any) => {
                 const activeBookings = (s.bookings || []).filter((b: any) => b.status === 'active').length
                 const ext = s.external_participants_count || 0
                 const totalCount = activeBookings + ext
@@ -1534,8 +1546,70 @@ export default function AdminKursePage() {
                     </div>
                   </div>
                 )
-              })
-            )}
+              })}
+
+            {/* Welle 2.10 (Sarah 2026-05-26): Beendete Stunden & Events —
+                Container-Sessions deren date < heute. Eigene Sektion analog
+                "Beendete Kurse". Wenn null: Sektion komplett ausgeblendet
+                (kein leerer Header). Card-Layout identisch zur "Geplante"-
+                Sektion, nur dezent via opacity-70 abgeblendet. Bearbeiten/
+                Absagen-Buttons fallen weg (keine sinnvolle Aktion mehr in
+                der Vergangenheit), nur Teilnehmer + Löschen bleiben. */}
+            {(() => {
+              const today = new Date().toISOString().split('T')[0]
+              const endedSessions = containerSessions.filter((s: any) => s.date < today)
+              if (endedSessions.length === 0) return null
+              return <>
+                <p className="section-label mt-6">Beendete Stunden & Events</p>
+                {endedSessions.map((s: any) => {
+                  const activeBookings = (s.bookings || []).filter((b: any) => b.status === 'active').length
+                  const ext = s.external_participants_count || 0
+                  const totalCount = activeBookings + ext
+                  const typeBadge = s.session_type === 'single' ? { label: 'Einzelstunde', cls: 'badge-wait' }
+                    : s.session_type === 'event_free' ? { label: 'Kostenlos', cls: 'badge-free' }
+                    : s.session_type === 'event_credit' ? { label: 'Credit', cls: 'badge-wait' }
+                    : s.session_type === 'event_paid' ? { label: `${s.price_eur} €`, cls: 'badge-wait' }
+                    : { label: s.session_type, cls: 'badge-wait' }
+                  return (
+                    <div key={s.id} className="card mb-3 opacity-70" data-ended-session>
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <div className="text-base font-bold truncate">{s.name || '—'}</div>
+                          </div>
+                          <div className="text-sm text-yoga-text/50">
+                            {new Date(s.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })}
+                            {' · '}{s.time_start?.slice(0,5)} Uhr · {s.duration_min} min
+                          </div>
+                          <div className="text-sm text-yoga-text/60 mt-0.5">
+                            Teilnehmer: <strong>{totalCount}</strong>{s.max_spots ? `/${s.max_spots}` : ''}
+                            {ext > 0 && <span className="text-xs text-yoga-text/50 ml-1">· {ext} extern</span>}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <span className={`badge ${typeBadge.cls}`}>{typeBadge.label}</span>
+                          <span className="badge bg-yoga-gray text-yoga-text/50 border-0">
+                            <i className="ti ti-check text-xs mr-0.5" />Beendet
+                          </span>
+                        </div>
+                      </div>
+                      {/* Beendet: nur Teilnehmer-Ansicht + Löschen (kein Edit, kein Absagen) */}
+                      <div className="flex gap-2 mt-2">
+                        <button onClick={() => router.push(`/admin/sessions/${s.id}`)}
+                          className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70">
+                          <i className="ti ti-users mr-1" />Teilnehmer
+                        </button>
+                        <button onClick={() => deleteContainerSession(s.id, activeBookings)}
+                          className="text-xs text-yoga-red-text rounded-full py-1.5 px-4 font-semibold hover:opacity-80 cursor-pointer border-0"
+                          style={{ background: 'var(--yoga-red-bg)' }}>
+                          <i className="ti ti-trash mr-1" />Löschen
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </>
+            })()}
 
             {/* Welle 2.5 (Sarah 2026-05-26): Beendete Kurse — eigene Sektion
                 unten, gleiche Card-Logik wie aktive. */}

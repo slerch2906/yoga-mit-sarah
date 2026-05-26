@@ -247,6 +247,31 @@ export default function AdminDashboard() {
     if (!selectedSession) return
     setDashAddingYogi(true)
 
+    // Welle 2.10 (Sarah 2026-05-26): Credit-Safety bei Events.
+    // event_free/event_paid → KEIN Credit-Abzug, credit_id=null.
+    const evType: string = selectedSession.session_type || 'course_session'
+    if (evType === 'event_free' || evType === 'event_paid') {
+      await supabase.from('bookings').insert({
+        user_id: yogi.id, session_id: selectedSession.id,
+        credit_id: null, type: 'single', status: 'active',
+        origin_session_id: null,
+      })
+      await supabase.from('audit_log').insert({
+        action: 'admin_added_yogi_to_event',
+        details: {
+          user_id: yogi.id, session_id: selectedSession.id, session_type: evType,
+          credit_used: false, price_eur: evType === 'event_paid' ? selectedSession.price_eur : null,
+          source: 'dashboard',
+        }
+      })
+      setDashAddingYogi(false)
+      setShowDashAddYogi(false)
+      setDashYogiSearch('')
+      setDashYogiResults([])
+      loadSessionDetail(selectedSession)
+      return
+    }
+
     // Sarah-Regel 2026-05-22: gleiche Logic wie Yogi-Selbstbuchung.
     // Course-Credit zuerst (mit minutengenauem Window-Check), dann Single/Tenpack/Quartal.
     const pick = await selectCreditForBooking(

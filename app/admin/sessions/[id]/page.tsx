@@ -137,7 +137,84 @@ export default function AdminSessionPage() {
 
   async function handleAddYogi(yogi: any) {
     if (!session) { setQuickCreditYogi(yogi); return }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Welle 2.10 (Sarah 2026-05-26) — CREDIT-SAFETY-AUDIT für Events:
+    //
+    // - event_free  → KEIN Credit-Abzug. credit_id=null. Yogi bekommt Mail
+    //                  "kostenlos, einfach kommen".
+    // - event_paid  → KEIN Credit-Abzug. credit_id=null. Yogi bekommt Mail
+    //                  mit Preis + Bezahlungs-Hinweis (extern: bar/Überweisung).
+    // - single      → Credit-Logik wie bisher (selectCreditForBooking).
+    // - event_credit→ Credit-Logik wie bei single (semantisch identisch).
+    // - course_session → bestehende Logik (Course-Credit vor Single/etc.).
+    //
+    // Begründung: bei event_free/event_paid darf NICHTS aus der credits-
+    // Tabelle abgezogen werden — die Bezahlung läuft komplett außerhalb des
+    // Credit-Systems. Wenn credit_id=null gesetzt wird, ignoriert auch der
+    // trg_sync_credit_used Trigger den Booking-Eintrag.
+    // ─────────────────────────────────────────────────────────────────────
+    const sessionType: string = session.session_type || 'course_session'
+    const isFreeEvent = sessionType === 'event_free'
+    const isPaidEvent = sessionType === 'event_paid'
+    const skipCreditLogic = isFreeEvent || isPaidEvent
+
+    if (skipCreditLogic) {
+      setAddingYogi(true)
+      // Direkt buchen ohne Credit — type='single' (= Drop-In-Charakter, keine
+      // Kursbindung), credit_id=null, kein origin_session_id.
+      const { error: bookingError } = await supabase.from('bookings').upsert({
+        user_id: yogi.id, session_id: id,
+        credit_id: null, type: 'single', status: 'active',
+        origin_session_id: null,
+        cancelled_at: null, cancel_late: false,
+      }, { onConflict: 'user_id,session_id' })
+      if (bookingError) {
+        setAddingYogi(false)
+        alert('Buchung konnte nicht angelegt werden.')
+        return
+      }
+      // Yogi-Email mit passendem Kontext. Für event_paid wird der Preis
+      // im Email-Text über `bookingConfirmed` mit isSingle=true gerendert;
+      // Preis-Hinweis kommen über das `courseName`-Feld (siehe Format unten).
+      if (yogi.email && !yogi.is_dummy) {
+        try {
+          // Konstruktion eines aussagekräftigen "courseName"-Strings, damit
+          // der Yogi in der Buchungsbestätigung sofort sieht ob bezahlt oder
+          // kostenlos. Wir benutzen NICHT neue Email-Cases (Edge Function
+          // ist deployed, keine Mit-Änderung möglich aus dem Frontend).
+          // Statt dessen reichern wir den Display-Namen mit Marker an —
+          // sauberer Workaround.
+          const eventLabel = isFreeEvent
+            ? `${session.name} (kostenlos)`
+            : `${session.name} (${session.price_eur} € — bitte bar mitbringen oder vorab überweisen)`
+          await Email.bookingConfirmed({
+            email: yogi.email,
+            firstName: yogi.first_name || 'Yogi',
+            courseName: eventLabel,
+            date: session.date,
+            timeStart: session.time_start,
+            durationMin: session.duration_min || 75,
+            isSingle: true,
+          })
+        } catch (e) { /* nicht-blockierend */ }
+      }
+      await supabase.from('audit_log').insert({
+        action: 'admin_added_yogi_to_event',
+        details: {
+          user_id: yogi.id, session_id: id, session_type: sessionType,
+          credit_used: false,
+          price_eur: isPaidEvent ? session.price_eur : null,
+        }
+      })
+      setShowAddYogi(false); setYogiSearch(''); setYogiResults([]); setSelectedYogi(null)
+      setAddingYogi(false); loadData()
+      return
+    }
+
     // Sarah-Regel 2026-05-22: Course-Credit vor Single/Tenpack/Quartal, minutengenauer 10d/8d-Check.
+    // (Pfad NUR für course_session, single, event_credit — alles wo Credits
+    // verbraucht werden müssen.)
     const pick = await selectCreditForBooking(supabase, yogi.id, id as string, session.date, session.time_start)
     if (!pick.ok) {
       // Course-Credit-Fenster verletzt oder kein Credit → Admin entscheidet (Quick-Credit Dialog)
@@ -234,6 +311,28 @@ export default function AdminSessionPage() {
   async function addWaitlistYogi(wlEntry: any) {
     if (!session?.date || !session?.time_start) return
     setPromotingWaitlist(wlEntry.id)
+    // Welle 2.10 (Sarah 2026-05-26): Credit-Safety auch hier — Warteliste-Yogi
+    // bei event_free/event_paid ohne Credit-Abzug einbuchen.
+    const evType: string = session.session_type || 'course_session'
+    if (evType === 'event_free' || evType === 'event_paid') {
+      await supabase.from('bookings').upsert({
+        user_id: wlEntry.user_id, session_id: id,
+        credit_id: null, type: 'single', status: 'active',
+        origin_session_id: null,
+        cancelled_at: null, cancel_late: false,
+      }, { onConflict: 'user_id,session_id' })
+      await supabase.from('waitlist').delete().eq('id', wlEntry.id)
+      await supabase.from('audit_log').insert({
+        action: 'admin_promoted_waitlist_yogi',
+        details: {
+          user_id: wlEntry.user_id, session_id: id, session_type: evType,
+          credit_used: false, price_eur: evType === 'event_paid' ? session.price_eur : null,
+        }
+      })
+      setPromotingWaitlist(null)
+      loadData()
+      return
+    }
     const pick = await selectCreditForBooking(supabase, wlEntry.user_id, id as string, session.date, session.time_start)
     if (!pick.ok) {
       const proceed = confirm(`${pick.message}\n\nSoll trotzdem ein Quick-Credit (1 Einzelstunde) angelegt werden?`)
@@ -490,8 +589,14 @@ export default function AdminSessionPage() {
 
     let replacementSessionId: string | null = null
 
-    // 1) Ersatztermin anlegen falls gewünscht
-    if (hasReplacement && replacementDate && replacementTime) {
+    // Welle 2.10 (Sarah 2026-05-26): Ersatztermin NUR für course_session sinnvoll —
+    // bei Einzelstunden/Events gibts keinen Folgetermin. hasReplacement wird
+    // bei nicht-course_session ignoriert (UI versteckt den Checkbox sowieso,
+    // aber State-Defensive: doppelt absichern).
+    const isCourseSession = session?.session_type === 'course_session'
+
+    // 1) Ersatztermin anlegen falls gewünscht (nur für course_session)
+    if (isCourseSession && hasReplacement && replacementDate && replacementTime) {
       const { data: newSession } = await supabase.from('sessions').insert({
         course_id: session.course.id,
         date: replacementDate,
@@ -563,9 +668,16 @@ export default function AdminSessionPage() {
     await supabase.from('waitlist').delete().eq('session_id', id)
 
     setCancelling(false)
+    // Welle 2.10 (Sarah 2026-05-26): bei Events/Einzelstunden ist die Credit-
+    // Rückbuchung kontextabhängig — event_free hat gar keine Credits,
+    // event_paid wurde extern bezahlt. Daher generische Meldung.
     const msg = replacementSessionId
       ? `Stunde abgesagt. ${bookings.length} Yogis wurden direkt in den Ersatztermin (${replacementDate}) eingebucht und informiert.`
-      : `Stunde abgesagt. ${bookings.length} Yogis wurden informiert und ihre Credits zurückgebucht.`
+      : session?.session_type === 'event_free'
+        ? `Stunde abgesagt. ${bookings.length} Yogis wurden informiert (kein Credit verbraucht).`
+        : session?.session_type === 'event_paid'
+          ? `Stunde abgesagt. ${bookings.length} Yogis wurden informiert — Rückzahlung manuell klären.`
+          : `Stunde abgesagt. ${bookings.length} Yogis wurden informiert und ihre Credits zurückgebucht.`
     alert(msg)
     router.back()
   }
@@ -834,43 +946,57 @@ export default function AdminSessionPage() {
                   onChange={e => setReason(e.target.value)}
                   placeholder="z.B. Krankheit, persönlicher Grund..." />
 
-                {/* Ersatztermin */}
-                <div className="mb-4">
-                  <label className="flex items-center gap-3 cursor-pointer mb-3">
-                    <input type="checkbox" checked={hasReplacement}
-                      onChange={e => setHasReplacement(e.target.checked)}
-                      className="w-5 h-5 flex-shrink-0" />
-                    <span className="text-sm font-semibold">Ersatztermin anbieten</span>
-                  </label>
+                {/* Ersatztermin — Welle 2.10 (Sarah 2026-05-26): NUR bei
+                    course_session sinnvoll. Einzelstunden/Events kommen
+                    nicht zurück; kein Ersatz-Bereich anzeigen. */}
+                {session?.session_type === 'course_session' ? (
+                  <div className="mb-4">
+                    <label className="flex items-center gap-3 cursor-pointer mb-3">
+                      <input type="checkbox" checked={hasReplacement}
+                        onChange={e => setHasReplacement(e.target.checked)}
+                        className="w-5 h-5 flex-shrink-0" />
+                      <span className="text-sm font-semibold">Ersatztermin anbieten</span>
+                    </label>
 
-                  {hasReplacement && (
-                    <div className="bg-yoga-bg rounded-yoga p-3 space-y-2">
-                      <p className="text-xs text-yoga-text/50 mb-2">
-                        Yogis werden direkt in den Ersatztermin eingebucht – ihr Credit bleibt verbraucht.
+                    {hasReplacement && (
+                      <div className="bg-yoga-bg rounded-yoga p-3 space-y-2">
+                        <p className="text-xs text-yoga-text/50 mb-2">
+                          Yogis werden direkt in den Ersatztermin eingebucht – ihr Credit bleibt verbraucht.
+                        </p>
+                        <div>
+                          <label className="field-label">Datum</label>
+                          <input type="date" className="field-input" value={replacementDate}
+                            onChange={e => setReplacementDate(e.target.value)}
+                            min={new Date().toISOString().split('T')[0]} />
+                        </div>
+                        <div>
+                          <label className="field-label">Uhrzeit</label>
+                          <input type="time" className="field-input" value={replacementTime}
+                            onChange={e => setReplacementTime(e.target.value)} />
+                        </div>
+                      </div>
+                    )}
+
+                    {!hasReplacement && (
+                      <p className="text-xs text-yoga-text/50">
+                        Ohne Ersatztermin: Credits werden an alle Yogis zurückgebucht.
                       </p>
-                      <div>
-                        <label className="field-label">Datum</label>
-                        <input type="date" className="field-input" value={replacementDate}
-                          onChange={e => setReplacementDate(e.target.value)}
-                          min={new Date().toISOString().split('T')[0]} />
-                      </div>
-                      <div>
-                        <label className="field-label">Uhrzeit</label>
-                        <input type="time" className="field-input" value={replacementTime}
-                          onChange={e => setReplacementTime(e.target.value)} />
-                      </div>
-                    </div>
-                  )}
-
-                  {!hasReplacement && (
+                    )}
+                  </div>
+                ) : (
+                  <div className="mb-4">
                     <p className="text-xs text-yoga-text/50">
-                      Ohne Ersatztermin: Credits werden an alle Yogis zurückgebucht.
+                      {session?.session_type === 'event_paid'
+                        ? 'Alle eingebuchten Yogis werden per Email informiert. Bezahlung wird – wenn schon geleistet – manuell mit Sarah geklärt.'
+                        : session?.session_type === 'event_free'
+                          ? 'Alle eingebuchten Yogis werden per Email informiert. Kein Credit verbraucht – nichts zurückzubuchen.'
+                          : 'Alle eingebuchten Yogis werden informiert und ihre Credits werden zurückgebucht.'}
                     </p>
-                  )}
-                </div>
+                  </div>
+                )}
 
-                {/* Validation */}
-                {hasReplacement && (!replacementDate || !replacementTime) && (
+                {/* Validation — nur relevant für course_session mit hasReplacement */}
+                {session?.session_type === 'course_session' && hasReplacement && (!replacementDate || !replacementTime) && (
                   <p className="text-xs text-yoga-red-text mb-3">
                     Bitte Datum und Uhrzeit für den Ersatztermin eingeben.
                   </p>
@@ -882,7 +1008,7 @@ export default function AdminSessionPage() {
                   </button>
                   <button
                     onClick={handleCancelSession}
-                    disabled={cancelling || (hasReplacement && (!replacementDate || !replacementTime))}
+                    disabled={cancelling || (session?.session_type === 'course_session' && hasReplacement && (!replacementDate || !replacementTime))}
                     className="flex-1 bg-yoga-red-text text-white rounded-yoga py-2.5 text-sm font-bold border-0 cursor-pointer disabled:opacity-40">
                     {cancelling ? 'Wird abgesagt...' : 'Absagen'}
                   </button>

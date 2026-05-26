@@ -10,7 +10,9 @@ interface NavItem {
 }
 
 const yogiNav: NavItem[] = [
-  { href: '/kurse',      label: 'Kurse',      icon: 'ti-calendar-week' },
+  // Welle 2.10 (Sarah 2026-05-26): Label "Kurse" → "Kalender". URL /kurse bleibt
+  // unverändert (kein Routing-Change), nur das angezeigte BottomNav-Label.
+  { href: '/kurse',      label: 'Kalender',   icon: 'ti-calendar-week' },
   { href: '/warteliste', label: 'Warteliste',  icon: 'ti-list' },
   { href: '/meine',      label: 'Meine',       icon: 'ti-heart' },
   { href: '/profil',     label: 'Profil',      icon: 'ti-user' },

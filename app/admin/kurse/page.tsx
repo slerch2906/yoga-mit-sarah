@@ -94,6 +94,26 @@ export default function AdminKursePage() {
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [form, setForm] = useState(emptyForm)
+  // Welle 2 (Sarah 2026-05-26): zweite Sektion "Geplante Stunden & Events" mit
+  // Sessions der vier SYS-Container. session_type unterscheidet single /
+  // event_free / event_credit / event_paid.
+  const [containerSessions, setContainerSessions] = useState<any[]>([])
+  const [containerIds, setContainerIds] = useState<{ single: string; eventFree: string; eventCredit: string; eventPaid: string } | null>(null)
+  const [showSingleForm, setShowSingleForm] = useState(false)
+  const [showEventForm, setShowEventForm] = useState(false)
+  const [singleForm, setSingleForm] = useState({
+    name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12,
+    location: '', description: '',
+  })
+  const [eventForm, setEventForm] = useState({
+    name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12,
+    location: '', description: '',
+    payment_type: 'free' as 'free' | 'credit' | 'paid',
+    price_eur: '',
+    image_url: '',
+  })
+  const [savingSingleOrEvent, setSavingSingleOrEvent] = useState(false)
+  const [uploadingEventImage, setUploadingEventImage] = useState(false)
   const supabase = createClient()
 
   useEffect(() => { loadData() }, [])
@@ -132,6 +152,26 @@ export default function AdminKursePage() {
       return { ...c, participant_count: enrolledCount, is_overbooked: isOverbooked }
     })
     setCourses(withParticipants)
+
+    // Welle 2 (2026-05-26): Container-Kurs-IDs + deren Sessions ("Geplante Stunden & Events")
+    const { data: containers } = await supabase.from('courses')
+      .select('id, name')
+      .eq('is_system_container', true)
+    if (containers) {
+      const find = (substr: string) => containers.find((c: any) => c.name.toLowerCase().includes(substr))?.id || ''
+      setContainerIds({
+        single: find('einzelstunden'),
+        eventFree: find('kostenlos'),
+        eventCredit: find('credit'),
+        eventPaid: find('bezahlt'),
+      })
+    }
+    // Sessions: alle die NICHT 'course_session' sind (= aus Containern)
+    const { data: cs } = await supabase.from('sessions')
+      .select('id, name, date, time_start, duration_min, max_spots, location, description, session_type, price_eur, image_url, is_cancelled, course_id, external_participants_count, bookings!bookings_session_id_fkey(id, status)')
+      .neq('session_type', 'course_session')
+      .order('date', { ascending: true })
+    setContainerSessions((cs || []).filter((s: any) => !s.is_cancelled))
     setLoading(false)
   }
 
@@ -177,6 +217,83 @@ export default function AdminKursePage() {
     setShowForm(false); setEditCourse(null)
     setExcludedDates([]); setExistingSessionDates([])
     setPreviewDates([]); setForm(emptyForm)
+  }
+
+  // Welle 2 (Sarah 2026-05-26): Einzelstunde anlegen (in SYS-Container "Einzelstunden")
+  async function handleSaveSingle() {
+    if (!containerIds?.single) { alert('Container fehlt'); return }
+    if (!singleForm.name || !singleForm.date || !singleForm.time_start) { alert('Pflichtfelder fehlen'); return }
+    setSavingSingleOrEvent(true)
+    try {
+      await supabase.from('sessions').insert({
+        course_id: containerIds.single,
+        session_type: 'single',
+        date: singleForm.date,
+        time_start: singleForm.time_start,
+        duration_min: singleForm.duration_min,
+        name: singleForm.name.trim(),
+        location: singleForm.location || null,
+        description: singleForm.description || null,
+        max_spots: singleForm.max_spots,
+      })
+      await supabase.from('audit_log').insert({
+        action: 'single_session_created',
+        details: { name: singleForm.name, date: singleForm.date, time: singleForm.time_start, max_spots: singleForm.max_spots }
+      })
+      setShowSingleForm(false)
+      setSingleForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '' })
+      await loadData()
+    } catch (e: any) {
+      alert('Fehler: ' + (e?.message || e))
+    } finally {
+      setSavingSingleOrEvent(false)
+    }
+  }
+
+  // Welle 2 (Sarah 2026-05-26): Event anlegen — payment_type entscheidet Container + session_type
+  async function handleSaveEvent() {
+    const containerLookup: Record<'free'|'credit'|'paid', string | undefined> = {
+      free: containerIds?.eventFree,
+      credit: containerIds?.eventCredit,
+      paid: containerIds?.eventPaid,
+    }
+    const courseId = containerLookup[eventForm.payment_type]
+    if (!courseId) { alert('Container fehlt'); return }
+    if (!eventForm.name || !eventForm.date || !eventForm.time_start) { alert('Pflichtfelder fehlen'); return }
+    if (eventForm.payment_type === 'paid') {
+      const p = parseFloat(eventForm.price_eur)
+      if (!p || p <= 0) { alert('Bitte Preis angeben'); return }
+    }
+    setSavingSingleOrEvent(true)
+    try {
+      const sessionType = eventForm.payment_type === 'free' ? 'event_free'
+        : eventForm.payment_type === 'credit' ? 'event_credit'
+        : 'event_paid'
+      await supabase.from('sessions').insert({
+        course_id: courseId,
+        session_type: sessionType,
+        date: eventForm.date,
+        time_start: eventForm.time_start,
+        duration_min: eventForm.duration_min,
+        name: eventForm.name.trim(),
+        location: eventForm.location || null,
+        description: eventForm.description || null,
+        max_spots: eventForm.max_spots,
+        image_url: eventForm.image_url || null,
+        price_eur: eventForm.payment_type === 'paid' ? parseFloat(eventForm.price_eur) : null,
+      })
+      await supabase.from('audit_log').insert({
+        action: 'event_created',
+        details: { name: eventForm.name, payment_type: eventForm.payment_type, date: eventForm.date, max_spots: eventForm.max_spots, price_eur: eventForm.payment_type === 'paid' ? parseFloat(eventForm.price_eur) : null }
+      })
+      setShowEventForm(false)
+      setEventForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', payment_type: 'free', price_eur: '', image_url: '' })
+      await loadData()
+    } catch (e: any) {
+      alert('Fehler: ' + (e?.message || e))
+    } finally {
+      setSavingSingleOrEvent(false)
+    }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -1075,11 +1192,21 @@ export default function AdminKursePage() {
     <div className="max-w-md mx-auto min-h-screen">
       <AppHeader title="Kurse verwalten" isAdmin />
       <div className="px-4 py-4">
-        {!showForm ? (
+        {(!showForm && !showSingleForm && !showEventForm) ? (
           <>
-            <button onClick={() => setShowForm(true)} className="btn-primary mb-4">
-              <i className="ti ti-plus mr-1" /> Neuen Kurs anlegen
-            </button>
+            {/* Welle 2 (Sarah 2026-05-26): 3 Buttons nebeneinander — Kurs, Einzelstunde, Event.
+                Auf kleinen Screens als Stack. Icons: ti-school / ti-yoga / ti-confetti. */}
+            <div className="grid grid-cols-3 max-md:grid-cols-1 gap-2 mb-4">
+              <button onClick={() => setShowForm(true)} className="btn-primary text-sm">
+                <i className="ti ti-school mr-1" /> Neuen Kurs anlegen
+              </button>
+              <button onClick={() => setShowSingleForm(true)} className="btn-primary text-sm">
+                <i className="ti ti-yoga mr-1" /> Einzelstunde anlegen
+              </button>
+              <button onClick={() => setShowEventForm(true)} className="btn-primary text-sm">
+                <i className="ti ti-confetti mr-1" /> Event anlegen
+              </button>
+            </div>
             {/* Sarah-Wunsch 2026-05-24: Aktive + Beendete teilen die GLEICHE Render-
                 Logik (identisches Card-Markup, identische Buttons). Implementation:
                 ALLE is_active Kurse in eine sortierte Liste — beendete ans Ende —
@@ -1283,6 +1410,237 @@ export default function AdminKursePage() {
                 ))}
               </>
             )}
+
+            {/* Welle 2 (Sarah 2026-05-26): zweite Sektion — Sessions aus den
+                SYS-Containern (Einzelstunden, Events kostenlos/credit/bezahlt).
+                Chronologisch, nur Anzeige + Detail-Navigation. */}
+            <p className="section-label mt-6">Geplante Stunden & Events</p>
+            {containerSessions.length === 0 ? (
+              <p className="text-sm text-yoga-text/40 text-center py-4">Noch keine geplanten Stunden oder Events</p>
+            ) : (
+              containerSessions.map((s: any) => {
+                const activeBookings = (s.bookings || []).filter((b: any) => b.status === 'active').length
+                const ext = s.external_participants_count || 0
+                const totalCount = activeBookings + ext
+                const typeBadge = s.session_type === 'single' ? { label: 'Einzelstunde', cls: 'bg-yoga-gray text-yoga-text/70' }
+                  : s.session_type === 'event_free' ? { label: 'Kostenlos', cls: 'bg-yoga-green-bg text-yoga-green-text' }
+                  : s.session_type === 'event_credit' ? { label: 'Credit', cls: 'bg-yoga-amber-bg text-yoga-amber-text' }
+                  : s.session_type === 'event_paid' ? { label: `${s.price_eur} €`, cls: 'bg-yoga-amber-bg text-yoga-amber-text' }
+                  : { label: s.session_type, cls: 'bg-yoga-gray text-yoga-text/70' }
+                return (
+                  <button key={s.id} onClick={() => router.push(`/admin/sessions/${s.id}`)}
+                    className="card mb-3 w-full text-left cursor-pointer hover:opacity-80 border-0 block">
+                    <div className="flex items-start gap-3">
+                      {s.image_url && (
+                        <img src={s.image_url} alt="" className="w-14 h-14 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                          <div className="text-base font-bold truncate">{s.name || '—'}</div>
+                          <span className={`text-xs rounded-full px-2 py-0.5 font-semibold ${typeBadge.cls}`}>{typeBadge.label}</span>
+                        </div>
+                        <div className="text-sm text-yoga-text/60">
+                          {new Date(s.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })}
+                          {' · '}{s.time_start?.slice(0,5)} Uhr
+                        </div>
+                        <div className="text-sm text-yoga-text/60 mt-0.5">
+                          Teilnehmer: <strong>{totalCount}</strong>{s.max_spots ? `/${s.max_spots}` : ''}
+                          {ext > 0 && <span className="text-xs text-yoga-text/50"> (inkl. {ext} extern)</span>}
+                        </div>
+                      </div>
+                      <i className="ti ti-chevron-right text-yoga-text/30 flex-shrink-0 mt-1" />
+                    </div>
+                  </button>
+                )
+              })
+            )}
+          </>
+        ) : showSingleForm ? (
+          <>
+            <button onClick={() => {
+              setShowSingleForm(false)
+              setSingleForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '' })
+            }} className="flex items-center gap-1 text-sm text-yoga-text/60 mb-4 hover:opacity-80">
+              <i className="ti ti-arrow-left" /> Zurück zur Kursübersicht
+            </button>
+            <h2 className="text-lg font-bold mb-4">Einzelstunde anlegen</h2>
+            <form onSubmit={(e) => { e.preventDefault(); handleSaveSingle() }} className="space-y-3">
+              <div>
+                <label className="field-label">Name *</label>
+                <input className="field-input" value={singleForm.name}
+                  onChange={e => setSingleForm({ ...singleForm, name: e.target.value })} required />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label">Datum *</label>
+                  <input className="field-input" type="date" value={singleForm.date}
+                    onChange={e => setSingleForm({ ...singleForm, date: e.target.value })} required />
+                </div>
+                <div>
+                  <label className="field-label">Uhrzeit *</label>
+                  <input className="field-input" type="time" value={singleForm.time_start}
+                    onChange={e => setSingleForm({ ...singleForm, time_start: e.target.value })} required />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label">Dauer (Min.)</label>
+                  <input className="field-input" type="number" value={singleForm.duration_min}
+                    onChange={e => setSingleForm({ ...singleForm, duration_min: parseInt(e.target.value) || 0 })} />
+                </div>
+                <div>
+                  <label className="field-label">Max. Teilnehmer</label>
+                  <input className="field-input" type="number" min={1} max={50} value={singleForm.max_spots}
+                    onChange={e => setSingleForm({ ...singleForm, max_spots: parseInt(e.target.value) || 0 })} />
+                </div>
+              </div>
+              <div>
+                <label className="field-label">Ort</label>
+                <input className="field-input" value={singleForm.location}
+                  onChange={e => setSingleForm({ ...singleForm, location: e.target.value })} />
+              </div>
+              <div>
+                <label className="field-label">Beschreibung</label>
+                <textarea className="field-input" rows={3} value={singleForm.description}
+                  onChange={e => setSingleForm({ ...singleForm, description: e.target.value })} />
+              </div>
+              <button type="submit" className="btn-primary" disabled={savingSingleOrEvent}>
+                {savingSingleOrEvent ? 'Wird gespeichert...' : 'Anlegen'}
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => {
+                setShowSingleForm(false)
+                setSingleForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '' })
+              }}>Abbrechen</button>
+            </form>
+          </>
+        ) : showEventForm ? (
+          <>
+            <button onClick={() => {
+              setShowEventForm(false)
+              setEventForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', payment_type: 'free', price_eur: '', image_url: '' })
+            }} className="flex items-center gap-1 text-sm text-yoga-text/60 mb-4 hover:opacity-80">
+              <i className="ti ti-arrow-left" /> Zurück zur Kursübersicht
+            </button>
+            <h2 className="text-lg font-bold mb-4">Event anlegen</h2>
+            <form onSubmit={(e) => { e.preventDefault(); handleSaveEvent() }} className="space-y-3">
+              <div>
+                <label className="field-label">Name *</label>
+                <input className="field-input" value={eventForm.name}
+                  onChange={e => setEventForm({ ...eventForm, name: e.target.value })} required />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label">Datum *</label>
+                  <input className="field-input" type="date" value={eventForm.date}
+                    onChange={e => setEventForm({ ...eventForm, date: e.target.value })} required />
+                </div>
+                <div>
+                  <label className="field-label">Uhrzeit *</label>
+                  <input className="field-input" type="time" value={eventForm.time_start}
+                    onChange={e => setEventForm({ ...eventForm, time_start: e.target.value })} required />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label">Dauer (Min.)</label>
+                  <input className="field-input" type="number" value={eventForm.duration_min}
+                    onChange={e => setEventForm({ ...eventForm, duration_min: parseInt(e.target.value) || 0 })} />
+                </div>
+                <div>
+                  <label className="field-label">Max. Teilnehmer</label>
+                  <input className="field-input" type="number" min={1} max={200} value={eventForm.max_spots}
+                    onChange={e => setEventForm({ ...eventForm, max_spots: parseInt(e.target.value) || 0 })} />
+                </div>
+              </div>
+              <div>
+                <label className="field-label">Ort</label>
+                <input className="field-input" value={eventForm.location}
+                  onChange={e => setEventForm({ ...eventForm, location: e.target.value })} />
+              </div>
+              <div>
+                <label className="field-label">Beschreibung</label>
+                <textarea className="field-input" rows={3} value={eventForm.description}
+                  onChange={e => setEventForm({ ...eventForm, description: e.target.value })} />
+              </div>
+              {/* Bild-Upload — gleiche Logik wie Block-Kurs-Form */}
+              <div>
+                <label className="field-label">Bild (optional)</label>
+                {eventForm.image_url && (
+                  <div className="mb-2 flex items-center gap-3">
+                    <img src={eventForm.image_url} alt="Vorschau" className="w-20 h-20 rounded-yoga object-cover border border-yoga-border" />
+                    <button type="button" className="btn-secondary text-xs"
+                      onClick={() => setEventForm({ ...eventForm, image_url: '' })}>
+                      Entfernen
+                    </button>
+                  </div>
+                )}
+                <input className="field-input text-sm" type="file" accept="image/jpeg,image/png,image/webp"
+                  disabled={uploadingEventImage}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]; if (!file) return
+                    if (file.size > 5 * 1024 * 1024) { alert('Bild zu groß (max 5 MB)'); return }
+                    setUploadingEventImage(true)
+                    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+                    const path = `event-${Date.now()}.${ext}`
+                    const { error: upErr } = await supabase.storage.from('course-images').upload(path, file, { upsert: true })
+                    if (upErr) { alert('Upload-Fehler: ' + upErr.message); setUploadingEventImage(false); return }
+                    const { data: urlData } = supabase.storage.from('course-images').getPublicUrl(path)
+                    setEventForm({ ...eventForm, image_url: urlData.publicUrl })
+                    setUploadingEventImage(false)
+                    e.target.value = ''
+                  }} />
+                {uploadingEventImage && <p className="text-xs text-yoga-text/50 mt-1">Wird hochgeladen…</p>}
+                <p className="text-xs text-yoga-text/50 mt-1">JPG/PNG/WebP · max 5 MB</p>
+              </div>
+              {/* 3 Radio-Optionen für payment_type */}
+              <div>
+                <label className="field-label">Bezahlung</label>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-3 card cursor-pointer">
+                    <input type="radio" name="event_payment_type" value="free"
+                      checked={eventForm.payment_type === 'free'}
+                      onChange={() => setEventForm({ ...eventForm, payment_type: 'free' })}
+                      className="w-5 h-5" />
+                    <span className="text-sm">Kostenlos</span>
+                  </label>
+                  <label className="flex items-center gap-3 card cursor-pointer">
+                    <input type="radio" name="event_payment_type" value="credit"
+                      checked={eventForm.payment_type === 'credit'}
+                      onChange={() => setEventForm({ ...eventForm, payment_type: 'credit' })}
+                      className="w-5 h-5" />
+                    <span className="text-sm">
+                      Credit-Verbrauch <span className="text-yoga-text/50">(Yogi verbraucht 1 Credit)</span>
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-3 card cursor-pointer">
+                    <input type="radio" name="event_payment_type" value="paid"
+                      checked={eventForm.payment_type === 'paid'}
+                      onChange={() => setEventForm({ ...eventForm, payment_type: 'paid' })}
+                      className="w-5 h-5" />
+                    <span className="text-sm">Bezahlt</span>
+                  </label>
+                </div>
+              </div>
+              {eventForm.payment_type === 'paid' && (
+                <div>
+                  <label className="field-label">Preis *</label>
+                  <div className="relative">
+                    <input className="field-input pr-10" type="number" min={0.01} step={0.01}
+                      value={eventForm.price_eur}
+                      onChange={e => setEventForm({ ...eventForm, price_eur: e.target.value })}
+                      required />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-yoga-text/60">€</span>
+                  </div>
+                </div>
+              )}
+              <button type="submit" className="btn-primary" disabled={savingSingleOrEvent}>
+                {savingSingleOrEvent ? 'Wird gespeichert...' : 'Anlegen'}
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => {
+                setShowEventForm(false)
+                setEventForm({ name: '', date: '', time_start: '18:00', duration_min: 75, max_spots: 12, location: '', description: '', payment_type: 'free', price_eur: '', image_url: '' })
+              }}>Abbrechen</button>
+            </form>
           </>
         ) : (
           <>
@@ -1313,7 +1671,7 @@ export default function AdminKursePage() {
               <label className="flex items-center gap-3 card cursor-pointer" onClick={() => setForm({...form, is_free: !form.is_free})}>
                 <input type="checkbox" checked={form.is_free} readOnly className="w-5 h-5" />
                 <span className="text-sm">
-                  Kostenlos <span className="text-yoga-text/50">(kein Credit nötig — z.B. Charity Yoga)</span>
+                  Kostenlos <span className="text-yoga-text/50">(kein Credit nötig — z.B. Schnupper- oder Spendenstunde)</span>
                 </span>
               </label>
               {/* Bild-Upload — sinnvoll v.a. bei is_free, aber für jeden Kurs verfügbar */}

@@ -501,7 +501,7 @@ export default function AdminSessionPage() {
                     updated_at: new Date().toISOString(),
                   }).eq('id', 1)
                 if (error) alert('Fehler: ' + error.message)
-                else alert('Charity-Stunde wurde in der Sprechblase für alle Yogis promoted.')
+                else alert('Stunde wurde in der Sprechblase für alle Yogis promoted.')
               }}
               className="mt-3 w-full text-sm font-semibold bg-yoga-green-text text-white rounded-yoga py-2.5 hover:opacity-90">
               <i className="ti ti-bullhorn mr-1" /> In Sprechblase posten (für alle Yogis)

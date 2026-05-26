@@ -465,7 +465,7 @@ export default function ProfilPage() {
               </label>
               {/* Optionaler Button mit Link — z.B. um Charity-Stunde zu promoten */}
               <div className="space-y-2 mb-3">
-                <p className="text-xs text-yoga-text/55">Optional: Button mit Link (z.B. zur Charity-Stunde)</p>
+                <p className="text-xs text-yoga-text/55">Optional: Button mit Link (z.B. zu kostenloser Stunde)</p>
                 <input
                   className="w-full bg-white border border-yoga-border2 rounded-yoga px-3 py-2 text-sm text-yoga-text outline-none focus:border-yoga-text/40 transition-colors"
                   value={annLinkUrl}

@@ -130,9 +130,10 @@ test.describe('[E2E-Text] Sprechblase Admin-Promote — neutrale Datums-Formulie
     expect(src).toMatch(/getFullYear/)
   })
 
-  test('Promote-Bestaetigung sagt "Charity-Stunde wurde promoted" (nicht "Email versandt")', async () => {
+  test('Promote-Bestaetigung sagt "Stunde wurde promoted" (nicht "Email versandt")', async () => {
     const src = read('app/admin/sessions/[id]/page.tsx')
-    expect(src).toMatch(/Charity-Stunde wurde[\s\S]{0,80}promoted/i)
+    // Sarah 2026-05-26 (Welle 2): "Charity" raus aus UI-Text; Begriff "Stunde" ist neutral.
+    expect(src).toMatch(/Stunde wurde[\s\S]{0,80}promoted/i)
   })
 })
 

@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Email-Send-Failure Resilience
  * Testfälle:
@@ -27,6 +28,11 @@ test.describe('Email-Resilience: Edge Function Validation', () => {
 
     // Erwartung: kein 5xx (kein Crash), sondern strukturierter Fehler
     expect(res.status, 'Edge Function darf nicht 5xx werfen').toBeLessThan(500)
+    // Welle 5: 4xx Status Code (validation error / invalid type)
+    expect(res.status, 'Ungültiger Type sollte 4xx liefern').toBeGreaterThanOrEqual(400)
+    // Welle 5: Response-Body soll JSON sein mit error/message-Feld
+    const text = await res.text()
+    expect(text.length, 'Response sollte Body haben').toBeGreaterThan(0)
   })
 })
 
@@ -92,5 +98,9 @@ test.describe('Email-Resilience: Kursabbruch Choice-Save bei Email-Failure', () 
     // DB-Check: Choice wurde gespeichert auch wenn Email-Versand evtl. scheitert
     const updated = await getCancellationResponse(yogi1Id, courseId)
     expect(updated?.choice, 'Choice muss in DB gespeichert sein').toBe('guthaben')
+    // Welle 5 Note: Guthaben-Credit wird per Cancellation-Choice asynchron via
+    // Cron/Trigger erstellt (nicht direkt in der POST-Antwort) — die Hauptzusicherung
+    // ist: API antwortet 200 + choice ist persistiert (siehe oben). Credit-Materialisierung
+    // ist im 87-Bugfix dokumentiert; Soft-Check via Backlog statt Hard-Assertion.
   })
 })

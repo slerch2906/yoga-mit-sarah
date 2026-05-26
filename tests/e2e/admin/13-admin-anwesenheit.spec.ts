@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Admin – Anwesenheit-Page (/admin/anwesenheit)
  * Testfälle:
@@ -110,6 +111,13 @@ test.describe('Anwesenheit: Session-spezifische Ansicht + Absagen-Flow', () => {
 
     // Absagen-Button sichtbar
     await expect(page.getByRole('button', { name: /diese stunde absagen/i })).toBeVisible()
+    // Welle 5: Yogi-Vorname/Nachname muss sichtbar sein (aus profiles)
+    const db = await getAdminClient()
+    const { data: prof } = await db.from('profiles')
+      .select('first_name, last_name').eq('id', yogi1Id).maybeSingle()
+    if (prof?.first_name) {
+      await expect(page.locator('body')).toContainText(new RegExp(prof.first_name, 'i'))
+    }
   })
 
   test('Stunde absagen via Anwesenheit-Page → Buchung storniert, Credit zurück', async ({ page }) => {
@@ -130,13 +138,21 @@ test.describe('Anwesenheit: Session-spezifische Ansicht + Absagen-Flow', () => {
 
     // DB-Check: Session abgesagt, Buchung storniert, Credit zurück
     const db = await getAdminClient()
-    const { data: sess } = await db.from('sessions').select('is_cancelled').eq('id', sessionId).maybeSingle()
+    const { data: sess } = await db.from('sessions').select('is_cancelled, cancel_reason').eq('id', sessionId).maybeSingle()
     expect(sess?.is_cancelled).toBe(true)
+    // Welle 5 Note: cancel_reason wird auf der Anwesenheit-Page (Quick-Cancel) nicht
+    // gesetzt — nur bei expliziten Kursabbruch-Workflows (cancelCourse) oder Krankheit.
+    // Hier reicht is_cancelled=true als Signal.
 
     const cancelled = await getCancelledBooking(yogi1Id, sessionId)
     expect(cancelled, 'Buchung muss storniert sein').toBeTruthy()
+    // Welle 5: cancelled_at + cancel_late=false (Admin-Absage ist nie spät für Yogi)
+    expect(cancelled?.cancelled_at).toBeTruthy()
+    expect(cancelled?.cancel_late, 'Admin-Absage ist KEINE Spät-Abmeldung').toBe(false)
 
     const creditAfter = await getSingleCredit(yogi1Id)
     expect(creditAfter?.used, 'Credit muss zurückgegeben sein').toBe(0)
+    // Welle 5: Dashboard zeigt nach Redirect Header
+    await expect(page.locator('body')).toContainText(/dashboard|admin|kurse/i)
   })
 })

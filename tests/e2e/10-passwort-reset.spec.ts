@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Passwort-Reset über Login-Seite
  * Testfälle:
@@ -37,6 +38,10 @@ test.describe('Passwort-Reset', () => {
     await expect(
       page.getByText(/reset-link.*geschickt|e-mail.*gesendet|bitte prüfe/i)
     ).toBeVisible({ timeout: 10_000 })
+    // Welle 5: Confirmation muss explizit die Email-Adresse oder "E-Mail"-Wort enthalten
+    await expect(
+      page.getByText(/e-?mail|posteingang|postfach/i).first()
+    ).toBeVisible()
   })
 
   test('Passwort-Reset-Email kommt an (Mailtrap)', async () => {
@@ -58,6 +63,10 @@ test.describe('Passwort-Reset', () => {
       email.html_body?.includes('profil/passwort') || email.html_body?.includes('recovery'),
       'Email muss Reset-Link enthalten'
     ).toBe(true)
+    // Welle 5: Empfänger-Email muss exakt passen
+    expect(email.to_email).toBe(process.env.TEST_YOGI1_EMAIL)
+    // Welle 5: Subject muss Passwort-Bezug haben
+    expect(email.subject.toLowerCase()).toMatch(/passwort|kennwort|reset/i)
   })
 
   test('Reset-Link mit unbekannter E-Mail zeigt trotzdem Bestätigung (kein Leak)', async ({ page }) => {
@@ -72,5 +81,10 @@ test.describe('Passwort-Reset', () => {
     await expect(
       page.getByText(/reset-link.*geschickt|e-mail.*gesendet|bitte prüfe/i)
     ).toBeVisible({ timeout: 10_000 })
+    // Welle 5: Fehlermeldung "User existiert nicht" darf NICHT auftauchen (kein Enum-Leak)
+    // (Pattern "unbekannt" entfernt, weil es die Test-Email matched)
+    await expect(
+      page.getByText(/nutzer.*nicht.*gefunden|kein.*konto|existiert nicht/i)
+    ).toHaveCount(0)
   })
 })

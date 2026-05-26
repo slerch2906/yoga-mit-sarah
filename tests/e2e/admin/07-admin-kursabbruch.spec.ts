@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Admin – Kurs abbrechen
  * Testfälle: Option 1 (all_refund), Option 2 (yogi_choice) mit Guthaben-Wahl
@@ -73,6 +74,10 @@ test.describe('Kurs abbrechen – Option 1: Geld zurück (all_refund)', () => {
     const response = await getCancellationResponse(yogi1Id, courseId)
     expect(response, 'Abbruch-Token sollte in der Datenbank vorhanden sein').toBeTruthy()
     expect(response?.token).toBeTruthy()
+    // Welle 5: bei all_refund ist choice='erstattung' direkt gesetzt (oder verbleibt null je nach Mode)
+    // expires_at muss gesetzt sein für Token-Gültigkeit
+    expect(response?.expires_at, 'Token muss Ablaufdatum haben').toBeTruthy()
+    expect(response?.remaining_sessions, 'remaining_sessions muss gesetzt sein').toBeGreaterThan(0)
   })
 })
 
@@ -118,12 +123,17 @@ test.describe('Kurs abbrechen – Option 2: Yogi entscheidet (yogi_choice)', () 
 
     // Bestätigungsmeldung sichtbar
     await expect(page.getByText(/guthaben gespeichert/i)).toBeVisible({ timeout: 10_000 })
+    // Welle 5: konkrete Bestätigung erwähnt "Guthaben"
+    await expect(page.locator('body')).toContainText(/guthaben/i)
 
     // Guthaben-Credit in der Datenbank prüfen
     const credit = await getGuthabenCredit(yogi1Id)
     expect(credit, 'Guthaben-Credit sollte angelegt worden sein').toBeTruthy()
     expect(credit?.model).toBe('guthaben')
     expect(credit?.total, 'Guthaben sollte mindestens 1 Credit enthalten').toBeGreaterThan(0)
+    // Welle 5: Credit hat expires_at in der Zukunft
+    expect(new Date(credit!.expires_at).getTime(), 'Guthaben muss in Zukunft ablaufen')
+      .toBeGreaterThan(Date.now())
 
     // Wahl in course_cancellation_responses aktualisiert
     const updated = await getCancellationResponse(yogi1Id, courseId)
@@ -171,6 +181,8 @@ test.describe('Kurs abbrechen – Option 2b: Yogi wählt Erstattung', () => {
 
     // Bestätigungsmeldung sichtbar
     await expect(page.getByText(/erstattung beantragt/i)).toBeVisible({ timeout: 10_000 })
+    // Welle 5: konkret das Wort "Erstattung" oder "Geld zurück" muss erscheinen
+    await expect(page.locator('body')).toContainText(/erstattung|geld zurück|rückerstattung/i)
 
     // Kein Guthaben-Credit darf angelegt worden sein
     const credit = await getGuthabenCredit(yogi2Id)
@@ -179,6 +191,8 @@ test.describe('Kurs abbrechen – Option 2b: Yogi wählt Erstattung', () => {
     // Wahl korrekt in DB gespeichert
     const updated = await getCancellationResponse(yogi2Id, courseId)
     expect(updated?.choice).toBe('erstattung')
+    // Welle 5: refund_paid bleibt false (noch nicht ausgezahlt, nur beantragt)
+    expect(updated?.refund_paid, 'refund_paid bleibt false bei Wahl-Aktion').toBe(false)
   })
 })
 
@@ -235,5 +249,9 @@ test.describe('Kursabbruch Admin-Übersicht: /admin/kursabbruch zeigt Status pro
 
     // Statistik am Ende erscheint (mehrere Kurse möglich → first)
     await expect(page.getByText(/erstattung/i).first()).toBeVisible({ timeout: 5_000 })
+    // Welle 5: Yogi-Name muss in der Liste sichtbar sein
+    await expect(page.locator('body')).toContainText(
+      new RegExp(process.env.TEST_YOGI1_EMAIL!.split('@')[0], 'i')
+    )
   })
 })

@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Admin – Einzelstunde verwalten
  * Testfälle:
@@ -67,6 +68,13 @@ test.describe('Admin Session: Yogi einbuchen und austragen', () => {
     const booking = await getActiveBooking(yogi1Id, sessionId)
     expect(booking, 'Aktive Buchung muss in DB vorhanden sein').toBeTruthy()
     expect(booking!.status).toBe('active')
+    // Welle 5: credit_id muss verknüpft sein
+    expect(booking!.credit_id, 'Buchung muss credit_id haben').toBeTruthy()
+    // Welle 5: Credit ist als used markiert
+    const db = await getAdminClient()
+    const { data: cred } = await db.from('credits')
+      .select('used').eq('id', booking!.credit_id).maybeSingle()
+    expect(cred?.used, 'Credit muss inkrementiert sein').toBeGreaterThan(0)
   })
 
   test('Yogi austragen → verschwindet aus Liste, Credit zurückgegeben', async ({ page }) => {
@@ -102,6 +110,10 @@ test.describe('Admin Session: Yogi einbuchen und austragen', () => {
     // DB-Check: Credit zurückgegeben
     const creditAfter = await db.from('credits').select('used').eq('id', bookingBefore!.credit_id).maybeSingle()
     expect(creditAfter.data?.used, 'Credit muss zurückgegeben sein').toBe(Math.max(0, usedBefore - 1))
+    // Welle 5: Buchung ist als cancelled markiert, cancelled_at gesetzt
+    const cancelled = await getCancelledBooking(yogi1Id, sessionId)
+    expect(cancelled, 'Buchung muss cancelled-Eintrag haben').toBeTruthy()
+    expect(cancelled?.cancelled_at).toBeTruthy()
   })
 
   test('Wiederholtes Einbuchen nach Austragen funktioniert (kein Unique-Constraint-Fehler)', async ({ page }) => {
@@ -128,6 +140,12 @@ test.describe('Admin Session: Yogi einbuchen und austragen', () => {
 
     const booking = await getActiveBooking(yogi1Id, sessionId)
     expect(booking, 'Aktive Buchung nach erneutem Einbuchen').toBeTruthy()
+    expect(booking?.status).toBe('active')
+    // Welle 5: nur EINE active-Buchung trotz Re-Aktivierung (unique-Constraint)
+    const db2 = await getAdminClient()
+    const { count } = await db2.from('bookings').select('id', { count: 'exact', head: true })
+      .eq('user_id', yogi1Id).eq('session_id', sessionId).eq('status', 'active')
+    expect(count, 'Es darf nur 1 aktive Buchung geben').toBe(1)
   })
 })
 
@@ -181,5 +199,8 @@ test.describe('Admin Session: Guthaben-Warnung bei Einzelstunden', () => {
 
     // Kein "Credit vergeben & einbuchen" Button
     await expect(page.getByRole('button', { name: /credit vergeben.*einbuchen/i })).not.toBeVisible()
+    // Welle 5: DB-Check Yogi2 wurde NICHT eingebucht
+    const yogi2Booking = await getActiveBooking(yogi2Id, sessionId)
+    expect(yogi2Booking, 'Yogi2 darf nicht eingebucht sein bei nur-Guthaben').toBeNull()
   })
 })

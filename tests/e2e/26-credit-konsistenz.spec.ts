@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * DEEP AUDIT: Credit-Konsistenz Yogi-Sicht ↔ Admin-Sicht ↔ DB
  *
@@ -62,8 +63,10 @@ test.describe('Credit-Konsistenz: DB-Trigger trg_sync_credit_used', () => {
       type: 'single', status: 'active',
     })
 
-    const { data: after } = await db.from('credits').select('used').eq('id', credit!.id).single()
+    const { data: after } = await db.from('credits').select('used, total').eq('id', credit!.id).single()
     expect(after?.used).toBe(1)
+    // Welle 5: total bleibt unverändert bei 10
+    expect(after?.total, 'total darf sich durch Buchung nicht ändern').toBe(10)
   })
 
   test('[AUDIT] Tenpack: Buchung cancelled → credit.used = 0', async () => {
@@ -82,8 +85,9 @@ test.describe('Credit-Konsistenz: DB-Trigger trg_sync_credit_used', () => {
     await db.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
       .eq('user_id', yogi1Id).eq('session_id', course.sessionIds[0])
 
-    const { data: after } = await db.from('credits').select('used').eq('id', credit!.id).single()
+    const { data: after } = await db.from('credits').select('used, total').eq('id', credit!.id).single()
     expect(after?.used).toBe(0)
+    expect(after?.total, 'total bleibt 10 nach Cancel').toBe(10)
   })
 
   test('[AUDIT] Course-Credit: 2 Bookings → used=2, 1 cancelled → used=1', async () => {
@@ -156,8 +160,10 @@ test.describe('Credit-Konsistenz: DB-Trigger trg_sync_credit_used', () => {
     })
     // Entweder Error (Unique-Violation) ODER Upsert → höchstens 1 Booking in DB
     const { data: bookings } = await db.from('bookings')
-      .select('id').eq('user_id', yogi1Id).eq('session_id', course.sessionIds[0])
+      .select('id, status').eq('user_id', yogi1Id).eq('session_id', course.sessionIds[0])
     expect(bookings?.length).toBe(1)
+    // Welle 5: einzige Buchung muss active sein
+    expect(bookings![0].status).toBe('active')
     // Plus: credit.used muss 1 sein (nicht 2!)
     const { data: c } = await db.from('credits').select('used').eq('id', credit!.id).single()
     expect(c?.used).toBe(1)

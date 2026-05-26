@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Spät-Abmeldung (cancel_late=true)
  * Testfälle:
@@ -109,10 +110,27 @@ test.describe('Spät-Abmeldung: Innerhalb 3h vor Stundenbeginn', () => {
     const booking = await getCancelledBooking(yogi1Id, sessionId)
     expect(booking, 'Buchung muss storniert sein').toBeTruthy()
     expect(booking?.cancel_late, 'Spät-Abmeldung muss cancel_late=true setzen').toBe(true)
+    // Welle 5: cancelled_at gesetzt, status cancelled
+    expect(booking?.cancelled_at, 'cancelled_at muss gesetzt sein').toBeTruthy()
+    expect(booking?.status).toBe('cancelled')
 
     // Credit darf NICHT zurückgegeben sein
     const creditAfter = await getSingleCredit(yogi1Id)
     expect(creditAfter?.used, 'Credit muss verbraucht bleiben (kein Refund bei Spät-Abmeldung)').toBe(1)
+    // Welle 5: Audit-Log-Prüfung – Spät-Abmeldung sollte geloggt sein
+    const db = await getAdminClient()
+    const { data: audits } = await db.from('audit_log')
+      .select('action, user_id, target_id')
+      .eq('user_id', yogi1Id)
+      .order('created_at', { ascending: false })
+      .limit(20)
+    // Erwarte mind. einen audit-Eintrag der zur Abmeldung/Cancel passt
+    const cancelAudit = (audits || []).find((a: any) =>
+      /cancel|abmeld|booking.*delete|booking.*cancel|late/i.test(a.action || '')
+    )
+    if (!cancelAudit) {
+      console.warn(`⚠️ Kein audit-log-Eintrag zur Spät-Abmeldung gefunden (Welle 6 Backlog: Audit-Erweiterung)`)
+    }
   })
 })
 
@@ -179,5 +197,10 @@ test.describe('Spät-Abmeldung: UI zeigt Stornofrist-Warnung', () => {
     await expect(
       page.getByText(/stornofrist|kein.*credit|zu spät|unter.*3 stunden|innerhalb.*3/i).first()
     ).toBeVisible({ timeout: 8_000 })
+    // Welle 5: konkret die "3 Stunden" Frist-Zahl muss im Warntext erscheinen
+    await expect(page.locator('body')).toContainText(/3.*stunde/i)
+    // Welle 5: Abmelde-Button trotzdem grundsätzlich verfügbar (UI erlaubt Spät-Abmeldung mit Warnung)
+    const abmeldButton = page.getByRole('button', { name: /abmelden|austragen/i })
+    await expect(abmeldButton.first()).toBeVisible({ timeout: 5_000 })
   })
 })

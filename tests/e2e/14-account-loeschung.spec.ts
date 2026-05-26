@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: DSGVO Account-Löschung
  * Testfälle:
@@ -106,6 +107,11 @@ test.describe('DSGVO Account-Löschung', () => {
     // Bestätigungs-Dialog mit DSGVO-Hinweis sichtbar
     await expect(page.getByText(/account wirklich löschen/i)).toBeVisible({ timeout: 5_000 })
     await expect(page.getByText(/dsgvo|anonymisiert/i)).toBeVisible()
+    // Welle 5: Dialog muss Checkbox + Endgültig-Button enthalten
+    await expect(page.locator('input[type="checkbox"]').first()).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: /endgültig|löschen/i }).first()
+    ).toBeVisible()
   })
 
   test.fixme('Account löschen ausführen → Profil anonymisiert, Buchungshistorie bleibt', async ({ page }) => {
@@ -158,5 +164,11 @@ test.describe('DSGVO Account-Löschung', () => {
       .select('*').eq('type', 'account_deleted_dsgvo')
       .order('created_at', { ascending: false }).limit(1).maybeSingle()
     expect(notif, 'Admin muss informiert worden sein').toBeTruthy()
+    // Welle 5: Notification-Message muss die gelöschte Email referenzieren (Audit-Spur)
+    expect(notif?.message, 'Notification-Text muss die Lösch-Email referenzieren').toMatch(
+      new RegExp(DELETE_EMAIL.split('@')[0], 'i')
+    )
+    // Welle 5: Login-Page (nach Redirect) muss sichtbar sein
+    await expect(page.locator('input[type="password"]')).toBeVisible({ timeout: 5_000 })
   })
 })

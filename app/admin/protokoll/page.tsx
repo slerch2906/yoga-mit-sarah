@@ -13,6 +13,8 @@ import BottomNav from '@/components/layout/BottomNav'
 const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   booking_created:                { label: 'Stunde gebucht',                 color: 'text-yoga-green-text' },
   booking_cancelled:              { label: 'Stunde storniert',               color: 'text-yoga-amber-text' },
+  // Welle 5 (Sarah 2026-05-26): Admin-Storno einer Yogi-Buchung — wird in dashboard/kurse/sessions geschrieben
+  booking_cancelled_by_admin:     { label: 'Yogi-Buchung storniert (Admin)', color: 'text-yoga-red-text' },
   credit_assigned:                { label: 'Credits vergeben',               color: 'text-yoga-green-text' },
   credit_adjusted:                { label: 'Credit angepasst',               color: 'text-yoga-amber-text' },
   credit_deleted:                 { label: 'Credit gelöscht',                color: 'text-yoga-red-text' },

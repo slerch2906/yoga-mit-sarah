@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Single-Course (is_single=true / Drop-in)
  * Testfälle:
@@ -77,11 +78,18 @@ test.describe('Single-Course: Einzelstunden-Buchung ohne Enrollment', () => {
     const booking = await getActiveBooking(yogi1Id, sessionId)
     expect(booking, 'Buchung muss vorhanden sein').toBeTruthy()
     expect(booking?.type, 'Drop-in muss type=single haben').toBe('single')
+    expect(booking?.status).toBe('active')
 
     // DB-Check: KEIN Enrollment (Drop-in ist nicht Kurs-Anmeldung)
     const db = await getAdminClient()
     const { data: enrollment } = await db.from('enrollments')
       .select('*').eq('user_id', yogi1Id).eq('course_id', courseId).maybeSingle()
     expect(enrollment, 'Drop-in-Buchung darf KEIN Enrollment erzeugen').toBeNull()
+    // Welle 5: Credit-Type muss single sein, nicht course
+    const { data: credit } = await db.from('credits')
+      .select('model').eq('id', booking!.credit_id).maybeSingle()
+    expect(credit?.model, 'Drop-in muss single-Credit verbrauchen').toBe('single')
+    // Welle 5: Confirm-Page muss Drop-in-Kursname zeigen
+    await expect(page.locator('body')).toContainText(/Drop-in-Test/i)
   })
 })

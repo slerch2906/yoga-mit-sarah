@@ -47,11 +47,13 @@ async function getContainerIds() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 test.describe('[E2E] Welle 3/4 Source — /admin/kurse', () => {
-  test('Abgesagte Stunden & Events-Sektion mit line-through Titel', () => {
+  test('Abgesagte Stunden & Events-Sektion OHNE durchgestrichene Titel (Sarah-Wunsch)', () => {
     const src = read('app/admin/kurse/page.tsx')
     expect(src).toMatch(/Abgesagte Stunden & Events/)
     expect(src).toMatch(/cancelledSessions = containerSessions\.filter\(\(s: any\) => s\.is_cancelled\)/)
-    expect(src).toMatch(/line-through text-yoga-text\/60/)
+    // Welle 4.5 Sarah-Hotfix (2026-05-26): "ich möchte keine durchgestrichenen Titel"
+    // — Differenzierung statt line-through durch text-yoga-text/60 + rote Pille + opacity-70.
+    expect(src).not.toMatch(/line-through/)
     // Sektion wird nur gerendert wenn >0 Einträge
     expect(src).toMatch(/cancelledSessions\.length === 0[\s\S]*?return null/)
   })

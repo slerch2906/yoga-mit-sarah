@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Admin Dashboard – Stats-Kacheln
  * Testfälle:
@@ -28,6 +29,12 @@ test.describe('Admin Dashboard: Stats-Kacheln', () => {
 
     // Seite lädt ohne Fehler
     await expect(page.getByText(/buchungen/i).first()).toBeVisible({ timeout: 5_000 })
+    // Welle 5: Page hat Header/Heading (nicht nur Body-Text)
+    await expect(
+      page.getByRole('heading', { name: /buchungen/i }).first()
+    ).toBeVisible({ timeout: 5_000 })
+    // Welle 5: Keine Crash-Indikatoren
+    await expect(page.getByText(/500|something went wrong|interner.*fehler/i)).toHaveCount(0)
   })
 
   test('Abmeldungen-Kachel öffnet Detailseite /admin/stats/abmeldungen', async ({ page }) => {
@@ -42,6 +49,11 @@ test.describe('Admin Dashboard: Stats-Kacheln', () => {
     await page.waitForLoadState('networkidle')
 
     await expect(page.getByText(/abmeldungen/i).first()).toBeVisible({ timeout: 5_000 })
+    // Welle 5: Heading + keine Crash-Indikatoren
+    await expect(
+      page.getByRole('heading', { name: /abmeldungen/i }).first()
+    ).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByText(/500|something went wrong/i)).toHaveCount(0)
   })
 
   test('Warteliste-Kachel öffnet Detailseite /admin/stats/warteliste', async ({ page }) => {
@@ -59,6 +71,10 @@ test.describe('Admin Dashboard: Stats-Kacheln', () => {
     // Zeigt entweder Einträge oder "Keine Einträge"
     await expect(
       page.getByText(/keine einträge/i).or(page.locator('.card')).first()
+    ).toBeVisible({ timeout: 5_000 })
+    // Welle 5: Heading
+    await expect(
+      page.getByRole('heading', { name: /warteliste/i }).first()
     ).toBeVisible({ timeout: 5_000 })
   })
 })

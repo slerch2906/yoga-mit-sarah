@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Buchung & Abmeldung
  * Testfälle: Stunde buchen, rechtzeitig abmelden (Credit zurück), spät abmelden (kein Credit)
@@ -47,10 +48,18 @@ test.describe('Buchung & Abmeldung', () => {
     // Buchung in DB prüfen
     const booking = await getActiveBooking(yogi1Id, sessionId)
     expect(booking, 'Buchung fehlgeschlagen: Kein aktiver Eintrag in der Datenbank').toBeTruthy()
+    // Welle 5: status + type explizit prüfen
+    expect(booking?.status).toBe('active')
+    expect(booking?.type, 'Single-Credit-Buchung muss type=single haben').toBe('single')
+    // Welle 5: Credit muss inkrementiert sein
+    const creditAfter = await getCredit(yogi1Id)
+    expect(creditAfter?.used, 'Credit muss nach Buchung +1 sein').toBe((creditBefore?.used ?? 0) + 1)
 
     // Stunde erscheint in "Meine"
     await meinePage.goto()
     await meinePage.expectSessionVisible('[E2E] Testkurs')
+    // Welle 5: Meine-Page muss "Meine Stunden"/"Stunden" Heading zeigen + Kursname
+    await expect(page.locator('body')).toContainText(/\[E2E\].*Testkurs/i)
   })
 
   test('Rechtzeitige Abmeldung (> 3h vorher) → Credit wird zurückgebucht', async ({ page }) => {
@@ -66,6 +75,9 @@ test.describe('Buchung & Abmeldung', () => {
     const booking = await getCancelledBooking(yogi1Id, sessionId)
     expect(booking, 'Abmeldung fehlgeschlagen: Buchung ist noch aktiv').toBeTruthy()
     expect(booking?.cancel_late, 'Frühzeitige Abmeldung sollte cancel_late=false haben').toBe(false)
+    // Welle 5: cancelled_at muss gesetzt sein
+    expect(booking?.cancelled_at, 'cancelled_at muss bei Stornierung gesetzt sein').toBeTruthy()
+    expect(booking?.status).toBe('cancelled')
 
     // Credit zurückgegeben
     const creditAfter = await getCredit(yogi1Id)
@@ -82,6 +94,9 @@ test.describe('Buchung & Abmeldung', () => {
     await sessionPage.expectBookedStatus()
     const booking = await getActiveBooking(yogi1Id, sessionId)
     expect(booking, 'Erneute Buchung fehlgeschlagen').toBeTruthy()
+    expect(booking?.status).toBe('active')
+    // Welle 5: cancelled_at muss nach Re-Aktivierung null sein
+    expect(booking?.cancelled_at, 'Re-Buchung muss cancelled_at zurücksetzen').toBeNull()
   })
 
   test('Abgesagte Stunde zeigt Hinweis – keine Buchung möglich', async ({ page }) => {
@@ -95,5 +110,12 @@ test.describe('Buchung & Abmeldung', () => {
     const sessionPage = new SessionDetailPage(page)
     await sessionPage.goto(course.sessionIds[0])
     await sessionPage.expectCancelledNotice()
+    // Welle 5: konkreter "abgesagt"-Text muss erscheinen, kein Buchungsbutton
+    await expect(
+      page.getByText(/abgesagt|cancelled|entfällt|ausgefallen/i).first()
+    ).toBeVisible({ timeout: 5_000 })
+    await expect(
+      page.getByRole('button', { name: /für diese stunde eintragen|^eintragen$|buchen/i })
+    ).toHaveCount(0)
   })
 })

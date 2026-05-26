@@ -20,14 +20,15 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8')
 
 // ── Punkt 2: Beendete Stunden & Events-Sektion ───────────────────────────────
 test.describe('[E2E] Punkt 2 — Beendete Stunden & Events Sektion', () => {
-  test('admin/kurse trennt geplante (date >= heute) und beendete (date < heute) Container-Sessions', () => {
+  test('admin/kurse trennt geplante (Start >= jetzt) und beendete (Start < jetzt) Container-Sessions', () => {
     const src = read('app/admin/kurse/page.tsx')
-    // Filter auf "Geplante Stunden & Events" ist date >= heute
+    // Filter auf "Geplante Stunden & Events" ist Start >= jetzt
     expect(src).toMatch(/Geplante Stunden & Events/)
     // Eigene Sektion "Beendete Stunden & Events" existiert
     expect(src).toMatch(/Beendete Stunden & Events/)
-    // Filter date < heute für ended-Sessions
-    expect(src).toMatch(/s\.date < today/)
+    // Welle 4.6 (Sarah 2026-05-26): Filter über Session-Start-Timestamp statt nur date,
+    // damit auch heute morgen vorbei-gegangene Stunden als "beendet" gelten.
+    expect(src).toMatch(/getTime\(\)\s*<\s*nowMs/)
   })
 
   test('Sektion "Beendete Stunden & Events" wird nur gerendert wenn >0 Einträge (kein leerer Header)', () => {

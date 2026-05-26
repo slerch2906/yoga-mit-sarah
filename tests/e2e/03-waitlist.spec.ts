@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Warteliste & Nachrücken
  * Testfälle: Auf Warteliste setzen, Warteliste nachrücken, Benachrichtigung
@@ -62,6 +63,12 @@ test.describe('Warteliste (Yogi2)', () => {
     const entry = await getWaitlistEntry(yogi2Id, fullSessionId)
     expect(entry, 'Warteliste fehlgeschlagen: Kein Eintrag in der Datenbank').toBeTruthy()
     expect(entry?.type).toBe('waitlist')
+    // Welle 5: unsubscribe_token muss automatisch gesetzt sein
+    expect(entry?.unsubscribe_token, 'Token für E-Mail-Austrag muss generiert sein').toBeTruthy()
+    // Welle 5: UI muss Warteliste-Status nun anzeigen
+    await expect(
+      page.getByText(/warteliste|auf der liste|warteliste-platz/i).first()
+    ).toBeVisible({ timeout: 5_000 })
   })
 })
 
@@ -82,6 +89,11 @@ test.describe('Warteliste Nachrücken (Yogi1)', () => {
       booking,
       'Workflow Warteliste fehlgeschlagen: Yogi2 ist nach Abmeldung von Yogi1 nicht nachgerückt.'
     ).toBeTruthy()
+    expect(booking?.status).toBe('active')
+    // Welle 5: Yogi2-Warteliste-Eintrag muss nach Nachrücken weg sein
+    const { getWaitlistEntry: getWl } = await import('../utils/db')
+    const wlAfter = await getWl(yogi2Id, fullSessionId)
+    expect(wlAfter, 'Warteliste-Eintrag muss nach Nachrücken entfernt sein').toBeNull()
   })
 })
 
@@ -96,6 +108,13 @@ test.describe('Warteliste Benachrichtigung (Yogi2)', () => {
 
     const entry = await getWaitlistEntry(yogi2Id, notifySessionId)
     expect(entry?.type, 'Benachrichtigungs-Eintrag hat falschen Typ').toBe('notify')
+    // Welle 5: Notify-Eintrag hat KEINE position (anders als waitlist)
+    expect(entry?.position, 'Notify-Eintrag darf keine Position haben').toBeNull()
+    expect(entry?.unsubscribe_token).toBeTruthy()
+    // Welle 5: UI bestätigt Benachrichtigung
+    await expect(
+      page.getByText(/benachrichtig|notify|informier/i).first()
+    ).toBeVisible({ timeout: 5_000 })
   })
 })
 

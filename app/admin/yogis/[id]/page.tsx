@@ -888,8 +888,10 @@ export default function AdminYogiDetailPage() {
         return { text: `Admin hat Kurs „${d.course_name || courseName || '?'}" archiviert`, subject: '' }
       case 'course_deleted':
         return { text: `Admin hat Kurs „${d.course_name || '?'}" komplett gelöscht (${d.sessions_count || 0} Sessions)`, subject: '' }
-      case 'course_open_toggled':
-        return { text: d.is_open ? 'Kurs freigegeben für externe Buchungen' : 'Kurs für externe Buchungen gesperrt', subject: '' }
+      case 'course_open_toggled': {
+        const cn = d.course_name || courseName || '?'
+        return { text: d.is_open ? `Kurs „${cn}" wurde für externe Buchungen FREIGEGEBEN` : `Kurs „${cn}" wurde für externe Buchungen GESPERRT`, subject: '' }
+      }
       case 'admin_illness_credit': {
         const attest = d.attest_date ? new Date(d.attest_date).toLocaleDateString('de-DE') : '?'
         const hrs = d.hours_credited ?? '?'
@@ -974,6 +976,31 @@ export default function AdminYogiDetailPage() {
         const subj = d.subject ? `: „${d.subject}"` : ''
         const sent = d.sent != null ? ` (an ${d.sent} Empfänger${d.failed > 0 ? `, ${d.failed} fehlgeschlagen` : ''})` : ''
         return { text: `Admin hat Bulk-Mail an Yogis verschickt${subj}${sent}`, subject: '' }
+      }
+      // Welle 5 (Sarah 2026-05-26): bislang fehlende Cases — laut Agent-A-Audit
+      // entweder via Trigger geschrieben oder zukünftig vorgesehen. Backbone-Argumentation
+      // braucht lückenlose Yogi-Sicht — daher hier menschenlesbar gemappt.
+      case 'yogi_deleted': {
+        const em = d.email || d.user_email || '?'
+        const reason = d.reason ? ` (Grund: ${d.reason})` : ''
+        return { text: `Yogi hat eigenen Account gelöscht — ${em}${reason}`, subject: '' }
+      }
+      case 'legal_accepted': {
+        const ver = d.version || d.agb_version || ''
+        const t = ver ? `AGB Version ${ver} bestätigt` : 'AGB bestätigt'
+        return { text: `Yogi hat ${t}`, subject: '' }
+      }
+      case 'waitlist_joined': {
+        const cn = d.course_name || courseName
+        return { text: `Yogi hat sich auf Warteliste eingetragen${cn ? ` — ${cn}` : ''}`, subject: '' }
+      }
+      case 'waitlist_promoted': {
+        const cn = d.course_name || courseName
+        return { text: `Yogi wurde automatisch von Warteliste nachgerückt${cn ? ` — ${cn}` : ''}`, subject: '' }
+      }
+      case 'admin_dsgvo_deletion': {
+        const reason = d.reason ? ` (Grund: ${d.reason})` : ''
+        return { text: `Admin hat Yogi-Account DSGVO-konform gelöscht${reason}`, subject: '' }
       }
       default:
         return { text: `${entry.action} — keine lesbare Beschreibung verfügbar (bitte Mapping ergänzen)`, subject: '' }

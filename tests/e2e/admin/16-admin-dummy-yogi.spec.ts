@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Dummy-Yogi (is_dummy=true)
  * Testfälle:
@@ -79,6 +80,9 @@ test.describe('Dummy-Yogi: Anlage + Einbuchung', () => {
     expect(prof).toBeTruthy()
     expect(prof?.is_dummy, 'is_dummy muss true sein').toBe(true)
     expect(prof?.email, 'Dummy-Yogi hat keine Email').toBeNull()
+    // Welle 5: Vor- und Nachname müssen die E2E-Werte haben
+    expect(prof?.first_name).toBe('E2E')
+    expect(prof?.last_name).toBe('Dummy')
   })
 
   test('Admin sieht Dummy-Yogi in Yogi-Liste mit "Dummy"-Badge', async ({ page }) => {
@@ -87,6 +91,10 @@ test.describe('Dummy-Yogi: Anlage + Einbuchung', () => {
 
     // Dummy-Yogi taucht auf (Name oder Badge)
     await expect(page.getByText(/E2E.*Dummy/i).first()).toBeVisible({ timeout: 8_000 })
+    // Welle 5: "Dummy"-Badge irgendwo in der Yogi-Liste
+    await expect(page.getByText(/dummy/i).first()).toBeVisible({ timeout: 5_000 })
+    // Welle 5: Yogi-Liste-Page identifizierbar
+    await expect(page).toHaveURL(/\/admin\/yogis/)
   })
 
   test('Dummy-Yogi kann via Admin in Session eingebucht werden', async ({ page }) => {
@@ -112,5 +120,12 @@ test.describe('Dummy-Yogi: Anlage + Einbuchung', () => {
 
     const booking = await getActiveBooking(dummyYogiId, sessionId)
     expect(booking, 'Dummy-Yogi muss eingebucht sein').toBeTruthy()
+    expect(booking?.status).toBe('active')
+    expect(booking?.type).toBe('single')
+    // Welle 5: Profil hat immer noch email=null trotz Buchung
+    const { data: profAfter } = await db.from('profiles')
+      .select('email, is_dummy').eq('id', dummyYogiId).maybeSingle()
+    expect(profAfter?.email, 'Dummy-Profil bleibt ohne Email').toBeNull()
+    expect(profAfter?.is_dummy).toBe(true)
   })
 })

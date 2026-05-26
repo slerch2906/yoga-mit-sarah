@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: AGB-Akzeptanz (legal_accepted_at)
  * Testfälle:
@@ -41,12 +42,19 @@ test.describe('AGB-Akzeptanz: Blockiert Buchungen ohne Zustimmung', () => {
     // useLegalCheck-Hook leitet via window.location.href weiter
     await page.waitForURL(/\/rechtliches/, { timeout: 10_000 })
     await expect(page).toHaveURL(/\/rechtliches/)
+    // Welle 5: Rechtliches-Seite muss klaren Text + Checkbox haben
+    await expect(
+      page.getByText(/agb|allgemeine geschäftsbedingungen|rechtliches|nutzungsbedingung/i).first()
+    ).toBeVisible({ timeout: 5_000 })
+    await expect(page.locator('input[type="checkbox"]').first()).toBeVisible()
   })
 
   test('Aufruf /profil ohne AGB-Akzeptanz → Weiterleitung zu /rechtliches', async ({ page }) => {
     await page.goto('/profil')
     await page.waitForURL(/\/rechtliches/, { timeout: 10_000 })
     await expect(page).toHaveURL(/\/rechtliches/)
+    // Welle 5: Profil-Inhalt (Email, "Mein Profil") darf nicht sichtbar sein
+    await expect(page.getByRole('heading', { name: /mein profil/i })).toHaveCount(0)
   })
 
   test('Rechtliches-Seite zeigt Pflichtfelder', async ({ page }) => {
@@ -55,6 +63,14 @@ test.describe('AGB-Akzeptanz: Blockiert Buchungen ohne Zustimmung', () => {
 
     // Mindestens eine Checkbox und Submit-Button sichtbar
     await expect(page.locator('input[type="checkbox"]').first()).toBeVisible({ timeout: 8_000 })
+    // Welle 5: Submit-Button vorhanden
+    await expect(
+      page.getByRole('button', { name: /bestätigen|akzeptieren|zustimmen|weiter|absenden/i }).first()
+    ).toBeVisible({ timeout: 5_000 })
+    // Welle 5: AGB/Datenschutz-Bezug im Text
+    await expect(
+      page.getByText(/agb|datenschutz|nutzungsbedingung/i).first()
+    ).toBeVisible()
   })
 })
 
@@ -73,5 +89,9 @@ test.describe('AGB-Akzeptanz: Nach Akzeptanz wieder Vollzugriff', () => {
     await page.waitForLoadState('networkidle')
     // Kein Redirect zu /rechtliches
     await expect(page).toHaveURL(/\/meine/)
+    // Welle 5: Meine-Page-Content lädt — kein "rechtliches"-Text mehr im Hauptbereich
+    await expect(
+      page.getByText(/bitte.*akzeptier|musst.*zustimmen/i)
+    ).toHaveCount(0)
   })
 })

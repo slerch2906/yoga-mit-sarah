@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Gleichzeitige Buchung des letzten Platzes
  * Testfälle:
@@ -80,6 +81,12 @@ test.describe('Concurrent Booking: Letzter Platz', () => {
 
     // Kein Buchungs-Button sichtbar
     await sessionPage.expectNoBookButton()
+    // Welle 5: konkret das Wort "ausgebucht" oder "voll" muss sichtbar sein
+    await expect(
+      page.getByText(/ausgebucht|voll besetzt|kein platz|0\s*\/\s*\d+|warteliste/i).first()
+    ).toBeVisible()
+    // Kursname noch im UI sichtbar (kein Crash-Zustand)
+    await expect(page.locator('body')).toContainText(/Concurrent-Test/i)
   })
 
   test('Yogi2 kann auf Warteliste, aber NICHT direkt buchen', async ({ page }) => {
@@ -94,6 +101,10 @@ test.describe('Concurrent Booking: Letzter Platz', () => {
     // Aktive Buchungen unverändert (genau 1)
     const count = await countActiveBookingsForSession(sessionId)
     expect(count, 'max_spots=1 darf nicht überschritten werden').toBe(1)
+    // Welle 5: explizit kein direkter "Buchen"-Button für Yogi2
+    await expect(
+      page.getByRole('button', { name: /^für diese stunde eintragen$|^buchen$/i })
+    ).toHaveCount(0)
   })
 
   test('RLS: Direkter DB-Insert für überbuchte Stunde liefert keine Überschreitung', async () => {

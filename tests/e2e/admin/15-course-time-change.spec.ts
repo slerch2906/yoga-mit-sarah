@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Course Time Change Email
  * Testfälle:
@@ -64,6 +65,14 @@ test.describe('Course Time Change: Admin ändert Kurszeit mit Teilnehmern', () =
       sessions!.every(s => s.time_start === NEW_TIME),
       'Alle zukünftigen Sessions müssen die neue Uhrzeit haben',
     ).toBe(true)
+    // Welle 5: keine cancelled Sessions (Time-Change ändert keine cancelled)
+    const { data: allSessions } = await db.from('sessions')
+      .select('time_start, is_cancelled').eq('course_id', courseId)
+    const futureUncancelled = (allSessions || []).filter((s: any) =>
+      !s.is_cancelled
+    )
+    expect(futureUncancelled.every((s: any) => s.time_start === NEW_TIME),
+      'Alle nicht-cancelled Sessions müssen neue Zeit haben').toBe(true)
   })
 
   test('courseTimeChanged Email kommt an (Mailtrap)', async () => {
@@ -85,5 +94,11 @@ test.describe('Course Time Change: Admin ändert Kurszeit mit Teilnehmern', () =
     }
 
     expect(emailContains(email, 'uhrzeit') || emailContains(email, 'zeit')).toBe(true)
+    // Welle 5: Email muss an den richtigen Yogi gehen
+    expect(email.to_email).toBe(process.env.TEST_YOGI1_EMAIL)
+    // Welle 5: Email muss neue Uhrzeit erwähnen (20:00)
+    expect(emailContains(email, '20:00') || emailContains(email, '20 uhr')).toBe(true)
+    // Welle 5: Kursname im Body
+    expect(emailContains(email, 'Time-Change-Test')).toBe(true)
   })
 })

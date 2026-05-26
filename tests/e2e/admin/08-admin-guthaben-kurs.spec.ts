@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Guthaben aus Kursabbruch → Verrechnung bei Kursanmeldung
  * Testfälle:
@@ -105,6 +106,20 @@ test.describe('Guthaben: Verrechnung bei Kursanmeldung (Admin)', () => {
     expect(courseCredit!.model).toBe('course')
     expect(courseCredit!.total, 'total = nur nicht durch Guthaben gedeckte Stunden (1)').toBe(1)
     expect(courseCredit!.used, 'used = 1 (1 Stunde mit neuem Credit gebucht)').toBe(1)
+    // Welle 5: Enrollment ist angelegt
+    const { data: enrollment } = await db.from('enrollments')
+      .select('*').eq('user_id', yogi1Id).eq('course_id', courseId).maybeSingle()
+    expect(enrollment, 'Yogi muss enrolled sein').toBeTruthy()
+    // Welle 5: insgesamt 4 Bookings (eines für jede Course-Session)
+    const { data: bookings } = await db.from('bookings')
+      .select('id, status, type')
+      .eq('user_id', yogi1Id)
+      .in('session_id',
+        (await db.from('sessions').select('id').eq('course_id', courseId)).data!.map((s: any) => s.id)
+      )
+    expect(bookings?.length, '4-Stunden-Kurs erzeugt 4 Buchungen').toBe(4)
+    expect(bookings!.every(b => b.status === 'active'), 'Alle Buchungen aktiv').toBe(true)
+    expect(bookings!.every(b => b.type === 'course'), 'Alle Buchungen type=course').toBe(true)
   })
 })
 
@@ -165,5 +180,10 @@ test.describe('Guthaben: Sperrung für Einzelstunden (Admin-Session)', () => {
     await expect(
       page.getByRole('button', { name: /credit vergeben.*einbuchen/i })
     ).not.toBeVisible()
+    // Welle 5: DB-Check Yogi2 ist NICHT eingebucht
+    const db2 = await getAdminClient()
+    const { data: bk } = await db2.from('bookings')
+      .select('id').eq('user_id', yogi2Id).eq('session_id', sessionId).eq('status', 'active').maybeSingle()
+    expect(bk, 'Yogi mit nur Guthaben darf nicht eingebucht werden').toBeNull()
   })
 })

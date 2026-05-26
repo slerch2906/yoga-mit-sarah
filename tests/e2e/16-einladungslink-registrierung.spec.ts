@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Registrierung über Einladungslink
  * Testfälle:
@@ -89,6 +90,10 @@ test.describe('Registrierung: Token-Validierung', () => {
     await expect(
       page.getByText(/abgelaufen oder ungültig|einladungslink.*ungültig|nicht.*gültig/i)
     ).toBeVisible({ timeout: 10_000 })
+    // Welle 5: kein Registrierungs-Formular sichtbar (kein Leak von Email-Feld)
+    await expect(page.locator('input[type="password"]')).toHaveCount(0)
+    // Welle 5: Soft-Check — falls die Page einen Login-Hinweis anbietet, ist das
+    // schöner UX. Die App zeigt aktuell nur die Fehlermeldung — kein Hard-Fail.
   })
 
   test('Bereits verwendetes Token → "bereits verwendet"', async ({ page }) => {
@@ -97,6 +102,8 @@ test.describe('Registrierung: Token-Validierung', () => {
     await expect(
       page.getByText(/bereits verwendet/i)
     ).toBeVisible({ timeout: 10_000 })
+    // Welle 5: kein Form sichtbar, Login-Link angeboten
+    await expect(page.locator('input[type="password"]')).toHaveCount(0)
   })
 
   test('Abgelaufenes Token → "abgelaufen"', async ({ page }) => {
@@ -105,6 +112,8 @@ test.describe('Registrierung: Token-Validierung', () => {
     await expect(
       page.getByText(/abgelaufen/i)
     ).toBeVisible({ timeout: 10_000 })
+    // Welle 5: kein Form sichtbar
+    await expect(page.locator('input[type="password"]')).toHaveCount(0)
   })
 
   test('Kein Token → Weiterleitung zu /login', async ({ page }) => {
@@ -131,6 +140,12 @@ test.describe('Registrierung: Erfolgreicher Flow', () => {
     // Vorname / Nachname vorausgefüllt
     await expect(page.locator('input[placeholder="Anna"]')).toHaveValue('E2E')
     await expect(page.locator('input[placeholder="Müller"]')).toHaveValue('Valid')
+    // Welle 5: Passwort-Feld + Geburtsdatum-Feld + Submit-Button vorhanden
+    await expect(page.locator('input[type="password"]').first()).toBeVisible()
+    await expect(page.locator('input[type="date"]').first()).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: /konto erstellen|loslegen|registrier/i })
+    ).toBeVisible()
   })
 
   test('Registrierung absenden → Profil angelegt, Token used=true', async ({ page }) => {
@@ -163,10 +178,16 @@ test.describe('Registrierung: Erfolgreicher Flow', () => {
 
     // Profil angelegt
     const { data: prof } = await db.from('profiles')
-      .select('first_name, last_name, email').eq('email', INVITE_EMAIL_VALID).maybeSingle()
+      .select('first_name, last_name, email, legal_accepted_at').eq('email', INVITE_EMAIL_VALID).maybeSingle()
     expect(prof, 'Profil muss in DB existieren').toBeTruthy()
     expect(prof?.first_name).toBe('E2E')
     expect(prof?.last_name).toBe('Valid')
+    expect(prof?.email).toBe(INVITE_EMAIL_VALID)
+    // Welle 5: Page muss nach Registrierung tatsächlich auf /rechtliches sein
+    await expect(page).toHaveURL(/\/rechtliches/)
+    await expect(
+      page.getByText(/agb|nutzungsbedingung|rechtliches/i).first()
+    ).toBeVisible({ timeout: 5_000 })
 
     // Admin-Notification (Soft-Check – App schreibt diese am Ende des handleRegister,
     // kann timing-bedingt verzögert ankommen. Wenn Profil + Token korrekt sind,

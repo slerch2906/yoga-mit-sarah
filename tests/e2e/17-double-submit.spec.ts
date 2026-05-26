@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Schutz gegen Doppel-Klick / Double-Submit
  * Testfälle:
@@ -66,6 +67,13 @@ test.describe('Double-Submit-Schutz: Buchung', () => {
     // DB-Check: NUR eine aktive Buchung
     const count = await countActiveBookingsForSession(sessionId)
     expect(count, 'Doppelklick darf nur EINE Buchung erzeugen').toBe(1)
+    // Welle 5: Credit-used Invariante — Doppelklick darf NIE > 1 verbrauchen.
+    // Soft-Lower-Bound: trg_sync_credit_used kann async sein → mindestens nicht > 1.
+    const db2 = await getAdminClient()
+    const { data: cred } = await db2.from('credits')
+      .select('used').eq('user_id', yogi1Id).eq('model', 'single')
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+    expect(cred?.used ?? 0, 'Credit darf NIE > 1 verbraucht sein bei Doppelklick').toBeLessThanOrEqual(1)
   })
 
   test('Buchung-Button ist nach Klick deaktiviert (actionLoading)', async ({ page }) => {

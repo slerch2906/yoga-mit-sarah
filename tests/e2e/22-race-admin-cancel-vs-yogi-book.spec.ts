@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Race-Condition Admin sagt ab vs Yogi bucht parallel
  * Testfälle:
@@ -74,5 +75,18 @@ test.describe('Race: Admin sagt Session ab während Yogi auf Buchen-Seite ist', 
     // Page sollte sauberen State zeigen (entweder Erfolg umgekehrt, oder Cancellation-Hinweis)
     // Test ist erfolgreich solange kein 500/crash
     await expect(page).toHaveURL(/\/kurse/)
+    // Welle 5: kein Fehler-Banner ("Etwas ist schiefgelaufen" / "500") sichtbar
+    await expect(
+      page.getByText(/etwas ist schief|something went wrong|5\d\d\s|interner.*fehler/i)
+    ).toHaveCount(0)
+    // Welle 5: DB-Check Session ist tatsächlich cancelled
+    const { data: sess } = await db.from('sessions')
+      .select('is_cancelled').eq('id', sessionId).maybeSingle()
+    expect(sess?.is_cancelled).toBe(true)
+    // Welle 5: Credit von yogi1 ist NICHT verbraucht (Buchung ging nicht durch)
+    const { data: cred } = await db.from('credits')
+      .select('used').eq('user_id', yogi1Id).eq('model', 'single')
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+    expect(cred?.used, 'Credit darf bei Race-Cancel nicht verbraucht sein').toBe(0)
   })
 })

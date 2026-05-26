@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Meine Stunden (Yogi-Ansicht)
  * Testfälle: Credits-Übersicht, Kursname, ausgeschlossene Stunden
@@ -25,6 +26,10 @@ test.describe('Meine Stunden', () => {
     const meinePage = new MeinePage(page)
     await meinePage.goto()
     await meinePage.expectCreditHeading()
+    // Welle 5: Page hat klare Sektion-Überschrift "Deine freien Credits"
+    await expect(page.getByText(/deine freien credits/i).first()).toBeVisible()
+    // Welle 5: Mindestens 1 Zahl > 0 sichtbar (body-weit, DOM-getrennte spans)
+    await expect(page.locator('body')).toContainText(/[1-9]\d*/)
   })
 
   test('Einzelstunden-Credits mit "Credits" (Mehrzahl) angezeigt', async ({ page }) => {
@@ -33,8 +38,10 @@ test.describe('Meine Stunden', () => {
     const meinePage = new MeinePage(page)
     await meinePage.goto()
     await meinePage.expectSingleCredits(5)
-    // Prüfen: kein "5 Einzelstunden-Credit" ohne S
-    await expect(page.getByText(/5 einzelstunden-credit[^s]/i)).not.toBeVisible()
+    // Singular-Variante darf nicht erscheinen (würde "Einzelstunden-Credit " ohne s sein)
+    await expect(page.locator('body')).not.toContainText('Einzelstunden-Credit ')
+    // Welle 5: "Einzelstunden-Credits" (Mehrzahl) als eigenständiger Label-Text
+    await expect(page.getByText(/einzelstunden-credits/i).first()).toBeVisible()
   })
 
   test('Kurs-Credits zeigen Kursnamen', async ({ page }) => {
@@ -56,6 +63,8 @@ test.describe('Meine Stunden', () => {
     await meinePage.goto()
     // "Kurs: [E2E] Kreditkurs" muss erscheinen
     await expect(page.getByText(new RegExp(`Kurs:.*${E2E_PREFIX}.*Kreditkurs`, 'i'))).toBeVisible()
+    // Welle 5: 4 Credits total (siehe Insert) müssen als Zahl im Text vorkommen
+    await expect(page.locator('body')).toContainText(/4/)
   })
 
   test('Ausgeschlossene Stunden erscheinen NICHT in Meine', async ({ page }) => {
@@ -94,5 +103,12 @@ test.describe('Meine Stunden', () => {
     const formattedDate = new Date(year, month - 1, dayNum, 12, 0, 0).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })
     // Ausgeschlossene Termine werden in Meine nicht gezeigt
     await meinePage.expectExcludedSessionNotVisible(formattedDate)
+    // Welle 5: andere (aktive) Sessions müssen sichtbar sein → der Kurs hat noch 2 von 3 aktive
+    const activeDate0 = course.sessionDates[0]
+    const [y0, m0, d0] = activeDate0.split('-').map(Number)
+    const fmt0 = new Date(y0, m0 - 1, d0, 12, 0, 0).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })
+    // Mindestens eine der aktiven Sessions muss als Datum sichtbar sein
+    const visibleDates = await page.getByText(new RegExp(fmt0.split(' ')[0])).count()
+    expect(visibleDates, 'Aktive Sessions müssen sichtbar sein').toBeGreaterThan(0)
   })
 })

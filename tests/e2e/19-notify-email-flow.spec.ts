@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Notify-Email Flow
  * Testfälle:
@@ -39,6 +40,12 @@ test.describe('Notify-Email: Yogi2 setzt Notify-Eintrag', () => {
     const entry = await getWaitlistEntry(yogi2Id, fullSessionId)
     expect(entry?.type, 'Notify-Eintrag muss type=notify haben').toBe('notify')
     expect(entry?.position, 'Notify-Eintrag hat keine Position').toBeNull()
+    // Welle 5: unsubscribe_token muss vorhanden sein (für E-Mail-Austrag)
+    expect(entry?.unsubscribe_token, 'unsubscribe_token muss generiert werden').toBeTruthy()
+    // Welle 5: UI-Bestätigung
+    await expect(
+      page.getByText(/benachrichtig|informier|notify/i).first()
+    ).toBeVisible({ timeout: 5_000 })
   })
 })
 
@@ -63,5 +70,12 @@ test.describe('Notify-Email: Yogi1 sagt ab → notify-Eintrag wird verarbeitet',
       notifyEntry,
       'Notify-Eintrag muss nach Email-Versand entfernt sein',
     ).toBeNull()
+    // Welle 5: Yogi1-Buchung ist als cancelled markiert
+    const db = await getAdminClient()
+    const { data: yogi1Booking } = await db.from('bookings')
+      .select('status, cancelled_at, cancel_late').eq('user_id', yogi1Id)
+      .eq('session_id', fullSessionId).maybeSingle()
+    expect(yogi1Booking?.status, 'Yogi1-Buchung muss cancelled sein').toBe('cancelled')
+    expect(yogi1Booking?.cancelled_at, 'cancelled_at muss gesetzt sein').toBeTruthy()
   })
 })

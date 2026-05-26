@@ -1,3 +1,4 @@
+// Welle 5 Refactor (Sarah 2026-05-26): zusätzliche semantische Assertions
 /**
  * Workflow: Admin – Kursverwaltung
  * Testfälle: Kurs anlegen, Stunde absagen, Kurs abbrechen, Archivieren
@@ -31,6 +32,9 @@ test.describe('Admin Kursverwaltung', () => {
     const kursePage = new AdminKursePage(page)
     await kursePage.goto()
     await kursePage.expectCourseVisible(COURSE_NAME)
+    // Welle 5: Admin-Kurse-Page muss als solche identifizierbar sein
+    await expect(page).toHaveURL(/\/admin\/kurse/)
+    await expect(page.locator('body')).toContainText(/kurs/i)
   })
 
   test('Stunde absagen → wird als "Abgesagt" angezeigt, kein Buchungs-Button', async ({ page }) => {
@@ -39,8 +43,10 @@ test.describe('Admin Kursverwaltung', () => {
     // Direktes Absagen über DB (UI-Flow ist in Anwesenheits-Tests)
     await db.from('sessions').update({ is_cancelled: true, cancel_reason: 'E2E Test' }).eq('id', sessionId)
 
-    const { data: s } = await db.from('sessions').select('is_cancelled').eq('id', sessionId).single()
+    const { data: s } = await db.from('sessions').select('is_cancelled, cancel_reason').eq('id', sessionId).single()
     expect(s?.is_cancelled, 'Stunden-Absage fehlgeschlagen').toBe(true)
+    // Welle 5: cancel_reason muss gesetzt sein
+    expect(s?.cancel_reason, 'cancel_reason muss bei Absage gespeichert sein').toBe('E2E Test')
   })
 
   test('Archivierter Kurs erscheint NICHT im Admin-Dashboard', async ({ page }) => {
@@ -55,6 +61,10 @@ test.describe('Admin Kursverwaltung', () => {
     const dashboard = new AdminDashboardPage(page)
     await dashboard.goto()
     await expect(page.getByText(`${E2E_PREFIX} Archiv-Test`)).not.toBeVisible()
+    // Welle 5: DB-Check is_active=false
+    const { data: archivedCourse } = await db.from('courses')
+      .select('is_active').eq('id', course.courseId).maybeSingle()
+    expect(archivedCourse?.is_active, 'Kurs muss tatsächlich inaktiv sein').toBe(false)
   })
 
   test('Stunden dieser Woche mit korrektem Wochenformat', async ({ page }) => {
@@ -195,5 +205,7 @@ test.describe('Admin Kurse: Bearbeiten-Modal mit Teilnehmern', () => {
     await expect(
       page.getByRole('button', { name: /ausschließen/i })
     ).not.toBeVisible({ timeout: 3_000 })
+    // Welle 5: Modal zeigt eindeutig den Kursnamen
+    await expect(page.locator('body')).toContainText(/Bearbeiten-Mit-Teiln/i)
   })
 })

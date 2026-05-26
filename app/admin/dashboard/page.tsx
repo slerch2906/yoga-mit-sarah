@@ -699,12 +699,24 @@ export default function AdminDashboard() {
                   <input className="field-input mb-2 text-sm" placeholder="Name eingeben..." autoFocus
                     value={dashYogiSearch} onChange={e => searchDashYogis(e.target.value)} />
                   {dashYogiResults.map(yogi => {
-                    const free = (yogi.credits || []).filter((cr: any) => new Date(cr.expires_at) > new Date() && (cr.total - cr.used) > 0).reduce((s: number, cr: any) => s + cr.total - cr.used, 0)
+                    // Sarah-Plausi-Fix 2026-05-26: Credits (course/tenpack/single/
+                    // quarterly) und Guthaben (model='guthaben') GETRENNT zählen —
+                    // sonst zeigt Yogi mit 12 Guthaben fälschlich "12 Credits frei".
+                    const free = (yogi.credits || []).filter((cr: any) =>
+                      cr.model !== 'guthaben' && new Date(cr.expires_at) > new Date() && (cr.total - cr.used) > 0
+                    ).reduce((s: number, cr: any) => s + cr.total - cr.used, 0)
+                    const guthaben = (yogi.credits || []).filter((cr: any) =>
+                      cr.model === 'guthaben' && new Date(cr.expires_at) > new Date() && (cr.total - cr.used) > 0
+                    ).reduce((s: number, cr: any) => s + cr.total - cr.used, 0)
+                    const parts: string[] = []
+                    if (free > 0) parts.push(`${free} Credits frei`)
+                    if (guthaben > 0) parts.push(`${guthaben} Guthaben`)
+                    const label = parts.length > 0 ? parts.join(' · ') : 'Kein Credit – wird vergeben'
                     return (
                       <div key={yogi.id} className="flex items-center justify-between py-2 border-b border-yoga-border">
                         <div>
                           <div className="text-sm font-semibold">{yogi.first_name} {yogi.last_name}</div>
-                          <div className="text-xs text-yoga-text/50">{free > 0 ? `${free} Credits frei` : 'Kein Credit – wird vergeben'}</div>
+                          <div className="text-xs text-yoga-text/50">{label}</div>
                         </div>
                         <button onClick={() => addYogiToSession(yogi)} disabled={dashAddingYogi}
                           className="text-xs bg-yoga-text text-yoga-bg rounded-full px-3 py-1.5 font-semibold border-0 cursor-pointer disabled:opacity-40">

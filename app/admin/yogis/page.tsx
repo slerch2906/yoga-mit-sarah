@@ -28,8 +28,20 @@ export default function AdminYogisPage() {
     setLoading(false)
   }
 
+  // Sarah-Plausibilitäts-Fix 2026-05-26: Credits und Guthaben sind NICHT
+  // das Gleiche. Yogi mit 12 Guthaben + 0 Course-Credits hatte hier
+  // irreführend "12 Credits" gezeigt. Jetzt getrennt: Credits (course/
+  // tenpack/single/quarterly) und Guthaben (model='guthaben').
   function getFreeCredits(yogi: any) {
     return (yogi.credits || []).reduce((sum: number, c: any) => {
+      if (c.model === 'guthaben') return sum
+      if (new Date(c.expires_at) > new Date()) return sum + Math.max(0, c.total - c.used)
+      return sum
+    }, 0)
+  }
+  function getGuthaben(yogi: any) {
+    return (yogi.credits || []).reduce((sum: number, c: any) => {
+      if (c.model !== 'guthaben') return sum
       if (new Date(c.expires_at) > new Date()) return sum + Math.max(0, c.total - c.used)
       return sum
     }, 0)
@@ -128,7 +140,15 @@ export default function AdminYogisPage() {
                   {yogi.email || 'Kein Login'}
                 </div>
                 <div className="text-sm text-yoga-text/40 mt-0.5">
-                  {getCurrentCourse(yogi)} · {getFreeCredits(yogi)} Credits
+                  {(() => {
+                    const credits = getFreeCredits(yogi)
+                    const guthaben = getGuthaben(yogi)
+                    const parts: string[] = []
+                    if (credits > 0) parts.push(`${credits} Credits`)
+                    if (guthaben > 0) parts.push(`${guthaben} Guthaben`)
+                    if (parts.length === 0) parts.push('0 Credits')
+                    return `${getCurrentCourse(yogi)} · ${parts.join(' · ')}`
+                  })()}
                 </div>
               </div>
               <i className="ti ti-chevron-right text-base text-yoga-text/30" />

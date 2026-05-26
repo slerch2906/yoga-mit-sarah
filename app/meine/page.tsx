@@ -181,8 +181,11 @@ export default function MeinePage() {
       <AppHeader title="Meine" isAdmin={profile?.is_admin} />
       <div className="px-4 py-4">
         {/* Sarah-Wunsch 2026-05-25: Guthaben in eigener Sektion unterhalb der freien Credits */}
-        {/* Credits Detail-Anzeige – "Freie Credits" = Credits aus Abmeldungen */}
-        {visibleCredits.length > 0 ? (
+        {/* Credits Detail-Anzeige – "Freie Credits" = Credits aus Abmeldungen.
+            Sarah-Plausi-Fix 2026-05-26: Sektion + Überschrift nur zeigen wenn
+            es WIRKLICH Nicht-Guthaben-Credits gibt — sonst sieht Yogi mit nur
+            Guthaben eine leere Sektion + irreführende "Keine Credits"-Karte. */}
+        {visibleCredits.filter(c => c.model !== 'guthaben').length > 0 ? (
           <div className="mb-4">
             <p className="section-label">Deine freien Credits</p>
             {visibleCredits.filter(c => c.model !== 'guthaben').map(c => {
@@ -243,7 +246,9 @@ export default function MeinePage() {
               )
             })}
           </div>
-        ) : (
+        ) : visibleCredits.filter(c => c.model === 'guthaben').length === 0 && (
+          /* Empty-state nur wenn AUCH kein Guthaben da ist — sonst zeigt die
+             Guthaben-Sektion unten ja was. Sarah-Plausi-Fix 2026-05-26. */
           <div className="mb-4">
             <p className="section-label">Deine freien Credits</p>
             <div className="card text-center py-4">

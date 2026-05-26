@@ -961,7 +961,7 @@ export default function AdminYogiDetailPage() {
     if (visibleCredits.length === 0) return null
     return (
       <>
-        <p className="section-label mt-2">Credits verwalten</p>
+        <p className="section-label mt-2">Credits / Guthaben verwalten</p>
         {visibleCredits.map(c => {
           const free = computeFree(c)
           const isExpired = new Date(c.expires_at) < new Date()
@@ -990,7 +990,13 @@ export default function AdminYogiDetailPage() {
                     <div className="text-sm font-semibold">
                       {c.model === 'course'
                         ? `${c.used} / ${c.total} genutzt · ${Math.max(0, c.total - c.used)} frei`
-                        : `${free} von ${c.total} Credits frei`}
+                        : c.model === 'guthaben'
+                          // Sarah-Wunsch 2026-05-26: bei Guthaben kein "Credits"
+                          // und kein "frei" — semantisch falsch. Stattdessen
+                          // "X von Y Stunden verfügbar" (Yogi kann sie nur für
+                          // Kurse einlösen).
+                          ? `${free} von ${c.total} Stunden verfügbar`
+                          : `${free} von ${c.total} Credits frei`}
                     </div>
                     {(() => {
                       const isQuarterly = c.model === 'quarterly'

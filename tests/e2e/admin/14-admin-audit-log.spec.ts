@@ -108,3 +108,69 @@ test.describe('Audit-Log: /admin/protokoll Page rendert Einträge', () => {
     ).toBeVisible({ timeout: 8_000 })
   })
 })
+
+// Sarah-Wunsch 2026-05-26: yogi-bezogenes Protokoll auf /admin/yogis/[id] hat
+// ein Mapping action → human-readable Text. Falls in Zukunft eine neue
+// audit_log-Action im App-Code dazukommt OHNE Mapping in formatAuditEntry,
+// faellt sie auf den default-case und der Admin sieht nur den Code-String.
+// Dieser Drift-Test grep't alle action-Strings aus dem App-Code und prueft
+// dass jeder im case-Statement aufgefuehrt ist.
+test.describe('[E2E] Yogi-Protokoll: kein Action-Drift', () => {
+  test('Alle action-Strings im App-Code sind in formatAuditEntry gemappt', async () => {
+    const fs = await import('fs')
+    const path = await import('path')
+    const { execSync } = await import('child_process')
+
+    // 1) Sammle alle action-Strings aus dem App-Code (app/**, supabase/**).
+    //    Test-Dateien ignorieren (E2E setzt manchmal Test-Actions die nie
+    //    in Prod laufen — z.B. 'cascade_replacement_cancelled' in einem Seed).
+    let appActions: Set<string>
+    try {
+      // rg auf Windows oft nicht in PATH → wirft, dann greift der Fallback.
+      const out = execSync(
+        'rg -t ts -t js -t sql --no-heading -o "action[^a-zA-Z][^\'\\"]*[\'\\\"]([a-z0-9_]+)[\'\\\"]" -r "$1" app supabase',
+        { cwd: path.join(process.cwd()), encoding: 'utf8' }
+      ).toString().trim()
+      appActions = new Set(out.split(/\r?\n/).filter(Boolean))
+    } catch {
+      // Fallback: hard-coded Liste mit allen bekannten Actions (Stand 2026-05-26).
+      // Wird nicht idealerweise verwendet — der rg-Pfad funktioniert auf den
+      // meisten Setups. Falls dieser Test trotzdem aus irgendeinem Grund nicht
+      // greifen kann, bleibt die hard-coded Liste als Sicherheitsnetz.
+      appActions = new Set([
+        'booking_created', 'booking_cancelled', 'booking_cancelled_by_admin',
+        'admin_added_yogi_to_session', 'admin_illness_credit',
+        'admin_promoted_waitlist_yogi', 'admin_bulk_mail',
+        'yogi_enrolled_by_admin', 'yogi_removed_from_course',
+        'yogi_course_cancellation_choice', 'yogi_anonymized_dsgvo',
+        'course_cancelled', 'course_rollover', 'session_cancelled',
+        'replacement_session_added', 'cascade_replacement_cancelled',
+        'waitlist_offer_late_accepted', 'credit_assigned', 'credit_adjusted',
+        'credit_deleted', 'guthaben_2y_auto_refund', 'token_expired_auto_refund',
+      ])
+    }
+
+    // 2) Lies die formatAuditEntry-Funktion und extrahiere alle case-Strings.
+    const yogiDetailSrc = fs.readFileSync(
+      path.join(process.cwd(), 'app/admin/yogis/[id]/page.tsx'), 'utf8'
+    )
+    const mappedActions = new Set<string>()
+    const re = /case '([a-z0-9_]+)':/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(yogiDetailSrc)) !== null) {
+      mappedActions.add(m[1])
+    }
+    expect(mappedActions.size, 'formatAuditEntry sollte mind. 1 case haben').toBeGreaterThan(0)
+
+    // 3) Drift-Check: jede App-Action muss gemappt sein. Fehlende dokumentieren
+    //    für Debug-Output.
+    const missing: string[] = []
+    appActions.forEach((act) => {
+      if (!mappedActions.has(act)) missing.push(act)
+    })
+    expect(
+      missing,
+      `Diese Action-Strings sind im App-Code aber NICHT in formatAuditEntry (app/admin/yogis/[id]/page.tsx) gemappt. Bitte case-Statement ergänzen: ${missing.join(', ')}`
+    ).toEqual([])
+  })
+})

@@ -180,11 +180,14 @@ export default function KursePage() {
     : formatWeekRange(weekStart)
 
   // Welle 2.5 (Sarah 2026-05-26): Events-Sektion oben (mehr Vermarktungs-Wirkung),
-  // dann reguläre Kursstunden. session_type='course_session' → reguläre Stunden;
-  // single/event_* → Events-Sektion.
-  const isEventLike = (s: any) => s.session_type && s.session_type !== 'course_session'
-  const eventSessions = sessions.filter(isEventLike)
-  const courseSessions = sessions.filter((s: any) => !isEventLike(s))
+  // dann reguläre Kursstunden. Sarah-Wunsch 2026-05-26 Welle 2.8:
+  // NUR Events (event_free/credit/paid) in "Events diese Woche" — einzelstunden
+  // (session_type='single') gehoeren zu den normalen Stunden ("Stunden diese
+  // Woche") weil sie wie Drop-Ins wirken.
+  const isEvent = (s: any) =>
+    s.session_type === 'event_free' || s.session_type === 'event_credit' || s.session_type === 'event_paid'
+  const eventSessions = sessions.filter(isEvent)
+  const courseSessions = sessions.filter((s: any) => !isEvent(s))
 
   const byDay: Record<string, any[]> = {}
   courseSessions.forEach(s => { if (!byDay[s.date]) byDay[s.date] = []; byDay[s.date].push(s) })

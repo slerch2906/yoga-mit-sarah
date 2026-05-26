@@ -413,13 +413,25 @@ export default function SessionDetailPage() {
   const isEvent = isEventPaid || isEventFree
   // Für Anzeige: session.name/description haben Vorrang vor course.name/description
   // (course.name = SYS-Container für event_*/single).
-  const displayName = (session as any).name ?? course?.name
-  const displayDescription = (session as any).description ?? course?.description
-  const displayLocation = (session as any).location ?? course?.location
-  const displayBringAlong = (session as any).bring_along ?? course?.bring_along
-  const displayDifficulty = (session as any).difficulty ?? course?.difficulty
-  const displayImageUrl = (session as any).image_url ?? course?.image_url
-  const displayMaxSpots = (session as any).max_spots ?? course?.max_spots
+  // Sarah-Wunsch 2026-05-26 Welle 2.8: SYS-Container-Description darf NIE
+  // beim Yogi durchschlagen ("Unsichtbarer Container fuer ..."). Bei
+  // session_type != 'course_session' wird der course-Fallback unterdrueckt;
+  // bei event_free zeigen wir stattdessen einen Standard-Hinweis.
+  const isContainerSession = sessionType && sessionType !== 'course_session'
+  const displayName = (session as any).name ?? (isContainerSession ? null : course?.name)
+  const sessionOwnDescription = (session as any).description as string | null | undefined
+  const defaultDescription =
+    sessionType === 'event_free'
+      ? 'Kostenlos — einfach anmelden und teilnehmen. Abmelden jederzeit möglich.'
+      : null
+  const displayDescription = isContainerSession
+    ? (sessionOwnDescription || defaultDescription)
+    : (sessionOwnDescription ?? course?.description)
+  const displayLocation = (session as any).location ?? (isContainerSession ? null : course?.location)
+  const displayBringAlong = (session as any).bring_along ?? (isContainerSession ? null : course?.bring_along)
+  const displayDifficulty = (session as any).difficulty ?? (isContainerSession ? null : course?.difficulty)
+  const displayImageUrl = (session as any).image_url ?? (isContainerSession ? null : course?.image_url)
+  const displayMaxSpots = (session as any).max_spots ?? (isContainerSession ? null : course?.max_spots)
   // Bei Events: andere Überschrift für die Description.
   const descriptionHeader = isEvent ? 'Über dieses Event'
     : sessionType === 'single' || sessionType === 'event_credit' ? 'Über die Stunde'

@@ -88,11 +88,46 @@ export default function AdminSessionPage() {
   async function cancelBookingForYogi(bookingId: string, creditId: string | null, sessionId: string) {
     // Sarah-Wunsch 2026-05-25: Robustes Modal statt confirm() — innerhalb 3h
     // vor Stundenbeginn muss Admin bewusst entscheiden, ob der Credit
-    // zurueckgebucht wird. Re-load der Session-Zeit aus DB (statt React-State),
-    // damit der Check auch funktioniert, wenn state aus irgendwelchen Gruenden
-    // stale ist.
+    // zurueckgebucht wird.
+    // Welle 4 (Sarah 2026-05-26): Bei Events (event_free/event_paid) entfaellt
+    // die 3h-Frist-Logik komplett — Events haben kein Credit-System, und Admin
+    // darf jederzeit austragen (Sarah-Wunsch: "rest mach ich manuell").
+    // Bei event_paid innerhalb 7d: nur ein Hinweis-Confirm, dass eine
+    // Bezahlung extern abgewickelt werden muss.
     const { data: freshSession } = await supabase.from('sessions')
-      .select('date, time_start').eq('id', sessionId).single()
+      .select('date, time_start, session_type, price_eur, name').eq('id', sessionId).single()
+    const sessType = freshSession?.session_type
+    const isEvent = sessType === 'event_free' || sessType === 'event_paid'
+    const isPaidEvent = sessType === 'event_paid'
+
+    if (isEvent) {
+      // Events: kein 3h-Modal, direktes Confirm. Bei event_paid + within7d
+      // Hinweis auf externe Erstattung.
+      let confirmText = 'Yogi aus dem Event austragen?'
+      if (isPaidEvent && freshSession) {
+        const sessionStart = new Date(`${freshSession.date}T${freshSession.time_start}`).getTime()
+        const within7d = (sessionStart - Date.now()) <= 7 * 24 * 60 * 60 * 1000 && sessionStart > Date.now()
+        if (within7d) {
+          confirmText = `Yogi aus dem Event austragen?\n\n⚠️ Innerhalb der 7-Tage-Stornofrist — eine eventuell schon geleistete Bezahlung (${freshSession.price_eur || '?'} €) musst du extern erstatten.`
+        }
+      }
+      if (!confirm(confirmText)) return
+      await supabase.from('bookings').update({
+        status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false,
+      }).eq('id', bookingId)
+      await supabase.from('audit_log').insert({
+        action: 'booking_cancelled_by_admin',
+        details: {
+          booking_id: bookingId, session_id: sessionId,
+          session_type: sessType, credit_returned: false, within_3h: false,
+        }
+      })
+      // Keine credit-Aktion noetig (credit_id war null bei Events)
+      loadData()
+      return
+    }
+
+    // Standard-Pfad (course_session / single / event_credit): 3h-Frist-Modal
     let within3h = false
     if (freshSession) {
       const sessionStart = new Date(`${freshSession.date}T${freshSession.time_start}`).getTime()

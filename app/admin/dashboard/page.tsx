@@ -190,9 +190,40 @@ export default function AdminDashboard() {
 
   async function cancelBookingForYogi(bookingId: string, creditId: string | null, sessionId: string) {
     // Sarah-Wunsch 2026-05-25: 3h-Frist-Auswahl als Modal (statt confirm).
-    // Session-Zeit frisch aus DB, damit der Check auch bei stale state stimmt.
+    // Welle 4 (Sarah 2026-05-26): Bei Events kein 3h-Frist-Modal — Admin darf
+    // jederzeit austragen. event_paid + <7d: nur Hinweis auf externe Erstattung.
     const { data: freshSession } = await supabase.from('sessions')
-      .select('date, time_start').eq('id', sessionId).single()
+      .select('date, time_start, session_type, price_eur, name').eq('id', sessionId).single()
+    const sessType = freshSession?.session_type
+    const isEvent = sessType === 'event_free' || sessType === 'event_paid'
+    const isPaidEvent = sessType === 'event_paid'
+
+    if (isEvent) {
+      let confirmText = 'Yogi aus dem Event austragen?'
+      if (isPaidEvent && freshSession) {
+        const sessionStart = new Date(`${freshSession.date}T${freshSession.time_start}`).getTime()
+        const within7d = (sessionStart - Date.now()) <= 7 * 24 * 60 * 60 * 1000 && sessionStart > Date.now()
+        if (within7d) {
+          confirmText = `Yogi aus dem Event austragen?\n\n⚠️ Innerhalb der 7-Tage-Stornofrist — eine eventuell schon geleistete Bezahlung (${freshSession.price_eur || '?'} €) musst du extern erstatten.`
+        }
+      }
+      if (!confirm(confirmText)) return
+      await supabase.from('bookings').update({
+        status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false,
+      }).eq('id', bookingId)
+      await supabase.from('audit_log').insert({
+        action: 'booking_cancelled_by_admin',
+        details: {
+          booking_id: bookingId, session_id: sessionId,
+          session_type: sessType, credit_returned: false, within_3h: false,
+        }
+      })
+      // Reload
+      if (selectedSession) loadSessionDetail(selectedSession)
+      loadData()
+      return
+    }
+
     let within3h = false
     if (freshSession) {
       const sessionStart = new Date(`${freshSession.date}T${freshSession.time_start}`).getTime()

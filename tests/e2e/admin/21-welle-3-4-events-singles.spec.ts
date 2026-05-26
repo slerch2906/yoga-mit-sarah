@@ -56,8 +56,10 @@ test.describe('[E2E] Welle 3/4 Source — /admin/kurse', () => {
     // Genauer Check: Im cancelledSessions-Block selbst (~50 Zeilen ab Anker) darf kein
     // line-through stehen. line-through existiert noch für isExcluded-Yogi-Markierung
     // an anderer Stelle (das ist erwünscht — Yogi ausgeschlossen vom Einzeltermin).
-    const cancelledBlockMatch = src.match(/Abgesagte Stunden & Events[\s\S]{0,2500}?(?=\{\/\*\s*Welle 2\.5)/)
-    expect(cancelledBlockMatch, 'cancelledSessions-Block muss isoliert findbar sein').toBeTruthy()
+    // Eindeutiger JSX-Start: <p className="section-label mt-6">Abgesagte Stunden & Events
+    // (NICHT der frühe Kommentar in Zeile ~219). End-Anker: "Beendete Kurse"-Section-Label.
+    const cancelledBlockMatch = src.match(/section-label[^>]*>Abgesagte Stunden & Events[\s\S]+?section-label[^>]*>Beendete Kurse/)
+    expect(cancelledBlockMatch, 'cancelledSessions-JSX-Block muss isoliert findbar sein (zwischen den beiden section-labels)').toBeTruthy()
     expect(cancelledBlockMatch![0]).not.toMatch(/line-through/)
     // Stattdessen die explizite Differenzierungs-Klassen
     expect(cancelledBlockMatch![0]).toMatch(/text-yoga-text\/60/)

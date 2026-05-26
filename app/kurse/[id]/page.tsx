@@ -411,6 +411,13 @@ export default function SessionDetailPage() {
   const isEventPaid = sessionType === 'event_paid'
   const isEventFree = sessionType === 'event_free'
   const isEvent = isEventPaid || isEventFree
+  // Welle 2.9 (Sarah 2026-05-26): Effective-Open-Logik. SYS-Container haben
+  // is_open=false (Container ist NIE buchbar). Daher fuer single/event_*
+  // wird stattdessen session.is_open genutzt (Default = true wenn NULL).
+  // Bei normalen Kursstunden bleibt course.is_open massgeblich.
+  const effectiveOpen: boolean = isCourseSession
+    ? !!course?.is_open
+    : ((session as any)?.is_open !== false)
   // Für Anzeige: session.name/description haben Vorrang vor course.name/description
   // (course.name = SYS-Container für event_*/single).
   // Sarah-Wunsch 2026-05-26 Welle 2.8: SYS-Container-Description darf NIE
@@ -679,7 +686,7 @@ export default function SessionDetailPage() {
             {/* Welle 2.5: Charity + Events brauchen keinen Credit. Treat als Pseudo-"hat Credit".
                 event_paid → "Verbindlich anmelden, Zahlung extern" Hinweis. */}
             {/* Kurs gesperrt für externe Buchungen */}
-            {!course?.is_open && freeSpots > 0 && (freeCredits > 0 || course?.is_free || isEvent) && (
+            {!effectiveOpen && freeSpots > 0 && (freeCredits > 0 || course?.is_free || isEvent) && (
               <div className="bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga p-4 mb-4">
                 <p className="text-sm font-bold text-yoga-amber-text mb-1">
                   <i className="ti ti-lock mr-1" /> Kurs noch nicht freigegeben
@@ -689,28 +696,28 @@ export default function SessionDetailPage() {
                 </p>
               </div>
             )}
-            {course?.is_free && freeSpots > 0 && course?.is_open && (
+            {course?.is_free && freeSpots > 0 && effectiveOpen && (
               <div className="bg-yoga-green-bg border border-yoga-green-text/20 rounded-yoga p-3 mb-4">
                 <p className="text-sm text-yoga-green-text leading-relaxed">
                   <span className="font-bold">Kostenlose Stunde</span> — kein Credit nötig. Einfach anmelden und teilnehmen.
                 </p>
               </div>
             )}
-            {isEventFree && freeSpots > 0 && course?.is_open && (
+            {isEventFree && freeSpots > 0 && effectiveOpen && (
               <div className="bg-yoga-green-bg border border-yoga-green-text/20 rounded-yoga p-3 mb-4">
                 <p className="text-sm text-yoga-green-text leading-relaxed">
                   <span className="font-bold">Kostenloses Event</span> — einfach anmelden und teilnehmen.
                 </p>
               </div>
             )}
-            {isEventPaid && freeSpots > 0 && course?.is_open && (
+            {isEventPaid && freeSpots > 0 && effectiveOpen && (
               <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 mb-4">
                 <p className="text-sm text-yoga-amber-text leading-relaxed">
                   <span className="font-bold">Verbindlich anmelden</span> — Bezahlung extern (PayPal/Bar). Stornofrist: 7 Tage.
                 </p>
               </div>
             )}
-            {course?.is_open && freeSpots > 0 && (freeCredits > 0 || course?.is_free || isEvent) ? (
+            {effectiveOpen && freeSpots > 0 && (freeCredits > 0 || course?.is_free || isEvent) ? (
               <>
                 {/* Welle 2.5: bei Events keine 3h-Frist-Logik anzeigen */}
                 {within3h && !isEvent ? (

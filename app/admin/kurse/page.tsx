@@ -498,6 +498,42 @@ export default function AdminKursePage() {
     loadData()
   }
 
+  // Welle 2.9 (Sarah 2026-05-26): External-Counter inline auf der Card.
+  // Optimistisch updaten + audit_log Eintrag wenn sich Wert geaendert hat.
+  async function updateExternalCount(sessionId: string, newValue: number) {
+    const v = Math.max(0, Math.floor(newValue))
+    // Optimistic UI
+    setContainerSessions(prev => prev.map((s: any) =>
+      s.id === sessionId ? { ...s, external_participants_count: v } : s
+    ))
+    const current = containerSessions.find((s: any) => s.id === sessionId)
+    const old = current?.external_participants_count ?? 0
+    if (old === v) return
+    await supabase.from('sessions').update({ external_participants_count: v }).eq('id', sessionId)
+    await supabase.from('audit_log').insert({
+      action: 'external_participants_changed',
+      details: { session_id: sessionId, old, new: v },
+    })
+  }
+
+  // Welle 2.9: Loeschen einer Einzelstunde/eines Events von der Karte aus.
+  // Schutz: wenn aktive Bookings existieren, erst absagen lassen.
+  async function deleteContainerSession(sessionId: string, activeBookings: number) {
+    if (activeBookings > 0) {
+      alert('Sage die Stunde zuerst ab (Yogis muessen informiert werden), dann kannst du sie loeschen.')
+      return
+    }
+    if (!confirm('Wirklich loeschen? Diese Aktion kann nicht rueckgaengig gemacht werden.')) return
+    await supabase.from('waitlist').delete().eq('session_id', sessionId)
+    await supabase.from('bookings').delete().eq('session_id', sessionId)
+    await supabase.from('sessions').delete().eq('id', sessionId)
+    await supabase.from('audit_log').insert({
+      action: 'single_or_event_deleted',
+      details: { session_id: sessionId, deleted_from: 'admin_kurse_card' },
+    })
+    loadData()
+  }
+
   async function loadSessions(courseId: string) {
     // Toggle: wenn bereits expanded → einklappen
     if (expandedCourse === courseId) { setExpandedCourse(null); return }
@@ -1408,46 +1444,93 @@ export default function AdminKursePage() {
                 const activeBookings = (s.bookings || []).filter((b: any) => b.status === 'active').length
                 const ext = s.external_participants_count || 0
                 const totalCount = activeBookings + ext
-                const typeBadge = s.session_type === 'single' ? { label: 'Einzelstunde', cls: 'bg-yoga-gray text-yoga-text/70' }
-                  : s.session_type === 'event_free' ? { label: 'Kostenlos', cls: 'bg-yoga-green-bg text-yoga-green-text' }
-                  : s.session_type === 'event_credit' ? { label: 'Credit', cls: 'bg-yoga-amber-bg text-yoga-amber-text' }
-                  : s.session_type === 'event_paid' ? { label: `${s.price_eur} €`, cls: 'bg-yoga-amber-bg text-yoga-amber-text' }
-                  : { label: s.session_type, cls: 'bg-yoga-gray text-yoga-text/70' }
-                // Welle 2.7: Frei/Gesperrt-Pille (sessions.is_open NULL/true = offen)
+                const overbooked = s.max_spots != null && totalCount > s.max_spots
+                // Type-Badge wie der "Kurs/Einzelstunde"-Badge bei Kursen.
+                // Welle 2.9: nutzt 'badge' Klasse fuer konsistente Groesse mit Kursen.
+                const typeBadge = s.session_type === 'single' ? { label: 'Einzelstunde', cls: 'badge-wait' }
+                  : s.session_type === 'event_free' ? { label: 'Kostenlos', cls: 'badge-free' }
+                  : s.session_type === 'event_credit' ? { label: 'Credit', cls: 'badge-wait' }
+                  : s.session_type === 'event_paid' ? { label: `${s.price_eur} €`, cls: 'badge-wait' }
+                  : { label: s.session_type, cls: 'badge-wait' }
                 const isOpen = s.is_open !== false
+                // Welle 2.9 (Sarah 2026-05-26): Layout 1:1 wie Kurs-Card oben drueber.
+                // - Header: Name + Typ-Badge links, Frei/Gesperrt-Pille + Typ-Pille rechts oben (gleiche Groesse via "badge"-Klasse)
+                // - 3 Buttons: Bearbeiten / Teilnehmer / Loeschen
+                // - External-Counter +/- inline ueber Teilnehmer-Zeile
                 return (
                   <div key={s.id} className="card mb-3">
-                    <div className="flex items-start gap-3">
-                      {s.image_url && (
-                        <img src={s.image_url} alt="" className="w-14 h-14 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
-                      )}
-                      <div className="flex-1 min-w-0 cursor-pointer" onClick={() => router.push(`/admin/sessions/${s.id}`)}>
-                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
                           <div className="text-base font-bold truncate">{s.name || '—'}</div>
-                          <span className={`text-xs rounded-full px-2 py-0.5 font-semibold ${typeBadge.cls}`}>{typeBadge.label}</span>
-                          {/* Frei/Gesperrt-Pille — toggle ohne Navigation */}
-                          <button
-                            type="button"
-                            onClick={(ev) => { ev.stopPropagation(); toggleSessionOpen(s.id, isOpen) }}
-                            className={`text-xs rounded-full px-2 py-0.5 font-semibold border-0 cursor-pointer hover:opacity-80 ${
-                              isOpen ? 'bg-yoga-green-bg text-yoga-green-text' : 'bg-yoga-amber-bg text-yoga-amber-text'
-                            }`}
-                            title={isOpen ? 'Klicken zum Sperren' : 'Klicken zum Freigeben'}>
-                            <i className={`ti ${isOpen ? 'ti-lock-open' : 'ti-lock'} text-xs mr-0.5`} />
-                            {isOpen ? 'Frei' : 'Gesperrt'}
-                          </button>
                         </div>
-                        <div className="text-sm text-yoga-text/60">
+                        <div className="text-sm text-yoga-text/50">
                           {new Date(s.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })}
-                          {' · '}{s.time_start?.slice(0,5)} Uhr
+                          {' · '}{s.time_start?.slice(0,5)} Uhr · {s.duration_min} min
                         </div>
-                        <div className="text-sm text-yoga-text/60 mt-0.5">
-                          Teilnehmer: <strong>{totalCount}</strong>{s.max_spots ? `/${s.max_spots}` : ''}
-                          {ext > 0 && <span className="text-xs text-yoga-text/50"> (inkl. {ext} extern)</span>}
+                        {/* External-Counter inline */}
+                        <div className="text-sm text-yoga-text/60 mt-0.5 flex items-center gap-1 flex-wrap">
+                          <span>
+                            Teilnehmer:{' '}
+                            <strong className={overbooked ? 'text-yoga-red-text' : ''}>{totalCount}</strong>
+                            {s.max_spots ? `/${s.max_spots}` : ''}
+                            {overbooked && <span className="ml-1 text-xs font-semibold text-yoga-red-text">· überbucht</span>}
+                          </span>
+                          <span className="text-xs text-yoga-text/45 ml-1">·</span>
+                          <span className="text-xs text-yoga-text/60 ml-1">extern:</span>
+                          <button type="button"
+                            onClick={() => updateExternalCount(s.id, Math.max(0, ext - 1))}
+                            disabled={ext <= 0}
+                            className="w-6 h-6 rounded-full border border-yoga-border2 text-yoga-text/70 text-xs font-bold cursor-pointer hover:opacity-80 disabled:opacity-30 flex items-center justify-center bg-transparent">−</button>
+                          <strong className="text-xs w-4 text-center">{ext}</strong>
+                          <button type="button"
+                            onClick={() => updateExternalCount(s.id, ext + 1)}
+                            className="w-6 h-6 rounded-full border border-yoga-border2 text-yoga-text/70 text-xs font-bold cursor-pointer hover:opacity-80 flex items-center justify-center bg-transparent">+</button>
                         </div>
                       </div>
-                      <i className="ti ti-chevron-right text-yoga-text/30 flex-shrink-0 mt-1 cursor-pointer"
-                        onClick={() => router.push(`/admin/sessions/${s.id}`)} />
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        {/* Typ-Pille rechts oben (gleicher 'badge'-Stil wie 'Kurs' bei Kursen) */}
+                        <span className={`badge ${typeBadge.cls}`}>{typeBadge.label}</span>
+                        {/* Frei/Gesperrt-Pille — toggle (gleicher Stil wie bei Kursen) */}
+                        <button onClick={() => toggleSessionOpen(s.id, isOpen)}
+                          className={`badge border-0 cursor-pointer hover:opacity-80 ${
+                            isOpen ? 'bg-yoga-green-bg text-yoga-green-text' : 'bg-yoga-amber-bg text-yoga-amber-text'
+                          }`}
+                          title={isOpen ? 'Klicken zum Sperren' : 'Klicken zum Freigeben'}>
+                          <i className={`ti ${isOpen ? 'ti-lock-open' : 'ti-lock'} text-xs mr-0.5`} />
+                          {isOpen ? 'Frei' : 'Gesperrt'}
+                        </button>
+                      </div>
+                    </div>
+                    {/* Bild — wenn vorhanden ueber den Buttons */}
+                    {s.image_url && (
+                      <img src={s.image_url} alt={s.name || ''} className="w-full h-32 object-cover rounded-yoga mb-2 border border-yoga-border" />
+                    )}
+                    {/* Buttons-Reihe 1: Bearbeiten / Teilnehmer */}
+                    <div className="flex gap-2 mt-2">
+                      <button onClick={() => router.push(`/admin/sessions/${s.id}?edit=1`)}
+                        className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer">
+                        <i className="ti ti-edit mr-1" />Bearbeiten
+                      </button>
+                      <button onClick={() => router.push(`/admin/sessions/${s.id}`)}
+                        className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70">
+                        <i className="ti ti-users mr-1" />Teilnehmer
+                      </button>
+                    </div>
+                    {/* Buttons-Reihe 2: Stunde absagen + Loeschen (analog Abbrechen+Archivieren bei Kursen) */}
+                    <div className="flex gap-2 mt-2">
+                      {activeBookings > 0 && (
+                        <button onClick={() => router.push(`/admin/sessions/${s.id}?cancel=1`)}
+                          className="flex-1 text-xs text-yoga-text/50 rounded-full py-1.5 font-semibold hover:opacity-80 cursor-pointer border-0"
+                          style={{ background: 'var(--yoga-gray)' }}>
+                          <i className="ti ti-ban mr-1" />Absagen
+                        </button>
+                      )}
+                      <button onClick={() => deleteContainerSession(s.id, activeBookings)}
+                        className="flex-1 text-xs text-yoga-red-text rounded-full py-1.5 font-semibold hover:opacity-80 cursor-pointer border-0"
+                        style={{ background: 'var(--yoga-red-bg)' }}>
+                        <i className="ti ti-trash mr-1" />Löschen
+                      </button>
                     </div>
                   </div>
                 )

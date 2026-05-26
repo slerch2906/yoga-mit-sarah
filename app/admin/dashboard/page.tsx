@@ -91,6 +91,21 @@ export default function AdminDashboard() {
     }
   }, [selectedSession])
 
+  // Welle 3.5 (Sarah 2026-05-26): gleiches Pattern fuer Cancel-Form-Modal und
+  // Cancel-Choice-Modal — Handy-Swipe schliesst das Modal, kein Page-Back.
+  useEffect(() => {
+    if (!showCancelForm && !cancelChoice) return
+    window.history.pushState({ cancelModal: true }, '')
+    const handler = () => {
+      setShowCancelForm(false); setCancelChoice(null)
+    }
+    window.addEventListener('popstate', handler)
+    return () => {
+      window.removeEventListener('popstate', handler)
+      if (window.history.state?.cancelModal) window.history.back()
+    }
+  }, [showCancelForm, cancelChoice])
+
   async function loadData() {
     // KEIN setLoading(true) hier — sonst zeigt Wochenwechsel via Swipe einen leeren
     // Spinner. Alte Daten bleiben bis neue da sind, dann sanfter Re-Render.
@@ -380,6 +395,7 @@ export default function AdminDashboard() {
           timeStart: selectedSession.time_start || '',
           replacementDate: replacementDate || undefined,
           replacementTime: replacementTime || undefined,
+          sessionType: selectedSession.session_type,
         })
         if (replacementDate && replacementTime) {
           await Email.bookingConfirmed({
@@ -389,6 +405,7 @@ export default function AdminDashboard() {
             date: replacementDate,
             timeStart: replacementTime,
             durationMin: selectedSession.duration_min || 75,
+            sessionType: selectedSession.session_type,
           })
         }
       }
@@ -681,6 +698,48 @@ export default function AdminDashboard() {
                   </div>
                 </div>
               )}
+
+              {/* Welle 3.5 (Sarah 2026-05-26): Externe Teilnehmer +/- direkt im
+                  Modal — nur bei nicht-course_session (bei Kursstunden gibts
+                  das nicht). */}
+              {!selectedSession.is_cancelled && selectedSession.session_type && selectedSession.session_type !== 'course_session' && (() => {
+                const ext = selectedSession.external_participants_count || 0
+                const internal = sessionBookings.filter(b => b._type === 'booking' && b.status === 'active').length
+                const cap = selectedSession.max_spots
+                return (
+                  <div className="bg-yoga-gray rounded-yoga p-3 mb-3">
+                    <div className="text-sm font-semibold mb-1">
+                      {internal + ext}{cap ? ` / ${cap}` : ''} Teilnehmer gesamt
+                    </div>
+                    <div className="text-xs text-yoga-text/60 mb-2">
+                      {internal} eingebucht{ext > 0 ? ` · ${ext} extern` : ''}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-yoga-text/60">Externe Teilnehmer:</span>
+                      <button type="button"
+                        onClick={async () => {
+                          const newCount = Math.max(0, ext - 1)
+                          await supabase.from('sessions').update({ external_participants_count: newCount }).eq('id', selectedSession.id)
+                          await supabase.from('audit_log').insert({ action: 'external_participants_changed', details: { session_id: selectedSession.id, old_count: ext, new_count: newCount } })
+                          setSelectedSession((prev: any) => prev ? { ...prev, external_participants_count: newCount } : prev)
+                          loadData()
+                        }}
+                        disabled={ext <= 0}
+                        className="w-7 h-7 rounded-full border border-yoga-border2 text-yoga-text/70 text-sm font-bold cursor-pointer hover:opacity-80 disabled:opacity-30 flex items-center justify-center bg-transparent">−</button>
+                      <strong className="text-sm w-5 text-center">{ext}</strong>
+                      <button type="button"
+                        onClick={async () => {
+                          const newCount = ext + 1
+                          await supabase.from('sessions').update({ external_participants_count: newCount }).eq('id', selectedSession.id)
+                          await supabase.from('audit_log').insert({ action: 'external_participants_changed', details: { session_id: selectedSession.id, old_count: ext, new_count: newCount } })
+                          setSelectedSession((prev: any) => prev ? { ...prev, external_participants_count: newCount } : prev)
+                          loadData()
+                        }}
+                        className="w-7 h-7 rounded-full border border-yoga-border2 text-yoga-text/70 text-sm font-bold cursor-pointer hover:opacity-80 flex items-center justify-center bg-transparent">+</button>
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* Yogi hinzufügen */}
               {!selectedSession.is_cancelled && (
@@ -1031,9 +1090,13 @@ export default function AdminDashboard() {
                     const maxS = (s.session_type && s.session_type !== 'course_session')
                       ? (s.max_spots ?? s.course?.max_spots)
                       : s.course?.max_spots
+                    // Welle 3.5 (Sarah 2026-05-26): externe Teilnehmer mit zaehlen,
+                    // sonst stand bei Events mit 5 Externen weiter "0/12".
+                    const ext = s.external_participants_count || 0
+                    const total = s.active_count + ext
                     return (
-                      <span className={`badge ${maxS && s.active_count >= maxS ? 'badge-full' : 'badge-free'}`}>
-                        {s.active_count}/{maxS ?? '?'}
+                      <span className={`badge ${maxS && total >= maxS ? 'badge-full' : 'badge-free'}`}>
+                        {total}/{maxS ?? '?'}
                       </span>
                     )
                   })()}

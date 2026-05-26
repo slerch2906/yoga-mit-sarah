@@ -659,6 +659,7 @@ export default function AdminSessionPage() {
           reason: reason || undefined,
           replacementDate: hasReplacement ? replacementDate : undefined,
           replacementTime: hasReplacement ? replacementTime : undefined,
+          sessionType: session?.session_type,
         })
 
         // Falls Ersatztermin: auch Buchungsbestätigung für neuen Termin
@@ -671,6 +672,7 @@ export default function AdminSessionPage() {
             date: replacementDate,
             timeStart: replacementTime,
             durationMin: session?.duration_min || 60,
+            sessionType: session?.session_type,
           })
         }
       }

@@ -257,6 +257,7 @@ export default function SessionDetailPage() {
           timeStart: session?.time_start || '',
           durationMin: session?.duration_min || 60,
           isSingle: isSingleForEmail(session),
+          sessionType: (session as any)?.session_type,
         })
       } catch(e) {}
       router.push(`/kurse/${id}/bestaetigung`)
@@ -311,6 +312,7 @@ export default function SessionDetailPage() {
           durationMin: session?.duration_min || 75,
           creditReturned: !late,
           isSingle: isSingleForEmail(session),
+          sessionType: (session as any)?.session_type,
         })
       }
     } catch (e) { console.error('Cancel email error:', e) }
@@ -397,6 +399,7 @@ export default function SessionDetailPage() {
           position,
           unsubscribeToken,
           isSingle: isSingleForEmail(session),
+          sessionType: (session as any)?.session_type,
         })
       } catch(e) {}
     }
@@ -735,7 +738,7 @@ export default function SessionDetailPage() {
             {isEventPaid && freeSpots > 0 && effectiveOpen && (
               <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 mb-4">
                 <p className="text-sm text-yoga-amber-text leading-relaxed">
-                  Schön, dass du dabei sein möchtest! Deine Anmeldung ist <span className="font-bold">verbindlich</span> — die Bezahlung läuft direkt mit Sarah (PayPal oder Bar). Bis <strong>7 Tage</strong> vor dem Event kannst du dich kostenfrei wieder abmelden.
+                  Schön, dass du dabei sein möchtest! Deine Anmeldung ist <span className="font-bold">verbindlich</span> — die Bezahlung läuft direkt mit Sarah (PayPal oder Bar). Bis <strong>7 Tage</strong> vor dem Event kannst du dich kostenfrei wieder abmelden. Danach fällt die <strong>volle Gebühr</strong> an. Du kannst aber gerne einen <strong>Ersatzkandidaten</strong> benennen.
                 </p>
               </div>
             )}
@@ -780,9 +783,11 @@ export default function SessionDetailPage() {
                     <button onClick={handleBook} className="btn-primary mb-2" disabled={actionLoading}>
                       {actionLoading
                         ? 'Wird eingetragen...'
-                        : isEvent
+                        : isEventPaid
                           ? 'Verbindlich anmelden'
-                          : 'Für diese Stunde eintragen'}
+                          : isEventFree
+                            ? 'Jetzt anmelden'
+                            : 'Für diese Stunde eintragen'}
                     </button>
                   </>
                 )}

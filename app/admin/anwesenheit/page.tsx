@@ -78,6 +78,7 @@ function AnwesenheitInner() {
           courseName: mailName,
           date: (session as any)?.date || '',
           timeStart: (session as any)?.time_start || '',
+          sessionType: sessType,
         })
       }
     }

@@ -26,34 +26,36 @@ export const Email = {
 
   // Sarah-Wunsch 2026-05-25: bei is_single Stunden wird im Email-Text
   // "Einzelstunde:" statt "Kurs:" angezeigt. Optional, Default = Kurs.
-  bookingConfirmed: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number; isSingle?: boolean }) =>
+  // Welle 3.5 (Sarah 2026-05-26): zusätzlich sessionType — Edge Function
+  // differenziert dann Texte/Subjects für event_free / event_paid / single.
+  bookingConfirmed: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number; isSingle?: boolean; sessionType?: string }) =>
     sendEmail('booking_confirmed', data),
 
-  bookingCancelled: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; creditReturned: boolean; durationMin?: number; isSingle?: boolean }) =>
+  bookingCancelled: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; creditReturned: boolean; durationMin?: number; isSingle?: boolean; sessionType?: string }) =>
     sendEmail('booking_cancelled', data),
 
-  waitlistJoined: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; position: number; unsubscribeToken?: string; isSingle?: boolean }) =>
+  waitlistJoined: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; position: number; unsubscribeToken?: string; isSingle?: boolean; sessionType?: string }) =>
     sendEmail('waitlist_joined', data),
 
-  waitlistPromoted: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; isSingle?: boolean }) =>
+  waitlistPromoted: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; isSingle?: boolean; sessionType?: string }) =>
     sendEmail('waitlist_promoted', data),
 
-  waitlistOfferLate: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; offerToken: string; isSingle?: boolean }) =>
+  waitlistOfferLate: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; offerToken: string; isSingle?: boolean; sessionType?: string }) =>
     sendEmail('waitlist_offer_late', data),
 
-  sessionCancelled: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; reason?: string; replacementDate?: string; replacementTime?: string; isSingle?: boolean }) =>
+  sessionCancelled: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; reason?: string; replacementDate?: string; replacementTime?: string; isSingle?: boolean; sessionType?: string }) =>
     sendEmail('session_cancelled', data),
 
-  sessionAdded: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number; originalDate?: string; originalTime?: string; isSingle?: boolean }) =>
+  sessionAdded: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number; originalDate?: string; originalTime?: string; isSingle?: boolean; sessionType?: string }) =>
     sendEmail('session_added', data),
 
-  sessionReminder: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number; hoursBefore: number; isSingle?: boolean }) =>
+  sessionReminder: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number; hoursBefore: number; isSingle?: boolean; sessionType?: string }) =>
     sendEmail('session_reminder', data),
 
-  waitlistRemovedCreditUsedElsewhere: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; isSingle?: boolean }) =>
+  waitlistRemovedCreditUsedElsewhere: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; isSingle?: boolean; sessionType?: string }) =>
     sendEmail('waitlist_removed_credit_used_elsewhere', data),
 
-  notifyPlaceFree: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; sessionId: string; isSingle?: boolean }) =>
+  notifyPlaceFree: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; sessionId: string; isSingle?: boolean; sessionType?: string }) =>
     sendEmail('notify_place_free', data),
 
   adminNewYogi: (data: { fullName: string; email: string; courseName?: string }) =>

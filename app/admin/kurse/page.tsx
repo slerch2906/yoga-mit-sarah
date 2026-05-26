@@ -133,17 +133,26 @@ export default function AdminKursePage() {
   // Welle 2.5 (Sarah 2026-05-26): History-Push beim Öffnen eines Formulars,
   // damit Handy-Swipe-Back ODER Browser-Back-Button das Formular schließt
   // (statt zur Dashboard-Seite zurückzugehen).
+  // Welle 3.5 (Sarah 2026-05-26): erweitert auf ALLE Modals dieser Seite —
+  // Teilnehmer-Modals, Folgekurs-Modal, Abbrechen-Modal, Yogi-hinzufügen.
   useEffect(() => {
-    if (showForm || showSingleForm || showEventForm) {
-      window.history.pushState({ formOpen: true }, '', window.location.pathname)
+    const anyOpen = showForm || showSingleForm || showEventForm
+      || !!participantsCourse || !!participantsSession
+      || !!folgekursCourse || !!cancellingCourse
+      || showAddYogiModal
+    if (anyOpen) {
+      window.history.pushState({ modalOpen: true }, '', window.location.pathname)
       const onPop = () => {
         setShowForm(false); setShowSingleForm(false); setShowEventForm(false)
         setEditingSessionId(null)
+        setParticipantsCourse(null); setParticipantsSession(null); setSessionBookings([])
+        setFolgekursCourse(null); setCancellingCourse(null)
+        setShowAddYogiModal(false)
       }
       window.addEventListener('popstate', onPop)
       return () => window.removeEventListener('popstate', onPop)
     }
-  }, [showForm, showSingleForm, showEventForm])
+  }, [showForm, showSingleForm, showEventForm, participantsCourse, participantsSession, folgekursCourse, cancellingCourse, showAddYogiModal])
 
   useEffect(() => {
     if (form.date_start && form.date_end && !form.is_single) {
@@ -198,7 +207,10 @@ export default function AdminKursePage() {
       .select('id, name, date, time_start, duration_min, max_spots, location, description, session_type, price_eur, image_url, is_cancelled, is_open, course_id, external_participants_count, bookings!bookings_session_id_fkey(id, status)')
       .neq('session_type', 'course_session')
       .order('date', { ascending: true })
-    setContainerSessions((cs || []).filter((s: any) => !s.is_cancelled))
+    // Welle 3.5 (Sarah 2026-05-26): Abgesagte Sessions NICHT mehr rausfiltern —
+    // sie sollen in einer eigenen Sektion "Abgesagte Stunden & Events" sichtbar
+    // bleiben, damit Admin sie loeschen/archivieren kann.
+    setContainerSessions(cs || [])
     setLoading(false)
   }
 
@@ -1545,7 +1557,8 @@ export default function AdminKursePage() {
             <p className="section-label mt-6">Geplante Stunden & Events</p>
             {(() => {
               const today = new Date().toISOString().split('T')[0]
-              const upcoming = containerSessions.filter((s: any) => s.date >= today)
+              // Welle 3.5 (Sarah 2026-05-26): abgesagte ausschliessen (eigene Sektion)
+              const upcoming = containerSessions.filter((s: any) => s.date >= today && !s.is_cancelled)
               if (upcoming.length === 0) {
                 return <p className="text-sm text-yoga-text/40 text-center py-4">Noch keine geplanten Stunden oder Events</p>
               }
@@ -1554,7 +1567,7 @@ export default function AdminKursePage() {
             {containerSessions
               .filter((s: any) => {
                 const today = new Date().toISOString().split('T')[0]
-                return s.date >= today
+                return s.date >= today && !s.is_cancelled
               })
               .map((s: any) => {
                 const activeBookings = (s.bookings || []).filter((b: any) => b.status === 'active').length
@@ -1639,21 +1652,20 @@ export default function AdminKursePage() {
                         <i className="ti ti-share mr-1" />Teilen
                       </button>
                     </div>
-                    {/* Buttons-Reihe 2: Stunde absagen + Loeschen (analog Abbrechen+Archivieren bei Kursen)
-                        Welle 2.11: Absagen ist KEIN Yogi-Stunden-Absagen Flow
-                        bei Events (kein Ersatztermin) — bleibt erstmal via
-                        /admin/sessions/[id]?cancel=1 (das Modal dort kennt
-                        bereits die Event-Sonderlogik aus Welle 2.10). */}
+                    {/* Buttons-Reihe 2: Stunde absagen + Löschen.
+                        Welle 3.5 (Sarah 2026-05-26): gleiche Button-Größe wie
+                        obere Reihe (Bearbeiten/Teilnehmer/Teilen) — kein
+                        Mini-Style mehr. */}
                     <div className="flex gap-2 mt-2">
                       {activeBookings > 0 && (
                         <button onClick={() => router.push(`/admin/sessions/${s.id}?cancel=1`)}
-                          className="flex-1 text-xs text-yoga-text/50 rounded-full py-1.5 font-semibold hover:opacity-80 cursor-pointer border-0"
+                          className="flex-1 text-sm rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer border-0 text-yoga-text/70"
                           style={{ background: 'var(--yoga-gray)' }}>
                           <i className="ti ti-ban mr-1" />Absagen
                         </button>
                       )}
                       <button onClick={() => deleteContainerSession(s.id, activeBookings)}
-                        className="flex-1 text-xs text-yoga-red-text rounded-full py-1.5 font-semibold hover:opacity-80 cursor-pointer border-0"
+                        className="flex-1 text-sm rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer border-0 text-yoga-red-text"
                         style={{ background: 'var(--yoga-red-bg)' }}>
                         <i className="ti ti-trash mr-1" />Löschen
                       </button>
@@ -1671,7 +1683,8 @@ export default function AdminKursePage() {
                 der Vergangenheit), nur Teilnehmer + Löschen bleiben. */}
             {(() => {
               const today = new Date().toISOString().split('T')[0]
-              const endedSessions = containerSessions.filter((s: any) => s.date < today)
+              // Welle 3.5: abgesagte ausschliessen (eigene Sektion unten)
+              const endedSessions = containerSessions.filter((s: any) => s.date < today && !s.is_cancelled)
               if (endedSessions.length === 0) return null
               return <>
                 <p className="section-label mt-6">Beendete Stunden & Events</p>
@@ -1708,16 +1721,71 @@ export default function AdminKursePage() {
                         </div>
                       </div>
                       {/* Beendet: nur Teilnehmer-Ansicht + Löschen (kein Edit, kein Absagen)
-                          Welle 2.11: Modal statt Seite. */}
+                          Welle 2.11: Modal statt Seite.
+                          Welle 3.5: Button-Größe einheitlich (kein Mini-Style). */}
                       <div className="flex gap-2 mt-2">
                         <button onClick={() => loadSessionParticipants(s)}
                           className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70">
                           <i className="ti ti-users mr-1" />Teilnehmer
                         </button>
                         <button onClick={() => deleteContainerSession(s.id, activeBookings)}
-                          className="text-xs text-yoga-red-text rounded-full py-1.5 px-4 font-semibold hover:opacity-80 cursor-pointer border-0"
+                          className="flex-1 text-sm rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer border-0 text-yoga-red-text"
                           style={{ background: 'var(--yoga-red-bg)' }}>
                           <i className="ti ti-trash mr-1" />Löschen
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </>
+            })()}
+
+            {/* Welle 3.5 (Sarah 2026-05-26): Abgesagte Stunden & Events —
+                eigene Sektion. Karten sind durchgestrichen rot markiert und
+                bieten nur "Endgültig löschen" — analog Abgebrochene Kurse.
+                Wenn null: Sektion ausgeblendet. */}
+            {(() => {
+              const cancelledSessions = containerSessions.filter((s: any) => s.is_cancelled)
+              if (cancelledSessions.length === 0) return null
+              return <>
+                <p className="section-label mt-6">Abgesagte Stunden & Events</p>
+                {cancelledSessions.map((s: any) => {
+                  const activeBookings = (s.bookings || []).filter((b: any) => b.status === 'active').length
+                  const typeBadge = s.session_type === 'single' ? { label: 'Einzelstunde', cls: 'badge-wait' }
+                    : s.session_type === 'event_free' ? { label: 'Kostenlos', cls: 'badge-free' }
+                    : s.session_type === 'event_credit' ? { label: 'Credit', cls: 'badge-wait' }
+                    : s.session_type === 'event_paid' ? { label: `${s.price_eur} €`, cls: 'badge-wait' }
+                    : { label: s.session_type, cls: 'badge-wait' }
+                  return (
+                    <div key={s.id} className="card mb-3 opacity-70" data-cancelled-session>
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <div className="text-base font-bold truncate line-through text-yoga-text/60">{s.name || '—'}</div>
+                          </div>
+                          <div className="text-sm text-yoga-text/50">
+                            {new Date(s.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })}
+                            {' · '}{s.time_start?.slice(0,5)} Uhr · {s.duration_min} min
+                          </div>
+                          {s.cancel_reason && (
+                            <div className="text-xs text-yoga-text/50 mt-0.5 italic">Grund: {s.cancel_reason}</div>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <span className={`badge ${typeBadge.cls}`}>{typeBadge.label}</span>
+                          <span className="badge bg-yoga-red-bg text-yoga-red-text border-0">
+                            <i className="ti ti-ban text-xs mr-0.5" />Abgesagt
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 mt-2">
+                        <button onClick={() => loadSessionParticipants(s)}
+                          className="flex-1 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70">
+                          <i className="ti ti-users mr-1" />Teilnehmer
+                        </button>
+                        <button onClick={() => deleteContainerSession(s.id, activeBookings)}
+                          className="flex-1 text-sm bg-yoga-red-bg text-yoga-red-text rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer border-0">
+                          <i className="ti ti-trash mr-1" />Endgültig löschen
                         </button>
                       </div>
                     </div>
@@ -2395,11 +2463,13 @@ export default function AdminKursePage() {
       )}
 
       {/* Welle 2.11 (Sarah 2026-05-26): Session-Teilnehmer-Modal
-          Klicken auf "Teilnehmer" bei Einzelstunde/Event oeffnet jetzt dieses
-          Modal — analog dem Kurs-Teilnehmer-Modal oben. Fuer komplexere Aktionen
-          (Yogi hinzufuegen, Buchung verschieben) gibt es weiter den "Stunde
-          verwalten" Link unten. */}
-      {participantsSession && (
+          Welle 3.5: zeigt jetzt auch externe Teilnehmer mit +/- Buttons. */}
+      {participantsSession && (() => {
+        const ext = participantsSession.external_participants_count || 0
+        const internal = sessionBookings.length
+        const total = internal + ext
+        const cap = participantsSession.max_spots
+        return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay" onClick={() => { setParticipantsSession(null); setSessionBookings([]) }}>
           <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-1">
@@ -2411,6 +2481,35 @@ export default function AdminKursePage() {
             <p className="text-sm text-yoga-text/50 mb-3">
               {participantsSession.name || '—'} · {new Date(participantsSession.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' })} · {participantsSession.time_start?.slice(0,5)} Uhr
             </p>
+
+            {/* Welle 3.5: Counter-Übersicht direkt unter dem Titel */}
+            <div className="bg-yoga-gray rounded-yoga p-3 mb-4">
+              <div className="text-sm font-semibold mb-1">
+                {total}{cap ? ` / ${cap}` : ''} Teilnehmer gesamt
+              </div>
+              <div className="text-xs text-yoga-text/60 mb-2">
+                {internal} eingebucht{ext > 0 ? ` · ${ext} extern` : ''}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-yoga-text/60">Externe Teilnehmer:</span>
+                <button type="button"
+                  onClick={async () => {
+                    await updateExternalCount(participantsSession.id, Math.max(0, ext - 1))
+                    setParticipantsSession((prev: any) => prev ? { ...prev, external_participants_count: Math.max(0, ext - 1) } : prev)
+                  }}
+                  disabled={ext <= 0}
+                  className="w-7 h-7 rounded-full border border-yoga-border2 text-yoga-text/70 text-sm font-bold cursor-pointer hover:opacity-80 disabled:opacity-30 flex items-center justify-center bg-transparent">−</button>
+                <strong className="text-sm w-5 text-center">{ext}</strong>
+                <button type="button"
+                  onClick={async () => {
+                    await updateExternalCount(participantsSession.id, ext + 1)
+                    setParticipantsSession((prev: any) => prev ? { ...prev, external_participants_count: ext + 1 } : prev)
+                  }}
+                  className="w-7 h-7 rounded-full border border-yoga-border2 text-yoga-text/70 text-sm font-bold cursor-pointer hover:opacity-80 flex items-center justify-center bg-transparent">+</button>
+              </div>
+            </div>
+
+            <p className="section-label">Eingebuchte Yogis ({internal})</p>
             {sessionBookings.length === 0 ? (
               <p className="text-sm text-yoga-text/40 text-center py-6">Noch keine Buchungen</p>
             ) : sessionBookings.map((b: any) => (
@@ -2432,11 +2531,12 @@ export default function AdminKursePage() {
             {/* Welle 2.11: Buchungen manuell aendern weiterhin via /admin/sessions/[id] */}
             <button onClick={() => router.push(`/admin/sessions/${participantsSession.id}`)}
               className="w-full mt-4 text-sm border border-yoga-border2 rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer text-yoga-text/70 bg-transparent">
-              <i className="ti ti-settings mr-1" />Stunde verwalten (Yogi hinzufuegen / Absagen)
+              <i className="ti ti-settings mr-1" />Stunde verwalten (Yogi hinzufügen)
             </button>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* Yogi zu Kurs hinzufügen Modal */}
       {showAddYogiModal && participantsCourse && (

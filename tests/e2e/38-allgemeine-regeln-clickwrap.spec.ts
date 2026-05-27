@@ -85,8 +85,12 @@ test.describe('[E2E] Click-Wrap Rechtliches — Source-Smoke', () => {
     const src = read('app/rechtliches/page.tsx')
     expect(src).toMatch(/agb-drive-upload/)
     expect(src).toMatch(/uploadToEdgeFunction/)
-    // x-function-secret im Header
-    expect(src).toMatch(/x-function-secret/)
+    // Welle S1/H8 (Sarah 2026-05-27): Edge-Function-Secret nicht mehr clientseitig.
+    // Aufruf laeuft jetzt ueber server-side API-Route /api/agb-drive-upload
+    // mit Bearer-Token. Die Route forwarded mit EDGE_FUNCTION_SECRET intern.
+    const apiRoute = read('app/api/agb-drive-upload/route.ts')
+    expect(apiRoute).toMatch(/EDGE_FUNCTION_SECRET|x-function-secret/)
+    expect(apiRoute).toMatch(/Bearer|auth\.getUser/)
   })
 
   test('lib/agb-version.ts hat 3 Helper: getCurrentAgbVersion, getAgbVersionByOrder, getAgbChangelogSince', async () => {

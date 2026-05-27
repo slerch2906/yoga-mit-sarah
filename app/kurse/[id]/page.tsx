@@ -84,9 +84,13 @@ export default function SessionDetailPage() {
       origin = orig
     }
 
-    const { count: bookingCount } = await supabase
-      .from('bookings').select('*', { count: 'exact', head: true })
-      .eq('session_id', id).eq('status', 'active')
+    // Welle S1/H4 (Sarah 2026-05-27): bookings.select count haut durch neue RLS
+    // ('user_id = auth.uid()') falsche Zahlen raus (Yogi sieht nur eigene).
+    // Stattdessen RPC mit SECURITY DEFINER → anonyme Counts ohne PII-Leak.
+    const { data: countRows } = await supabase.rpc('get_session_booking_counts', {
+      p_session_ids: [id],
+    })
+    const bookingCount = (countRows as any[])?.[0]?.booking_count ?? 0
 
     // Welle 6 (Sarah 2026-05-27): isEnrolled-Check für effectiveOpen-Override
     // bei Wieder-Buchung nach Selbst-Abmeldung in einem Kurs auf den der Yogi

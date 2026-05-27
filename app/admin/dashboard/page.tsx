@@ -7,6 +7,7 @@ import { Email } from '@/lib/email'
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import { useSwipe } from '@/lib/useSwipe'
 import { selectCreditForBooking } from '@/lib/credit-selector'
+import { escapeForOrFilter } from '@/lib/search-sanitize'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import WeekPickerPopover from '@/components/WeekPickerPopover'
@@ -267,15 +268,34 @@ export default function AdminDashboard() {
     // korrekten Audit-Snapshot (selectedSession kann stale sein).
     const { data: _sessAudit } = await supabase.from('sessions')
       .select('name, date, time_start').eq('id', sessionId).maybeSingle()
-    await supabase.from('audit_log').insert({
-      action: 'booking_cancelled_by_admin',
-      details: { booking_id: bookingId, session_id: sessionId, credit_returned: creditReturned,
-                 within_3h: within3h,
-                 // Welle 6A: session_type + name für klares Protokoll
-                 session_type: sessionType || null,
-                 name: _sessAudit?.name || null,
-                 session_date: _sessAudit?.date, session_time: _sessAudit?.time_start }
-    })
+    // Welle S2/H14 (Sarah 2026-05-27): Audit-Insert abgesichert — Booking-
+    // Cancel ist schon committed; Audit-Fehler darf Workflow nicht stoppen.
+    try {
+      const { error: auditErr } = await supabase.from('audit_log').insert({
+        action: 'booking_cancelled_by_admin',
+        details: { booking_id: bookingId, session_id: sessionId, credit_returned: creditReturned,
+                   within_3h: within3h,
+                   // Welle 6A: session_type + name für klares Protokoll
+                   session_type: sessionType || null,
+                   name: _sessAudit?.name || null,
+                   session_date: _sessAudit?.date, session_time: _sessAudit?.time_start }
+      })
+      if (auditErr) throw auditErr
+    } catch (auditErr: any) {
+      console.error('Audit-Log-Insert fehlgeschlagen (booking_cancelled_by_admin/dashboard):', auditErr)
+      try {
+        await supabase.from('admin_notifications').insert({
+          type: 'audit_log_insert_failed',
+          message: 'Audit-Eintrag fuer booking_cancelled_by_admin (Dashboard) fehlgeschlagen',
+          details: {
+            action: 'booking_cancelled_by_admin',
+            attempted_payload: { booking_id: bookingId, session_id: sessionId, credit_returned: creditReturned, within_3h: within3h, source: 'dashboard' },
+            error_message: auditErr?.message || String(auditErr),
+          },
+          read: false,
+        })
+      } catch (notifErr) { console.error('admin_notifications audit_log_insert_failed:', notifErr) }
+    }
 
     // Sarah-Regel 2026-05-23: zentraler Helper mit 90-Min-Cutoff.
     try { await promoteWaitlistOrOfferLate(supabase, sessionId) } catch(e) { console.error('promote:', e) }
@@ -359,10 +379,14 @@ export default function AdminDashboard() {
   async function searchDashYogis(q: string) {
     setDashYogiSearch(q)
     if (q.length < 2) { setDashYogiResults([]); return }
+    // Welle S2/M10 (Sarah 2026-05-27): Sonderzeichen aus PostgREST-OR-Filter
+    // entfernen, sonst crasht der Query bei "O'Brien" / %-Eingabe.
+    const safeQ = escapeForOrFilter(q)
+    if (safeQ.length < 2) { setDashYogiResults([]); return }
     const { data } = await supabase.from('profiles')
       .select('id, first_name, last_name, email, is_dummy, credits(*)')
       .eq('is_admin', false)
-      .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`)
+      .or(`first_name.ilike.%${safeQ}%,last_name.ilike.%${safeQ}%,email.ilike.%${safeQ}%`)
       .limit(8)
     const bookedIds = sessionBookings.filter(b => b._type === 'booking' && b.status === 'active').map((b: any) => b.user_id || b.profile?.id)
     setDashYogiResults((data || []).filter((y: any) => !bookedIds.includes(y.id)))
@@ -518,12 +542,86 @@ export default function AdminDashboard() {
         }).eq('id', selectedSession.id)
 
         // Credits wieder verbuchen für aktive Buchungen
+        // Welle S2/H11 (Sarah 2026-05-27): Credit-Window-Check vor dem
+        // automatischen Re-Enroll. Ungueltige Credits (expired oder valid_from
+        // noch in Zukunft) NICHT eintragen — Yogi-Banner + Admin-Notification.
+        const _replacementStart = new Date(`${replacementDate}T${replacementTime.length === 5 ? replacementTime + ':00' : replacementTime}`)
         for (const b of activeBookings) {
-          // Neue Buchung für Ersatztermin
-          await supabase.from('bookings').insert({
-            user_id: b.user_id, session_id: newSession.id,
-            credit_id: b.credit_id, type: b.type, status: 'active'
-          })
+          if (!b.credit_id) {
+            // Kein Credit (z.B. Event) — Buchung wie bisher anlegen.
+            await supabase.from('bookings').insert({
+              user_id: b.user_id, session_id: newSession.id,
+              credit_id: null, type: b.type, status: 'active'
+            })
+            continue
+          }
+          const { data: credit } = await supabase.from('credits')
+            .select('id, expires_at, valid_from, model, course_id')
+            .eq('id', b.credit_id).maybeSingle()
+          const expiresOk = !credit?.expires_at || _replacementStart <= new Date(credit.expires_at)
+          const validFromOk = !credit?.valid_from || _replacementStart >= new Date(credit.valid_from)
+          if (credit && expiresOk && validFromOk) {
+            await supabase.from('bookings').insert({
+              user_id: b.user_id, session_id: newSession.id,
+              credit_id: b.credit_id, type: b.type, status: 'active'
+            })
+          } else {
+            const reasonCode = !expiresOk ? 'expires_before_replacement' : 'valid_from_after_replacement'
+            const _courseName = selectedSession.name || (selectedSession as any).course?.name || ''
+            try {
+              await supabase.from('audit_log').insert({
+                action: 'replacement_credit_invalid',
+                details: {
+                  original_session_id: selectedSession.id,
+                  replacement_session_id: newSession.id,
+                  credit_id: b.credit_id,
+                  reason: reasonCode,
+                  user_id: b.user_id,
+                  source: 'dashboard',
+                },
+              })
+            } catch (e) { console.error('audit replacement_credit_invalid:', e) }
+            try {
+              await supabase.from('yogi_notifications').insert({
+                user_id: b.user_id,
+                type: 'replacement_credit_invalid',
+                payload: {
+                  original_session_id: selectedSession.id,
+                  replacement_session_id: newSession.id,
+                  replacement_date: replacementDate,
+                  replacement_time: replacementTime,
+                  course_name: _courseName,
+                },
+              })
+            } catch (e) { console.error('yogi_notifications replacement_credit_invalid:', e) }
+            try {
+              await supabase.from('admin_notifications').insert({
+                type: 'replacement_credit_invalid',
+                message: `Ersatztermin-Auto-Buchung fuer ${b.profile?.first_name || 'Yogi'} ${b.profile?.last_name || ''} fehlgeschlagen (${reasonCode === 'expires_before_replacement' ? 'Credit abgelaufen' : 'Credit noch nicht gueltig'}).`,
+                details: {
+                  user_id: b.user_id,
+                  original_session_id: selectedSession.id,
+                  replacement_session_id: newSession.id,
+                  credit_id: b.credit_id,
+                  reason: reasonCode,
+                  replacement_date: replacementDate,
+                  replacement_time: replacementTime,
+                  course_name: _courseName,
+                  source: 'dashboard',
+                },
+                read: false,
+              })
+            } catch (e) { console.error('admin_notifications replacement_credit_invalid:', e) }
+            try {
+              await Email.adminReplacementCreditInvalid({
+                yogiName: `${b.profile?.first_name || ''} ${b.profile?.last_name || ''}`.trim() || 'Yogi',
+                courseName: _courseName,
+                originalDate: selectedSession.date || '',
+                replacementDate,
+                reason: reasonCode as any,
+              })
+            } catch (e) { /* nicht-kritisch */ }
+          }
           // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
         }
       }

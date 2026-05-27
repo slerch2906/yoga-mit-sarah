@@ -206,17 +206,33 @@ async function notifyAllSubscribers(
   const { data: notifyRows } = await supabase.from('waitlist')
     .select('*, profile:profiles(email, first_name)')
     .eq('session_id', sessionId).eq('type', 'notify')
+  // Welle S2/M4 (Sarah 2026-05-27): Vorher wurden alle notify-Eintraege
+  // pauschal geloescht — bei Brevo-Down war die Yogi-Subscription weg, ohne
+  // dass die Mail je ankam. Jetzt tracken wir pro Eintrag, ob die Mail
+  // erfolgreich rausging, und loeschen NUR die erfolgreichen aus der Tabelle.
+  const succeededUserIds: string[] = []
   for (const nu of (notifyRows || [])) {
-    if (!(nu as any).profile?.email) continue
+    const userId = (nu as any).user_id
+    if (!(nu as any).profile?.email) {
+      // Kein Email-Adress = nichts zu schicken — Eintrag dennoch loeschen,
+      // sonst bleibt er fuer immer haengen.
+      if (userId) succeededUserIds.push(userId)
+      continue
+    }
     try {
-      await Email.notifyPlaceFree({
+      const result = await Email.notifyPlaceFree({
         email: (nu as any).profile.email,
         firstName: (nu as any).profile.first_name || 'Yogi',
         courseName: meta.courseName, date: meta.dateStr, timeStart: meta.timeStr,
         sessionId,
       })
+      if (result && result.ok !== false && userId) succeededUserIds.push(userId)
     } catch (e) { console.error('notifyPlaceFree email:', e) }
   }
-  // Notify-Einträge nach Versand entfernen (existing behavior)
-  await supabase.from('waitlist').delete().eq('session_id', sessionId).eq('type', 'notify')
+  // Nur die erfolgreich benachrichtigten notify-Eintraege loeschen.
+  if (succeededUserIds.length > 0) {
+    await supabase.from('waitlist').delete()
+      .eq('session_id', sessionId).eq('type', 'notify')
+      .in('user_id', succeededUserIds)
+  }
 }

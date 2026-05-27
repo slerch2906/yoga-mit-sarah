@@ -258,8 +258,40 @@ export default function ProfilPage() {
     }
 
     if (field === 'email') {
-      const { error } = await supabase.auth.updateUser({ email: value })
-      if (error) { alert('Fehler: ' + error.message); return }
+      // Welle S2/M11 (Sarah 2026-05-27): Auth-Email UND Profile-Email muessen
+      // synchron bleiben. Vorher wurde nur auth.updateUser aufgerufen — die
+      // profiles-Tabelle hat die alte Email behalten, was an vielen Stellen
+      // (Mails, Suche, Admin-Listen) zu Divergenz fuehrte. Jetzt:
+      //  1) auth.updateUser, bei Fehler: abbrechen, kein profiles-Update.
+      //  2) profiles.update, bei Fehler: best-effort auth-Rollback +
+      //     Audit + admin_notifications.
+      const previousEmail = userEmail
+      const { error: authErr } = await supabase.auth.updateUser({ email: value })
+      if (authErr) { alert('Fehler: ' + authErr.message); return }
+      const { error: profileErr } = await supabase.from('profiles').update({ email: value }).eq('id', user.id)
+      if (profileErr) {
+        console.error('profiles.email update fehlgeschlagen:', profileErr)
+        // Best-Effort: Auth-Email zuruecksetzen, damit Auth & Profile wieder synchron sind.
+        if (previousEmail) {
+          try { await supabase.auth.updateUser({ email: previousEmail }) } catch (e) { console.error('Auth-Rollback fehlgeschlagen:', e) }
+        }
+        try {
+          await supabase.from('audit_log').insert({
+            user_id: user.id, action: 'profile_email_update_failed',
+            details: { attempted_email: value, previous_email: previousEmail, error_message: profileErr.message },
+          })
+        } catch (e) { console.error('Audit profile_email_update_failed:', e) }
+        try {
+          await supabase.from('admin_notifications').insert({
+            type: 'profile_email_update_failed',
+            message: 'Email-Aenderung im Profil fehlgeschlagen — Auth wurde zurueckgesetzt.',
+            details: { user_id: user.id, attempted_email: value, previous_email: previousEmail, error_message: profileErr.message },
+            read: false,
+          })
+        } catch (e) { console.error('admin_notifications profile_email_update_failed:', e) }
+        alert('Email-Änderung fehlgeschlagen. Bitte erneut versuchen.')
+        return
+      }
       setUserEmail(value)
     } else {
       await supabase.from('profiles').update({ [field]: value }).eq('id', user.id)

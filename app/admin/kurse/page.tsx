@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Email } from '@/lib/email'
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import { selectCreditForBooking } from '@/lib/credit-selector'
+import { escapeForOrFilter } from '@/lib/search-sanitize'
 import { createClient } from '@/lib/supabase/client'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
@@ -367,8 +368,11 @@ export default function AdminKursePage() {
     if (!_evDur || _evDur <= 0) { alert('Bitte Dauer in Minuten angeben.'); return }
     if (!_evMax || _evMax <= 0) { alert('Bitte max. Teilnehmer angeben.'); return }
     if (eventForm.payment_type === 'paid') {
-      const p = parseFloat(eventForm.price_eur)
-      if (!p || p <= 0) { alert('Bitte Preis angeben'); return }
+      // Welle S2/M12 (Sarah 2026-05-27): Deutsches Komma "5,50" → "5.50"
+      // normalisieren, sonst kuerzt parseFloat stillschweigend auf 5.
+      const normalized = String(eventForm.price_eur).replace(',', '.')
+      const p = parseFloat(normalized)
+      if (isNaN(p) || p <= 0) { alert('Bitte gültigen Preis eingeben (z.B. 5.50 oder 5,50)'); return }
     }
     setSavingSingleOrEvent(true)
     try {
@@ -382,7 +386,8 @@ export default function AdminKursePage() {
         description: eventForm.description || null,
         max_spots: _evMax,
         image_url: eventForm.image_url || null,
-        price_eur: eventForm.payment_type === 'paid' ? parseFloat(eventForm.price_eur) : null,
+        // Welle S2/M12: gleiches Normalisieren wie oben in der Validierung.
+        price_eur: eventForm.payment_type === 'paid' ? parseFloat(String(eventForm.price_eur).replace(',', '.')) : null,
         bring_along: eventForm.bring_along || null,
         difficulty: eventForm.difficulty || null,
       }
@@ -1185,10 +1190,14 @@ export default function AdminKursePage() {
   async function searchYogisForCourse(q: string) {
     setAddYogiSearch(q)
     if (q.length < 2) { setAddYogiResults([]); return }
+    // Welle S2/M10 (Sarah 2026-05-27): Sonderzeichen aus dem PostgREST-OR-
+    // Filter rausziehen, sonst crasht "O'Brien" oder ein %-Zeichen den Query.
+    const safeQ = escapeForOrFilter(q)
+    if (safeQ.length < 2) { setAddYogiResults([]); return }
     const { data } = await supabase.from('profiles')
       .select('id, first_name, last_name, email, is_dummy, credits(*)')
       .eq('is_admin', false)
-      .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`)
+      .or(`first_name.ilike.%${safeQ}%,last_name.ilike.%${safeQ}%,email.ilike.%${safeQ}%`)
       .limit(8)
     // Filter already enrolled
     const enrolledIds = participants.map((p: any) => p.id)
@@ -1443,10 +1452,14 @@ export default function AdminKursePage() {
   async function searchYogisForSession(q: string) {
     setSessionAddYogiSearch(q)
     if (q.length < 2) { setSessionAddYogiResults([]); return }
+    // Welle S2/M10 (Sarah 2026-05-27): Sonderzeichen-Sanitize gegen
+    // PostgREST-OR-Filter-Crash.
+    const safeQ = escapeForOrFilter(q)
+    if (safeQ.length < 2) { setSessionAddYogiResults([]); return }
     const { data } = await supabase.from('profiles')
       .select('id, first_name, last_name, email, is_dummy, credits(*)')
       .eq('is_admin', false)
-      .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`)
+      .or(`first_name.ilike.%${safeQ}%,last_name.ilike.%${safeQ}%,email.ilike.%${safeQ}%`)
       .limit(8)
     const bookedIds = sessionBookings.map((b: any) => b.user_id)
     setSessionAddYogiResults((data || []).filter(y => !bookedIds.includes(y.id)))

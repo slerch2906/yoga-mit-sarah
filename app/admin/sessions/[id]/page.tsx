@@ -7,6 +7,7 @@ import { Email } from '@/lib/email'
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import { isExcluded } from '@/lib/session-status'
 import { selectCreditForBooking } from '@/lib/credit-selector'
+import { escapeForOrFilter } from '@/lib/search-sanitize'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -53,10 +54,14 @@ export default function AdminSessionPage() {
   async function searchYogis(q: string) {
     setYogiSearch(q)
     if (q.length < 2) { setYogiResults([]); return }
+    // Welle S2/M10 (Sarah 2026-05-27): Sonderzeichen-Sanitize fuer PostgREST-
+    // OR-Filter — Apostrophe/%/Komma haben den Query bisher gesprengt.
+    const safeQ = escapeForOrFilter(q)
+    if (safeQ.length < 2) { setYogiResults([]); return }
     const { data } = await supabase.from('profiles')
       .select('id, first_name, last_name, email, is_dummy, credits(*)')
       .eq('is_admin', false)
-      .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`)
+      .or(`first_name.ilike.%${safeQ}%,last_name.ilike.%${safeQ}%,email.ilike.%${safeQ}%`)
       .limit(8)
     // Filter already booked
     const bookedIds = bookings.map((b: any) => b.user_id)
@@ -166,15 +171,35 @@ export default function AdminSessionPage() {
     // Wenn Credit NICHT zurueckgebucht werden soll: cancel_late=true verhindert
     // den trg_sync_credit_used Trigger (alte Sarah-Regel: cancel_late=true = Credit verfaellt).
 
-    await supabase.from('audit_log').insert({
-      action: 'booking_cancelled_by_admin',
-      details: { booking_id: bookingId, session_id: sessionId, credit_returned: creditReturned,
-                 within_3h: within3h,
-                 // Welle 6A: session_type + name für klares Protokoll
-                 session_type: session?.session_type || null,
-                 name: session?.name || null,
-                 session_date: session?.date, session_time: session?.time_start }
-    })
+    // Welle S2/H14 (Sarah 2026-05-27): Audit-Insert in try/catch — Booking-
+    // Cancel ist schon committed; Audit-Fehler darf den Workflow nicht stoppen
+    // (aber Sarah bekommt eine admin_notifications-Sichtbarkeit).
+    try {
+      const { error: auditErr } = await supabase.from('audit_log').insert({
+        action: 'booking_cancelled_by_admin',
+        details: { booking_id: bookingId, session_id: sessionId, credit_returned: creditReturned,
+                   within_3h: within3h,
+                   // Welle 6A: session_type + name für klares Protokoll
+                   session_type: session?.session_type || null,
+                   name: session?.name || null,
+                   session_date: session?.date, session_time: session?.time_start }
+      })
+      if (auditErr) throw auditErr
+    } catch (auditErr: any) {
+      console.error('Audit-Log-Insert fehlgeschlagen (booking_cancelled_by_admin):', auditErr)
+      try {
+        await supabase.from('admin_notifications').insert({
+          type: 'audit_log_insert_failed',
+          message: 'Audit-Eintrag fuer booking_cancelled_by_admin fehlgeschlagen',
+          details: {
+            action: 'booking_cancelled_by_admin',
+            attempted_payload: { booking_id: bookingId, session_id: sessionId, credit_returned: creditReturned, within_3h: within3h },
+            error_message: auditErr?.message || String(auditErr),
+          },
+          read: false,
+        })
+      } catch (notifErr) { console.error('admin_notifications audit_log_insert_failed:', notifErr) }
+    }
 
     // Sarah-Regel 2026-05-23: zentraler Promote-Helper mit 90-Min-Cutoff-Logic.
     // > 90 Min vor Stunde: erster Waitlist-Yogi wird auto-promoted (+Email)
@@ -495,8 +520,12 @@ export default function AdminSessionPage() {
         image_url: editForm.image_url || null,
       }
       if (session.session_type === 'event_paid') {
-        const p = parseFloat(editForm.price_eur)
-        if (!p || p <= 0) { alert('Bitte gültigen Preis angeben'); setSavingEdit(false); return }
+        // Welle S2/M12 (Sarah 2026-05-27): Deutsche Eingabe-Konvention "5,50"
+        // akzeptieren — vorher hat parseFloat("5,50") → 5 zurueckgegeben und
+        // den Preis stillschweigend verfaelscht.
+        const normalized = String(editForm.price_eur).replace(',', '.')
+        const p = parseFloat(normalized)
+        if (isNaN(p) || p <= 0) { alert('Bitte gültigen Preis eingeben (z.B. 5.50 oder 5,50)'); setSavingEdit(false); return }
         patch.price_eur = p
       }
       // Welle 2.6 (Sarah 2026-05-26): Externe Teilnehmer editierbar.
@@ -733,15 +762,88 @@ export default function AdminSessionPage() {
       }).eq('id', booking.id)
 
       // Credit zurückbuchen ODER direkt in Ersatztermin einbuchen
+      // Welle S2/H11 (Sarah 2026-05-27): Vor dem Re-Enroll prüfen, ob der
+      // Credit zum Ersatztermin überhaupt gültig ist (8d-Nachhol-Fenster /
+      // valid_from / expires_at). Ohne Check landeten abgelaufene oder noch
+      // nicht aktive Credits in einem Ersatztermin — Yogi zahlt doppelt.
+      // Wenn ungueltig: keine Buchung anlegen, stattdessen Yogi-Banner +
+      // admin-Notification + Audit. Yogi muss dann selbst entscheiden /
+      // sich melden.
       if (replacementSessionId && booking.credit_id) {
-        // Direkt in Ersatztermin einbuchen – Credit bleibt verbraucht
-        await supabase.from('bookings').insert({
-          user_id: booking.user_id,
-          session_id: replacementSessionId,
-          credit_id: booking.credit_id,
-          type: booking.type,
-          status: 'active',
-        })
+        const { data: credit } = await supabase.from('credits')
+          .select('id, expires_at, valid_from, model, course_id')
+          .eq('id', booking.credit_id).maybeSingle()
+        const replacementStart = new Date(`${replacementDate}T${replacementTime.length === 5 ? replacementTime + ':00' : replacementTime}`)
+        const expiresOk = !credit?.expires_at || replacementStart <= new Date(credit.expires_at)
+        const validFromOk = !credit?.valid_from || replacementStart >= new Date(credit.valid_from)
+        if (credit && expiresOk && validFromOk) {
+          // OK — direkt in Ersatztermin einbuchen, Credit bleibt verbraucht.
+          await supabase.from('bookings').insert({
+            user_id: booking.user_id,
+            session_id: replacementSessionId,
+            credit_id: booking.credit_id,
+            type: booking.type,
+            status: 'active',
+          })
+        } else {
+          // Credit ungueltig fuer Ersatztermin — keine automatische Buchung.
+          // Credit wird durch trg_sync_credit_used wegen der vorherigen
+          // Booking-Cancellation regulaer zurueckgegeben.
+          const reasonCode = !expiresOk ? 'expires_before_replacement' : 'valid_from_after_replacement'
+          const _courseName = session?.course?.name || session?.name || ''
+          try {
+            await supabase.from('audit_log').insert({
+              action: 'replacement_credit_invalid',
+              details: {
+                original_session_id: id,
+                replacement_session_id: replacementSessionId,
+                credit_id: booking.credit_id,
+                reason: reasonCode,
+                user_id: booking.user_id,
+              },
+            })
+          } catch (e) { console.error('audit replacement_credit_invalid:', e) }
+          try {
+            await supabase.from('yogi_notifications').insert({
+              user_id: booking.user_id,
+              type: 'replacement_credit_invalid',
+              payload: {
+                original_session_id: id,
+                replacement_session_id: replacementSessionId,
+                replacement_date: replacementDate,
+                replacement_time: replacementTime,
+                course_name: _courseName,
+              },
+            })
+          } catch (e) { console.error('yogi_notifications replacement_credit_invalid:', e) }
+          try {
+            await supabase.from('admin_notifications').insert({
+              type: 'replacement_credit_invalid',
+              message: `Ersatztermin-Auto-Buchung fuer ${booking.profile?.first_name || 'Yogi'} ${booking.profile?.last_name || ''} fehlgeschlagen (${reasonCode === 'expires_before_replacement' ? 'Credit abgelaufen' : 'Credit noch nicht gueltig'}).`,
+              details: {
+                user_id: booking.user_id,
+                original_session_id: id,
+                replacement_session_id: replacementSessionId,
+                credit_id: booking.credit_id,
+                reason: reasonCode,
+                replacement_date: replacementDate,
+                replacement_time: replacementTime,
+                course_name: _courseName,
+              },
+              read: false,
+            })
+          } catch (e) { console.error('admin_notifications replacement_credit_invalid:', e) }
+          // Best-Effort Mail an Admin
+          try {
+            await Email.adminReplacementCreditInvalid({
+              yogiName: `${booking.profile?.first_name || ''} ${booking.profile?.last_name || ''}`.trim() || 'Yogi',
+              courseName: _courseName,
+              originalDate: session?.date || '',
+              replacementDate,
+              reason: reasonCode as any,
+            })
+          } catch (e) { /* Mail ist nicht-kritisch — admin_notifications ist die Hauptspur */ }
+        }
       }
       // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
       // (bei Cancellation und/oder neuer Buchung im Ersatztermin)

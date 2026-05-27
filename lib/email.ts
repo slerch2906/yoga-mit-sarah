@@ -7,9 +7,16 @@
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-async function sendEmail(type: string, data: Record<string, any>): Promise<void> {
+// Welle S2/H21 (Sarah 2026-05-27): 15s-Timeout via AbortController, damit ein
+// haengender Brevo/Edge-Call den aufrufenden UI-Flow nicht blockiert. Bei
+// AbortError gracefully zurueck — ok:false statt UI-Hang. Return-Shape:
+// { ok: boolean, status: number, error?: string } statt void, damit Caller
+// (z.B. notifyAllSubscribers, M4) den Erfolg pro Empfaenger tracken koennen.
+async function sendEmail(type: string, data: Record<string, any>): Promise<{ ok: boolean; status: number; error?: string }> {
   // Server-side: direkter Edge-Call mit server-only Secret.
   if (typeof window === 'undefined') {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 15_000)
     try {
       const edgeSecret = process.env.EDGE_FUNCTION_SECRET || process.env.NEXT_PUBLIC_EDGE_SECRET || ''
       const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY
@@ -22,17 +29,27 @@ async function sendEmail(type: string, data: Record<string, any>): Promise<void>
           'x-function-secret': edgeSecret,
         },
         body: JSON.stringify({ type, data }),
+        signal: controller.signal,
       })
       const result = await res.json().catch(() => ({}))
       console.log('Email sent (server):', type, res.status, result)
-    } catch (e) {
+      return { ok: res.ok, status: res.status }
+    } catch (e: any) {
+      if (e?.name === 'AbortError') {
+        console.error('Email-Edge timeout (server):', type)
+        return { ok: false, status: 0, error: 'timeout' }
+      }
       console.error('Email send error (server):', type, e)
+      return { ok: false, status: 0, error: e?.message || 'unknown' }
+    } finally {
+      clearTimeout(timeoutId)
     }
-    return
   }
 
   // Client-side: ueber /api/email-Proxy. Bearer-Token best-effort beilegen,
   // damit der Server eingeloggte vs. ausgeloggte Caller unterscheiden kann.
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15_000)
   try {
     let accessToken = ''
     try {
@@ -48,11 +65,20 @@ async function sendEmail(type: string, data: Record<string, any>): Promise<void>
         ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       },
       body: JSON.stringify({ type, data }),
+      signal: controller.signal,
     })
     const result = await res.json().catch(() => ({}))
     console.log('Email sent (client):', type, res.status, result)
-  } catch (e) {
+    return { ok: res.ok, status: res.status }
+  } catch (e: any) {
+    if (e?.name === 'AbortError') {
+      console.error('Email-Edge timeout (client):', type)
+      return { ok: false, status: 0, error: 'timeout' }
+    }
     console.error('Email send error (client):', type, e)
+    return { ok: false, status: 0, error: e?.message || 'unknown' }
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
 
@@ -116,6 +142,14 @@ export const Email = {
 
   adminCourseCancelledSummary: (data: { courseName: string; reason: string; remainingSessions: number; yogis: Array<{firstName: string; lastName: string; email: string}> }) =>
     sendEmail('admin_course_cancelled_summary', data),
+
+  // Welle S2/H11 (Sarah 2026-05-27): Admin-Info wenn beim Anlegen eines
+  // Ersatztermins der Credit eines Yogis ausserhalb seines Gueltigkeits-
+  // Fensters liegt (valid_from in Zukunft oder expires_at vor Ersatztermin).
+  // Yogi wird NICHT automatisch eingebucht; Sarah erfaehrt es per Mail +
+  // admin_notifications-Eintrag.
+  adminReplacementCreditInvalid: (data: { adminEmail?: string; yogiName: string; courseName: string; originalDate: string; replacementDate: string; reason: 'expires_before_replacement' | 'valid_from_after_replacement' }) =>
+    sendEmail('admin_replacement_credit_invalid', data),
 
   adminYogiChoice: (data: { userId: string; courseName: string; choice: 'guthaben' | 'erstattung'; remainingSessions: number }) =>
     sendEmail('admin_yogi_choice', data),

@@ -262,10 +262,30 @@ export default function SessionDetailPage() {
 
     if (!error) {
       // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
-      await supabase.from('audit_log').insert({
-        user_id: user!.id, action: 'booking_created',
-        details: { session_id: id, type: 'single', course_name: session?.course?.name, session_date: session?.date, session_time: session?.time_start }
-      })
+      // Welle S2/H14 (Sarah 2026-05-27): Audit-Insert in try/catch — Booking
+      // ist schon committed, Audit-Fehler darf den User-Flow nicht abreissen,
+      // muss aber fuer Sarah sichtbar werden (admin_notifications).
+      try {
+        const auditPayload = { session_id: id, type: 'single', course_name: session?.course?.name, session_date: session?.date, session_time: session?.time_start }
+        const { error: auditErr } = await supabase.from('audit_log').insert({
+          user_id: user!.id, action: 'booking_created', details: auditPayload,
+        })
+        if (auditErr) throw auditErr
+      } catch (auditErr: any) {
+        console.error('Audit-Log-Insert fehlgeschlagen (booking_created):', auditErr)
+        try {
+          await supabase.from('admin_notifications').insert({
+            type: 'audit_log_insert_failed',
+            message: 'Audit-Eintrag fuer booking_created fehlgeschlagen',
+            details: {
+              action: 'booking_created', user_id: user!.id,
+              attempted_payload: { session_id: id, type: 'single' },
+              error_message: auditErr?.message || String(auditErr),
+            },
+            read: false,
+          })
+        } catch (notifErr) { console.error('admin_notifications audit_log_insert_failed:', notifErr) }
+      }
       // Buchungsbestätigung Email — nur wenn Yogi sie aktiviert hat (Default: ja)
       try {
         const { data: prof } = await supabase.from('profiles').select('email, first_name, notify_booking_confirmations').eq('id', user!.id).single()
@@ -337,10 +357,30 @@ export default function SessionDetailPage() {
 
     // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
 
-    await supabase.from('audit_log').insert({
-      user_id: user!.id, action: 'booking_cancelled',
-      details: { session_id: id, late, course_name: session?.course?.name, session_date: session?.date, session_time: session?.time_start }
-    })
+    // Welle S2/H14 (Sarah 2026-05-27): Audit-Insert in try/catch — Booking-
+    // Storno ist schon committed; Audit-Fehler darf den Flow nicht abreissen,
+    // muss aber admin-sichtbar werden.
+    try {
+      const { error: auditErr } = await supabase.from('audit_log').insert({
+        user_id: user!.id, action: 'booking_cancelled',
+        details: { session_id: id, late, course_name: session?.course?.name, session_date: session?.date, session_time: session?.time_start }
+      })
+      if (auditErr) throw auditErr
+    } catch (auditErr: any) {
+      console.error('Audit-Log-Insert fehlgeschlagen (booking_cancelled):', auditErr)
+      try {
+        await supabase.from('admin_notifications').insert({
+          type: 'audit_log_insert_failed',
+          message: 'Audit-Eintrag fuer booking_cancelled fehlgeschlagen',
+          details: {
+            action: 'booking_cancelled', user_id: user!.id,
+            attempted_payload: { session_id: id, late },
+            error_message: auditErr?.message || String(auditErr),
+          },
+          read: false,
+        })
+      } catch (notifErr) { console.error('admin_notifications audit_log_insert_failed:', notifErr) }
+    }
 
     // Email an Yogi senden — nur wenn Yogi sie aktiviert hat (Default: ja)
     try {

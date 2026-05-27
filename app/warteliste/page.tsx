@@ -56,38 +56,55 @@ export default function WartelistePage() {
             <i className="ti ti-list text-3xl block mb-3" />
             <p className="text-sm">Du stehst auf keiner Warteliste</p>
           </div>
-        ) : (
-          <>
-            <p className="section-label">Du stehst auf der Warteliste</p>
-            {waitlistItems.map(w => (
-              <div key={w.id} className="card mb-3">
-                {/* Welle 2.7: zentraler Helper */}
-                <div className="text-base font-bold mb-1">
-                  {sessionDisplayName(w.session)}
-                </div>
-                <div className="text-sm text-yoga-text/55 mb-3">
-                  {new Date(w.session?.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · {w.session?.time_start?.slice(0,5)} Uhr
-                </div>
-                <div className="flex items-center justify-between">
-                  {w.type === 'waitlist' ? (
-                    <span className="text-sm px-3 py-1 rounded-full bg-yoga-amber-bg text-yoga-amber-text font-bold">Position {w.position}</span>
-                  ) : (
-                    <span className="text-sm px-3 py-1 rounded-full bg-yoga-gray text-yoga-text font-semibold">Benachrichtigung aktiv</span>
-                  )}
-                  <button onClick={() => handleLeave(w.id)}
-                    className="text-sm text-yoga-red-text bg-yoga-red-bg border-0 rounded-full px-3 py-1 cursor-pointer font-semibold">
-                    Austragen
-                  </button>
-                </div>
+        ) : (() => {
+          // Welle 6 (Sarah 2026-05-27): 2 Sektionen — echte Warteliste
+          // (type='waitlist', position gesetzt) vs reine Benachrichtigung
+          // (type='notify', position=null).
+          const waitlist = waitlistItems.filter(w => w.type === 'waitlist')
+          const notifies = waitlistItems.filter(w => w.type === 'notify')
+          const renderCard = (w: any) => (
+            <div key={w.id} className="card mb-3">
+              <div className="text-base font-bold mb-1">
+                {sessionDisplayName(w.session)}
               </div>
-            ))}
-            <div className="mt-4 bg-yoga-gray border border-yoga-border rounded-yoga p-3">
-              <p className="text-sm text-yoga-text/65 leading-relaxed">
-                Wenn ein Platz frei wird, rückst du automatisch nach und hast <strong>1 Stunde</strong> Zeit dich kostenlos abzumelden.
-              </p>
+              <div className="text-sm text-yoga-text/55 mb-3">
+                {new Date(w.session?.date).toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · {w.session?.time_start?.slice(0,5)} Uhr
+              </div>
+              <div className="flex items-center justify-between">
+                {w.type === 'waitlist' ? (
+                  <span className="text-sm px-3 py-1 rounded-full bg-yoga-amber-bg text-yoga-amber-text font-bold">Position {w.position}</span>
+                ) : (
+                  <span className="text-sm px-3 py-1 rounded-full bg-yoga-gray text-yoga-text font-semibold">Benachrichtigung aktiv</span>
+                )}
+                <button onClick={() => handleLeave(w.id)}
+                  className="text-sm text-yoga-red-text bg-yoga-red-bg border-0 rounded-full px-3 py-1 cursor-pointer font-semibold">
+                  {w.type === 'notify' ? 'Deaktivieren' : 'Austragen'}
+                </button>
+              </div>
             </div>
-          </>
-        )}
+          )
+          return (
+            <>
+              {waitlist.length > 0 && (
+                <>
+                  <p className="section-label">Du stehst auf der Warteliste</p>
+                  {waitlist.map(renderCard)}
+                </>
+              )}
+              {notifies.length > 0 && (
+                <>
+                  <p className="section-label mt-5">Benachrichtigung aktiviert</p>
+                  {notifies.map(renderCard)}
+                </>
+              )}
+              <div className="mt-4 bg-yoga-gray border border-yoga-border rounded-yoga p-3">
+                <p className="text-sm text-yoga-text/65 leading-relaxed">
+                  Wenn ein Platz frei wird, rückst Du automatisch nach und hast auch innerhalb der 3 Stunden Frist noch eine Stunde Zeit dich kostenlos wieder abzumelden.
+                </p>
+              </div>
+            </>
+          )
+        })()}
       </div>
       <BottomNav isAdmin={profile?.is_admin} />
     </div>

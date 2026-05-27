@@ -89,49 +89,63 @@ function RegisterInner() {
     const { data: { session } } = await supabase.auth.getSession()
     if (session) await supabase.auth.signOut()
 
-    const { data: authData, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          invitation_token: token
+    // Welle 6 (Sarah 2026-05-27): Bug-Fix — Button blieb bei "Konto wird
+    // registriert" hängen wenn ein nachfolgender Schritt einen unerwarteten
+    // Fehler warf (z.B. Email-Send timeout, RLS, etc.). Wir umschließen jetzt
+    // die kompletten Folge-Schritte mit try/catch und entfernen Loading-Lock
+    // im finally — egal was passiert, der Button reagiert wieder.
+    let authData: any = null
+    let userId: string = ''
+    try {
+      const signUp = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+            invitation_token: token
+          }
         }
+      })
+      const signUpError = signUp.error
+      authData = signUp.data
+
+      if (signUpError || !authData?.user) {
+        setError(signUpError?.message || 'Fehler beim Erstellen des Kontos.')
+        setLoading(false)
+        return
       }
-    })
 
-    if (signUpError || !authData.user) {
-      setError(signUpError?.message || 'Fehler beim Erstellen des Kontos.')
-      setLoading(false)
-      return
-    }
+      userId = authData.user.id
 
-    const userId = authData.user.id
+      await supabase.from('profiles').upsert({
+        id: userId,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        email: email.trim(),
+        birthdate, // YYYY-MM-DD
+      })
 
-    await supabase.from('profiles').upsert({
-      id: userId,
-      first_name: firstName.trim(),
-      last_name: lastName.trim(),
-      email: email.trim(),
-      birthdate, // YYYY-MM-DD
-    })
+      await supabase.from('invitations').update({ used: true, accepted_at: new Date().toISOString() }).eq('token', token!)
 
-    await supabase.from('invitations').update({ used: true, accepted_at: new Date().toISOString() }).eq('token', token!)
+      // Welcome Email senden — Fehler hier nicht fatal
+      try {
+        await Email.welcome({
+          email: email.trim(),
+          firstName: firstName.trim(),
+          courseName: invitation?.course?.name,
+        })
+      } catch (e) { console.error('welcome email:', e) }
 
-    // Welcome Email senden
-    await Email.welcome({
-      email: email.trim(),
-      firstName: firstName.trim(),
-      courseName: invitation?.course?.name,
-    })
-
-    // Admin informieren
-    await Email.adminNewYogi({
-      fullName: `${firstName.trim()} ${lastName.trim()}`,
-      email: email.trim(),
-      courseName: invitation?.course?.name,
-    })
+      // Admin informieren — Fehler hier nicht fatal
+      try {
+        await Email.adminNewYogi({
+          fullName: `${firstName.trim()} ${lastName.trim()}`,
+          email: email.trim(),
+          courseName: invitation?.course?.name,
+        })
+      } catch (e) { console.error('adminNewYogi email:', e) }
 
     if (invitation?.course_id && invitation?.credits_to_assign) {
       // 1) Enrollment anlegen
@@ -198,7 +212,12 @@ function RegisterInner() {
       })
     }
 
-    window.location.href = '/rechtliches'
+      window.location.href = '/rechtliches'
+    } catch (e: any) {
+      console.error('Registrierungs-Fehler nach signUp:', e)
+      setError('Es gab ein Problem nach der Konto-Erstellung. Versuche dich einzuloggen oder wende dich an Sarah.')
+      setLoading(false)
+    }
   }
 
   if (checking) return (
@@ -274,7 +293,7 @@ function RegisterInner() {
               <div className="bg-yoga-red-bg text-yoga-red-text text-sm p-3 rounded-yoga">{error}</div>
             )}
             <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? 'Konto wird erstellt...' : 'Konto erstellen & loslegen'}
+              {loading ? 'Konto wird registriert…' : 'Konto erstellen & loslegen'}
             </button>
           </form>
         )}

@@ -183,10 +183,11 @@ export default function WeekPickerPopover({ currentWeekStart, onSelectWeek, chil
           </div>
 
           {/* Footer: Quick-Jump „Heute" */}
+          {/* Welle 6 (Sarah 2026-05-27): "HEUTE" groß + fett, klar als Sprungziel erkennbar. */}
           <button type="button"
             onClick={() => { onSelectWeek(getMonday(today)); setOpen(false) }}
-            className="w-full mt-2 text-xs text-yoga-text/60 hover:text-yoga-text py-1.5 rounded-md hover:bg-yoga-gray/40 transition-colors font-medium">
-            Zu heute
+            className="w-full mt-2 text-xs text-yoga-text/60 hover:text-yoga-text py-1.5 rounded-md hover:bg-yoga-gray/40 transition-colors">
+            Zu <span className="text-base font-bold text-yoga-text">HEUTE</span>
           </button>
         </div>
       )}

@@ -13,6 +13,10 @@ import { sessionDisplayName } from '@/lib/session-display'
 export default function MeinePage() {
   const [profile, setProfile] = useState<any>(null)
   const [enrollments, setEnrollments] = useState<any[]>([])
+  // Welle 6 (Sarah 2026-05-27): "Beendete Kurse"-Sektion — Kurse mit date_end
+  // in den letzten 8 Tagen UND noch freien Course-Credits. Werden klein/gedimmt
+  // angezeigt, damit der Yogi seine Rest-Credits sieht.
+  const [recentlyEndedEnrollments, setRecentlyEndedEnrollments] = useState<any[]>([])
   // Sarah-Regel 2026-05-22 (final):
   // "Einzelstunden" = ALLE active bookings die NICHT in einer Session des eigenen
   // aktiv-enrolled Kurses sind. Egal welcher booking.type, egal welcher Credit.
@@ -55,12 +59,33 @@ export default function MeinePage() {
         router.push('/rechtliches'); return
       }
       setProfile(prof)
-      // Beendete Kurse (date_end < heute) für Yogi ausblenden – Credits bleiben sichtbar via expires_at
+      // Welle 6 (Sarah 2026-05-27): Beendete Kurse bleiben für 8 Tage sichtbar
+      // wenn der Yogi noch freie Credits aus diesem Kurs hat (Kurs-Reste, die
+      // er noch in Drop-In-Stunden verwenden kann). Nach 8 Tagen löscht der
+      // Cron-Job alle übrigen Reste (siehe Migration-Skizze im Report).
       const today = new Date().toISOString().split('T')[0]
+      const eightDaysAgoIso = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      // Map course_id → freie Credits aus diesem Kurs
+      const courseFreeMap: Record<string, number> = {}
+      for (const c of (crds || [])) {
+        if (c.course_id && c.total > c.used && c.model === 'course') {
+          courseFreeMap[c.course_id] = (courseFreeMap[c.course_id] || 0) + (c.total - c.used)
+        }
+      }
       const activeEnrols = (enrols || []).filter((e: any) =>
         !e.course?.date_end || e.course.date_end >= today
       )
+      // "Beendete Kurse"-Sektion: Kurse mit date_end < heute aber innerhalb der
+      // letzten 8 Tage UND mit übrigen Credits
+      const recentlyEnded = (enrols || []).filter((e: any) => {
+        const de = e.course?.date_end
+        if (!de) return false
+        if (de >= today) return false // noch aktiv
+        if (de < eightDaysAgoIso) return false // älter als 8 Tage
+        return (courseFreeMap[e.course_id] || 0) > 0
+      })
       setEnrollments(activeEnrols)
+      setRecentlyEndedEnrollments(recentlyEnded)
       setSingleBookings(allBookings || [])
       setCredits(crds || [])
 
@@ -413,6 +438,33 @@ export default function MeinePage() {
         })}
           </>
         })()}
+
+        {/* Welle 6 (Sarah 2026-05-27): Beendete Kurse mit Credit-Resten.
+            Zeige Kurs klein + gedimmt für 8 Tage nach date_end falls noch
+            freie Course-Credits da sind. Hinweis: Cron-Job räumt nach 8d
+            auf (siehe Migration-Skizze im Report). */}
+        {recentlyEndedEnrollments.length > 0 && (
+          <div className="mb-6 opacity-70">
+            <p className="section-label">Beendete Kurse</p>
+            {recentlyEndedEnrollments.map((enrol: any) => {
+              const free = credits.filter((c: any) => c.course_id === enrol.course_id && c.model === 'course' && c.total > c.used)
+                .reduce((sum: number, c: any) => sum + (c.total - c.used), 0)
+              return (
+                <div key={enrol.id} className="card mb-2 bg-yoga-gray/40 border-dashed">
+                  <div className="text-sm font-bold mb-1">{enrol.course?.name}</div>
+                  <div className="text-xs text-yoga-text/60">
+                    Beendet am {new Date(enrol.course.date_end).toLocaleDateString('de-DE', { day:'numeric', month:'short', year:'numeric' })}
+                    {' · '}
+                    {free} {free === 1 ? 'Rest-Credit' : 'Rest-Credits'} verfügbar
+                  </div>
+                </div>
+              )
+            })}
+            <p className="text-xs text-yoga-text/45 mt-1 italic">
+              Kurs und Credit werden nach 8 Tagen gelöscht.
+            </p>
+          </div>
+        )}
 
         {/* Einzelstunden — alle Buchungen die NICHT in einem aktiv-enrolled Kurs sind.
             Regel (Sarah 2026-05-22): egal welcher booking.type oder Credit-Modell.

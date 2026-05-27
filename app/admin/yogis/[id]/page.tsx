@@ -817,13 +817,25 @@ export default function AdminYogiDetailPage() {
       ? fmtDateTime(d.session_date, d.session_time)
       : (sess ? fmtDateTime(sess.date, sess.time_start) : '')
     // Kurs-Name: details → session.course → course-lookup → '—'
-    // Welle 2.7: zentraler Helper — differenziert Einzelstunde/Event/Kursname.
-    // Im audit_log nutzen wir nur den nackten Namen ohne Prefix.
-    const sessDisplayName = sess?.name ?? sess?.course?.name
+    // Welle 6A (Sarah 2026-05-27): SYS-Container-Namen ("SYS · Einzelstunden",
+    // "SYS · Events (kostenlos)" etc.) sind irreführend im Yogi-Protokoll — der
+    // Admin will den ECHTEN Titel der Stunde / des Events sehen. session.name
+    // hält den echten Titel; courses.name hält bei SYS-Containern den SYS-Namen.
+    const isSysName = (n?: string | null) => !!n && /^SYS\s*[·\-]/.test(n)
+    // session.name (= echter Titel bei single/event_*) hat höchste Priorität,
+    // dann erst details, dann der course.name (= bei SYS irreführend, daher ggf. übersprungen).
+    const realSessionName = sess?.name && !isSysName(sess.name) ? sess.name : null
+    const cleanedCourseName = isSysName(d.course_name) ? null : d.course_name
+    const cleanedOriginalCourseName = isSysName(d.original_course_name) ? null : d.original_course_name
+    const cleanedVonKursName = isSysName(d.von_kurs_name) ? null : d.von_kurs_name
+    const cleanedDetailsName = isSysName(d.name) ? null : d.name
+    const sessDisplayName = realSessionName || (sess?.course?.name && !isSysName(sess.course.name) ? sess.course.name : null)
     const courseName =
-      d.course_name
-      || d.original_course_name
-      || d.von_kurs_name
+      realSessionName              // echter Titel der Session (single/event_* Container)
+      || cleanedDetailsName        // details.name (z.B. session_name beim event_created Audit)
+      || cleanedCourseName         // details.course_name (Kursstunden)
+      || cleanedOriginalCourseName
+      || cleanedVonKursName
       || sessDisplayName
       || (d.course_id ? auditCourseMap.get(d.course_id) : null)
       || (d.von_kurs_id ? auditCourseMap.get(d.von_kurs_id) : null)
@@ -843,9 +855,21 @@ export default function AdminYogiDetailPage() {
         return { text: `Yogi hat sich abgemeldet${lateStr}`, subject: termin }
       }
       case 'booking_cancelled_by_admin': {
-        const wStr = d.within_3h ? ' (innerhalb 3h-Frist)' : ''
-        const cStr = d.credit_returned === false ? ' — Credit verfallen' : ' — Credit zurück'
-        return { text: `Admin hat Yogi abgemeldet${wStr}${cStr}`, subject: termin }
+        // Welle 6A (Sarah 2026-05-27): differenzierte Frist-Hinweise nach session_type.
+        // event_paid → 7-Tage-Frist; Kursstunde/Einzelstunde → 3-Stunden-Frist; Events → keine Frist.
+        const sessType = d.session_type
+        const isEventPaid = sessType === 'event_paid'
+        const isEventFree = sessType === 'event_free' || sessType === 'event_credit'
+        let fristStr = ''
+        if (isEventPaid) {
+          fristStr = d.within_7d ? ' (innerhalb 7-Tage-Frist)' : ' (außerhalb 7-Tage-Frist)'
+        } else if (!isEventFree) {
+          fristStr = d.within_3h ? ' (innerhalb 3-Stunden-Frist)' : ''
+        }
+        const cStr = isEventFree
+          ? '' // kein Credit involviert
+          : (d.credit_returned === false ? ' — Credit verfallen' : ' — Credit zurück')
+        return { text: `Admin hat Yogi abgemeldet${fristStr}${cStr}`, subject: termin }
       }
       case 'admin_added_yogi_to_session': {
         const oStr = d.origin_session_id ? ' (als Vorhol-/Nachholbuchung)' : ''
@@ -920,8 +944,19 @@ export default function AdminYogiDetailPage() {
         const mode = d.refund_mode === 'all_refund' ? 'alle Erstattung' : 'Yogi-Wahl Guthaben/Erstattung'
         return { text: `Admin hat ${courseLabel} abgebrochen — ${sess} Stunden entfallen, ${mode}${reason}`, subject: '' }
       }
-      case 'session_cancelled':
-        return { text: `Admin hat Stunde abgesagt${reason}`, subject: termin }
+      case 'session_cancelled': {
+        // Welle 6A (Sarah 2026-05-27): differenziert nach session_type — Yogi sieht
+        // welcher Art Termin abgesagt wurde + ob Credit zurück.
+        const sessType = d.session_type
+        const kind = sessType === 'single' ? 'Einzelstunde'
+          : sessType === 'event_free' || sessType === 'event_credit' ? 'Event'
+          : sessType === 'event_paid' ? 'Event'
+          : 'Kursstunde'
+        const creditNote = (sessType === 'event_free' || sessType === 'event_paid' || sessType === 'event_credit')
+          ? '' // kein Credit involviert bei Events
+          : ' — Credit zurückgebucht'
+        return { text: `Admin hat ${kind} abgesagt${creditNote}${reason}`, subject: termin }
+      }
       case 'replacement_session_added': {
         const orig = sessLookup(d.original_session_id)
         const origStr = orig ? `Ersatz für ${fmtDateTime(orig.date, orig.time_start)}` : 'Neuer Ersatztermin'

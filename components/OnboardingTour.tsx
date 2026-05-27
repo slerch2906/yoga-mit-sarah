@@ -14,12 +14,16 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
+// Welle 6 (Sarah 2026-05-27): Tab "Kurse" wurde in Welle 5 zu "Kalender"
+// umbenannt. Tour-Texte entsprechend aktualisiert. Schritt 4 enthält
+// jetzt zusätzlich den Hinweis auf den „Warteliste"-Tab als zentrale
+// Übersicht.
 const slides = [
   {
     icon: 'ti-calendar-week',
     title: 'Wochenübersicht',
-    tabHint: 'Tab „Kurse" — unten links',
-    body: 'Hier siehst du alle Stunden in einer Wochenübersicht. Mit den Pfeilen oder dem Datum oben wechselst du die Woche. Stunden in denen du angemeldet bist haben einen grünen Rahmen.',
+    tabHint: 'Tab „Kalender" — unten links',
+    body: 'Hier siehst Du alle Stunden und Events in einer Wochenübersicht. Mit den Pfeilen oder dem Datum oben wechselst du die Woche. Stunden in denen du angemeldet bist haben einen grünen Rahmen.',
   },
   {
     icon: 'ti-heart',
@@ -30,14 +34,14 @@ const slides = [
   {
     icon: 'ti-circle-plus',
     title: 'Stunde buchen',
-    tabHint: 'In „Kurse" auf eine freie Stunde tippen',
+    tabHint: 'In „Kalender" auf eine freie Stunde tippen',
     body: 'Klick einfach auf eine freie Stunde und wähle „Buchen". Ein Credit wird automatisch verrechnet — du musst nichts weiter tun.',
   },
   {
     icon: 'ti-list',
     title: 'Volle Stunde? Kein Problem',
     tabHint: 'Tab „Warteliste" — zweiter Tab unten',
-    body: 'Trag dich auf die Warteliste ein — du wirst automatisch nachgerückt sobald ein Platz frei wird. Oder lass dich einfach nur benachrichtigen und entscheide dann ob du kommen willst.',
+    body: 'Du kannst dich bei vollen Stunden auf die Warteliste setzen lassen, dann rückst Du automatisch nach und wirst per E-Mail benachrichtigt. Oder du lässt dich einfach nur benachrichtigen, wenn ein Platz frei wird. Wo du eingetragen bist, siehst du im Tab „Warteliste".',
   },
   {
     icon: 'ti-device-mobile',

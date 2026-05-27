@@ -44,14 +44,19 @@ function BestaetigungInner() {
       // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
     }
     // Abmeldungs-Email
+    // Welle 6 (Sarah 2026-05-27): session.name Vorrang vor course.name (SYS-Container)
     if (profile && session) {
+      const isContainer = session.session_type && session.session_type !== 'course_session'
+      const courseName = isContainer ? (session.name || '') : (session.course?.name || '')
       await Email.bookingCancelled({
         email: profile.email,
         firstName: profile.first_name || 'Yogi',
-        courseName: session.course?.name || '',
+        courseName,
         date: session.date,
         timeStart: session.time_start,
         creditReturned: !within3h,
+        isSingle: isContainer,
+        sessionType: session.session_type,
       })
     }
 
@@ -140,14 +145,55 @@ function BestaetigungInner() {
             {sessionDate.toLocaleDateString('de-DE', { weekday:'short', day:'numeric', month:'long' })} · {session.time_start?.slice(0,5)} Uhr
           </p>
 
-          <div className="bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga p-4 text-left mb-5">
-            <p className="text-sm font-bold text-yoga-amber-text mb-2">
-              <i className="ti ti-alert-circle mr-1" /> Wichtig – bitte beachten:
-            </p>
-            <p className="text-sm text-yoga-amber-text leading-relaxed">
-              Wenn ein Platz frei wird, rückst du <strong>bis 90 Minuten vor Beginn</strong> automatisch nach. Du hast dann <strong>1 Stunde Zeit</strong>, dich kostenlos abzumelden. Reagierst du nicht, wird dein <strong>Credit verbraucht</strong> und der Platz ist verbindlich gebucht.
-            </p>
-          </div>
+          {/* Welle 6 (Sarah 2026-05-27): Hinweistext differenziert nach
+              session_type:
+              - event_free: Sarah's neuer Wortlaut (kein Credit, kein Geld)
+              - event_paid: alter Text + Verbindlichkeit/Stornofrist
+              - course_session/single: bestehender 90-Min-Credit-Verfall-Text */}
+          {(() => {
+            const st = session.session_type
+            const dateLabel = sessionDate.toLocaleDateString('de-DE', { weekday:'long', day:'numeric', month:'long' })
+            const timeLabel = `${session.time_start?.slice(0,5)} Uhr`
+            const titleLabel = session.name ?? session.course?.name ?? 'Event'
+            if (st === 'event_free') {
+              return (
+                <div className="bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga p-4 text-left mb-5">
+                  <p className="text-sm text-yoga-amber-text leading-relaxed">
+                    Du stehst jetzt auf der Warteliste für mein kostenloses Event „<strong>{titleLabel}</strong>" am {dateLabel} um {timeLabel}.
+                  </p>
+                  <p className="text-sm text-yoga-amber-text leading-relaxed mt-3">
+                    Wenn ein Platz frei wird, rutschst Du bis <strong>90 Minuten</strong> davor automatisch nach und wirst per E-Mail informiert. In den letzten 90 Minuten gilt: wer zuerst zusagt, bekommt den Platz.
+                  </p>
+                  <p className="text-sm text-yoga-amber-text leading-relaxed mt-3">
+                    Du kannst Dich jederzeit wieder austragen.
+                  </p>
+                </div>
+              )
+            }
+            if (st === 'event_paid') {
+              return (
+                <div className="bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga p-4 text-left mb-5">
+                  <p className="text-sm font-bold text-yoga-amber-text mb-2">
+                    <i className="ti ti-alert-circle mr-1" /> Wichtig – bitte beachten:
+                  </p>
+                  <p className="text-sm text-yoga-amber-text leading-relaxed">
+                    Wenn du dich auf die Warteliste setzen lässt, rückst Du automatisch nach, wenn ein Platz frei wird. Damit wird deine Anmeldung <strong>verbindlich gebucht</strong>. Beachte die Stornofrist — nur bis <strong>7 Tage</strong> vorher — danach fällt die volle Gebühr an, außer du ernennst einen Ersatzteilnehmer.
+                  </p>
+                </div>
+              )
+            }
+            // course_session / single (bestehender Text)
+            return (
+              <div className="bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga p-4 text-left mb-5">
+                <p className="text-sm font-bold text-yoga-amber-text mb-2">
+                  <i className="ti ti-alert-circle mr-1" /> Wichtig – bitte beachten:
+                </p>
+                <p className="text-sm text-yoga-amber-text leading-relaxed">
+                  Wenn ein Platz frei wird, rückst du <strong>bis 90 Minuten vor Beginn</strong> automatisch nach. Du hast dann <strong>1 Stunde Zeit</strong>, dich kostenlos abzumelden. Reagierst du nicht, wird dein <strong>Credit verbraucht</strong> und der Platz ist verbindlich gebucht.
+                </p>
+              </div>
+            )
+          })()}
 
           <button onClick={() => router.push('/warteliste')} className="btn-primary mb-2">
             Meine Warteliste ansehen

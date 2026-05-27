@@ -117,11 +117,20 @@ export default function AdminSessionPage() {
       await supabase.from('bookings').update({
         status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false,
       }).eq('id', bookingId)
+      // Welle 6A (Sarah 2026-05-27): within_7d + name für klares Protokoll
+      let _within7d = false
+      if (isPaidEvent && freshSession) {
+        const _start = new Date(`${freshSession.date}T${freshSession.time_start}`).getTime()
+        _within7d = (_start - Date.now()) <= 7 * 24 * 60 * 60 * 1000 && _start > Date.now()
+      }
       await supabase.from('audit_log').insert({
         action: 'booking_cancelled_by_admin',
         details: {
           booking_id: bookingId, session_id: sessionId,
           session_type: sessType, credit_returned: false, within_3h: false,
+          within_7d: _within7d,
+          name: freshSession?.name || null,
+          session_date: freshSession?.date, session_time: freshSession?.time_start,
         }
       })
       // Keine credit-Aktion noetig (credit_id war null bei Events)
@@ -159,7 +168,12 @@ export default function AdminSessionPage() {
 
     await supabase.from('audit_log').insert({
       action: 'booking_cancelled_by_admin',
-      details: { booking_id: bookingId, session_id: sessionId, credit_returned: creditReturned, within_3h: within3h }
+      details: { booking_id: bookingId, session_id: sessionId, credit_returned: creditReturned,
+                 within_3h: within3h,
+                 // Welle 6A: session_type + name für klares Protokoll
+                 session_type: session?.session_type || null,
+                 name: session?.name || null,
+                 session_date: session?.date, session_time: session?.time_start }
     })
 
     // Sarah-Regel 2026-05-23: zentraler Promote-Helper mit 90-Min-Cutoff-Logic.
@@ -194,7 +208,11 @@ export default function AdminSessionPage() {
     const sessionType: string = session.session_type || 'course_session'
     const isFreeEvent = sessionType === 'event_free'
     const isPaidEvent = sessionType === 'event_paid'
-    const skipCreditLogic = isFreeEvent || isPaidEvent
+    // Welle 6 (Sarah 2026-05-27, Item 7): Dummy-Yogis buchen IMMER ohne Credit
+    // (kein Credit-Check, kein credit_id), egal welcher session_type. Dummys
+    // sind reine Anzeige-Platzhalter — sie brauchen kein Booking-System.
+    const isDummy = !!yogi.is_dummy
+    const skipCreditLogic = isFreeEvent || isPaidEvent || isDummy
 
     if (skipCreditLogic) {
       setAddingYogi(true)
@@ -222,9 +240,13 @@ export default function AdminSessionPage() {
           // ist deployed, keine Mit-Änderung möglich aus dem Frontend).
           // Statt dessen reichern wir den Display-Namen mit Marker an —
           // sauberer Workaround.
+          // Welle 6 (Sarah 2026-05-27): Dummy mit Mail bei Kursstunde →
+          // einfacher Name ohne Event-Marker.
           const eventLabel = isFreeEvent
             ? `${session.name} (kostenlos)`
-            : `${session.name} (${session.price_eur} € — bitte bar mitbringen oder vorab überweisen)`
+            : isPaidEvent
+            ? `${session.name} (${session.price_eur} € — bitte bar mitbringen oder vorab überweisen)`
+            : (session.name || session.course?.name || '')
           await Email.bookingConfirmed({
             email: yogi.email,
             firstName: yogi.first_name || 'Yogi',
@@ -236,12 +258,16 @@ export default function AdminSessionPage() {
           })
         } catch (e) { /* nicht-blockierend */ }
       }
+      // Welle 6 (Sarah 2026-05-27, Item 12): action je nach Kontext + name fuer Yogi-Protokoll.
       await supabase.from('audit_log').insert({
-        action: 'admin_added_yogi_to_event',
+        action: (isFreeEvent || isPaidEvent) ? 'admin_added_yogi_to_event' : 'admin_added_yogi_to_session',
         details: {
           user_id: yogi.id, session_id: id, session_type: sessionType,
           credit_used: false,
           price_eur: isPaidEvent ? session.price_eur : null,
+          is_dummy: isDummy || undefined,
+          name: session.name || null,
+          session_date: session.date, session_time: session.time_start,
         }
       })
       setShowAddYogi(false); setYogiSearch(''); setYogiResults([]); setSelectedYogi(null)
@@ -278,7 +304,14 @@ export default function AdminSessionPage() {
     }
     await supabase.from('audit_log').insert({
       action: 'admin_added_yogi_to_session',
-      details: { user_id: yogi.id, session_id: id, credit_id: pick.creditId, origin_session_id: pick.originSessionId }
+      // Welle 6A (Sarah 2026-05-27, Item 12): name + date/time fuer Yogi-Protokoll.
+      details: {
+        user_id: yogi.id, session_id: id,
+        credit_id: pick.creditId, origin_session_id: pick.originSessionId,
+        name: session.name || null,
+        session_type: sessionType,
+        session_date: session.date, session_time: session.time_start,
+      }
     })
     setShowAddYogi(false); setYogiSearch(''); setYogiResults([]); setSelectedYogi(null)
     setAddingYogi(false); loadData()
@@ -306,7 +339,14 @@ export default function AdminSessionPage() {
     })
     await supabase.from('audit_log').insert({
       action: 'admin_added_yogi_to_session',
-      details: { user_id: yogi.id, session_id: id, credit_id: newCredit.id, quick_credit: true }
+      // Welle 6A (Sarah 2026-05-27, Item 12): name fuer Yogi-Protokoll
+      details: {
+        user_id: yogi.id, session_id: id,
+        credit_id: newCredit.id, quick_credit: true,
+        name: session?.name || null,
+        session_type: session?.session_type || null,
+        session_date: session?.date, session_time: session?.time_start,
+      }
     })
     setQuickCreditYogi(null); setShowAddYogi(false)
     setYogiSearch(''); setYogiResults([])
@@ -325,7 +365,7 @@ export default function AdminSessionPage() {
       // Warteliste-Yogis ('waitlist' type) — chronologisch ältester zuerst (FIFO).
       // Notify-Type sind nur "informier mich"-Einträge, NICHT auf der echten Warteliste.
       supabase.from('waitlist')
-        .select('*, profile:profiles(email, first_name, last_name)')
+        .select('*, profile:profiles(email, first_name, last_name, is_dummy)')
         .eq('session_id', id).eq('type', 'waitlist').order('created_at', { ascending: true }),
     ])
 
@@ -362,8 +402,10 @@ export default function AdminSessionPage() {
     setPromotingWaitlist(wlEntry.id)
     // Welle 2.10 (Sarah 2026-05-26): Credit-Safety auch hier — Warteliste-Yogi
     // bei event_free/event_paid ohne Credit-Abzug einbuchen.
+    // Welle 6 (Sarah 2026-05-27, Item 7): zusaetzlich Dummys ohne Credit.
     const evType: string = session.session_type || 'course_session'
-    if (evType === 'event_free' || evType === 'event_paid') {
+    const isDummyWl = !!wlEntry.profile?.is_dummy
+    if (evType === 'event_free' || evType === 'event_paid' || isDummyWl) {
       await supabase.from('bookings').upsert({
         user_id: wlEntry.user_id, session_id: id,
         credit_id: null, type: 'single', status: 'active',
@@ -373,9 +415,13 @@ export default function AdminSessionPage() {
       await supabase.from('waitlist').delete().eq('id', wlEntry.id)
       await supabase.from('audit_log').insert({
         action: 'admin_promoted_waitlist_yogi',
+        // Welle 6A (Sarah 2026-05-27, Item 12): name fuer Yogi-Protokoll
         details: {
           user_id: wlEntry.user_id, session_id: id, session_type: evType,
           credit_used: false, price_eur: evType === 'event_paid' ? session.price_eur : null,
+          is_dummy: isDummyWl || undefined,
+          name: session.name || null,
+          session_date: session.date, session_time: session.time_start,
         }
       })
       setPromotingWaitlist(null)
@@ -415,7 +461,14 @@ export default function AdminSessionPage() {
     // Audit-Log
     await supabase.from('audit_log').insert({
       action: 'admin_promoted_waitlist_yogi',
-      details: { user_id: wlEntry.user_id, session_id: id, was_overbooking: bookings.length >= ((session as any).course?.max_spots ?? Infinity) }
+      // Welle 6A (Sarah 2026-05-27, Item 12): name fuer Yogi-Protokoll
+      details: {
+        user_id: wlEntry.user_id, session_id: id,
+        was_overbooking: bookings.length >= ((session as any).course?.max_spots ?? Infinity),
+        session_type: session?.session_type || null,
+        name: session?.name || null,
+        session_date: session?.date, session_time: session?.time_start,
+      }
     })
     setPromotingWaitlist(null)
     loadData()
@@ -1273,9 +1326,10 @@ export default function AdminSessionPage() {
               </div>
               <div>
                 <label className="field-label">Schwierigkeitsgrad</label>
+                {/* Welle 6 (Sarah 2026-05-27): identisch zu Kurs-Form — 3 Optionen. */}
                 <select className="field-input" value={editForm.difficulty}
                   onChange={e => setEditForm({ ...editForm, difficulty: e.target.value })}>
-                  {['Anfänger', 'Mittelstufe', 'Fortgeschritten', 'Alle Level'].map(d => <option key={d}>{d}</option>)}
+                  {['Alle Level', 'Beginner', 'Geübte'].map(d => <option key={d}>{d}</option>)}
                 </select>
               </div>
               <div>

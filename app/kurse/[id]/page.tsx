@@ -44,6 +44,10 @@ export default function SessionDetailPage() {
   const [showCancel, setShowCancel] = useState(false)
   const [conflictingWaitlists, setConflictingWaitlists] = useState<any[]>([])
   const [showWaitlistConflict, setShowWaitlistConflict] = useState(false)
+  // Welle 6 (Sarah 2026-05-27): isEnrolled für diesen Container-Kurs — enrolled
+  // Yogis dürfen auch dann buchen wenn course.is_open=false (Sarah-Regel:
+  // "enrolled Yogis dürfen immer"). Wird in loadData gefüllt.
+  const [isEnrolledInCourse, setIsEnrolledInCourse] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -83,6 +87,18 @@ export default function SessionDetailPage() {
     const { count: bookingCount } = await supabase
       .from('bookings').select('*', { count: 'exact', head: true })
       .eq('session_id', id).eq('status', 'active')
+
+    // Welle 6 (Sarah 2026-05-27): isEnrolled-Check für effectiveOpen-Override
+    // bei Wieder-Buchung nach Selbst-Abmeldung in einem Kurs auf den der Yogi
+    // ohnehin enrolled ist.
+    let enrolledHere = false
+    const sessCourseId = (sess as any)?.course_id
+    if (sessCourseId) {
+      const { data: enrolRow } = await supabase.from('enrollments')
+        .select('id').eq('user_id', user.id).eq('course_id', sessCourseId).maybeSingle()
+      enrolledHere = !!enrolRow
+    }
+    setIsEnrolledInCourse(enrolledHere)
 
     setProfile(prof)
     setSession(sess ? { ...sess, replacement, origin } : sess)
@@ -460,8 +476,12 @@ export default function SessionDetailPage() {
   // is_open=false (Container ist NIE buchbar). Daher fuer single/event_*
   // wird stattdessen session.is_open genutzt (Default = true wenn NULL).
   // Bei normalen Kursstunden bleibt course.is_open massgeblich.
+  // Welle 6 (Sarah 2026-05-27): enrolled Yogis dürfen IMMER buchen — auch
+  // wenn course.is_open=false (Kurs nicht extern freigegeben). Beispiel:
+  // ein Yogi hat sich aus einer Kursstunde abgemeldet und möchte sich
+  // wieder eintragen — der `is_open`-Check ist nur für externe Drop-Ins.
   const effectiveOpen: boolean = isCourseSession
-    ? !!course?.is_open
+    ? (!!course?.is_open || isEnrolledInCourse)
     : ((session as any)?.is_open !== false)
   // Für Anzeige: session.name/description haben Vorrang vor course.name/description
   // (course.name = SYS-Container für event_*/single).
@@ -846,7 +866,11 @@ export default function SessionDetailPage() {
                 )}
                 {freeSpots <= 0 && (
                   <>
-                    {freeCredits === 0 ? (
+                    {/* Welle 6 (Sarah 2026-05-27): Bei Events (event_free/event_paid)
+                        + Charity ist Warteliste IMMER möglich — Credits sind dort
+                        irrelevant. Credit-Check (mit "Warteliste nicht möglich")
+                        gilt nur bei course_session + single. */}
+                    {freeCredits === 0 && !isEvent && !course?.is_free ? (
                       // Kein Credit: nur Benachrichtigung möglich
                       <>
                         <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
@@ -862,13 +886,25 @@ export default function SessionDetailPage() {
                         </button>
                       </>
                     ) : (
-                      // Hat Credits: Warteliste + Benachrichtigung
+                      // Hat Credits ODER Event/Charity: Warteliste + Benachrichtigung
                       <>
                         <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-4">
                           <p className="text-sm text-yoga-text/80 leading-relaxed">
-                            Diese Stunde ist ausgebucht. Du kannst dich auf die Warteliste setzen oder benachrichtigt werden wenn ein Platz frei wird.
+                            {isEvent
+                              ? 'Dieses Event ist ausgebucht. Du kannst dich auf die Warteliste setzen oder benachrichtigt werden wenn ein Platz frei wird.'
+                              : 'Diese Stunde ist ausgebucht. Du kannst dich auf die Warteliste setzen oder benachrichtigt werden wenn ein Platz frei wird.'}
                           </p>
                         </div>
+                        {/* Welle 6 (Sarah 2026-05-27): bei event_paid zusätzlich
+                            Verbindlichkeits-/Stornofrist-Hinweis VOR der
+                            Bestätigung. */}
+                        {isEventPaid && (
+                          <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 mb-3">
+                            <p className="text-sm text-yoga-amber-text leading-relaxed">
+                              Wenn du dich auf die Warteliste setzen lässt, rückst Du automatisch nach, wenn ein Platz frei wird. Damit wird deine Anmeldung <strong>verbindlich gebucht</strong>. Beachte die Stornofrist — nur bis <strong>7 Tage</strong> vorher — danach fällt die volle Gebühr an, außer du ernennst einen Ersatzteilnehmer.
+                            </p>
+                          </div>
+                        )}
                         <button onClick={() => handleWaitlist('waitlist')} className="btn-primary mb-2" disabled={actionLoading}>
                           <i className="ti ti-list mr-1" /> Auf die Warteliste setzen
                         </button>

@@ -85,7 +85,17 @@ function AnwesenheitInner() {
 
     await supabase.from('audit_log').insert({
       action: 'session_cancelled',
-      details: { session_id: sessionId }
+      details: {
+        session_id: sessionId,
+        // Welle 6A (Sarah 2026-05-27): vollständige Details für klares Yogi-Protokoll
+        session_type: sessType || null,
+        name: (session as any)?.name || null,
+        course_name: (session as any)?.course?.name || null,
+        session_date: (session as any)?.date || null,
+        session_time: (session as any)?.time_start || null,
+        affected_yogis: bookings.length,
+        source: 'anwesenheit',
+      }
     })
 
     router.push('/admin/dashboard')

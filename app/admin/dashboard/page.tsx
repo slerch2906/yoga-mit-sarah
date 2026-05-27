@@ -72,8 +72,14 @@ export default function AdminDashboard() {
   // nicht zur vorherigen Page navigieren. Pattern: pushState beim Öffnen,
   // popstate-Listener schließt Modal. Cleanup macht back() falls Modal anders
   // geschlossen wurde, damit kein „Geist-Eintrag" in der History bleibt.
+  // Welle 6 (Sarah 2026-05-27, Item 3 Fix): useEffect haengt jetzt an
+  // !!selectedSession (Boolean), NICHT am Objekt selbst. Vorher wurde der
+  // Effekt bei jedem `setSelectedSession({...prev, external_participants_count})`
+  // re-run → Cleanup feuerte window.history.back() → popstate → modal weg.
+  // Jetzt: pushState passiert nur wenn das Modal sich oeffnet/schliesst.
+  const selectedSessionOpen = !!selectedSession
   useEffect(() => {
-    if (!selectedSession) return
+    if (!selectedSessionOpen) return
     window.history.pushState({ sessionModal: true }, '')
     const handlePopState = () => {
       setSelectedSession(null)
@@ -91,7 +97,7 @@ export default function AdminDashboard() {
         window.history.back()
       }
     }
-  }, [selectedSession])
+  }, [selectedSessionOpen])
 
   // Welle 3.5 (Sarah 2026-05-26): gleiches Pattern fuer Cancel-Form-Modal und
   // Cancel-Choice-Modal — Handy-Swipe schliesst das Modal, kein Page-Back.
@@ -213,11 +219,20 @@ export default function AdminDashboard() {
       await supabase.from('bookings').update({
         status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false,
       }).eq('id', bookingId)
+      // Welle 6A (Sarah 2026-05-27): within_7d + name für klares Protokoll
+      let _within7d = false
+      if (isPaidEvent && freshSession) {
+        const _start = new Date(`${freshSession.date}T${freshSession.time_start}`).getTime()
+        _within7d = (_start - Date.now()) <= 7 * 24 * 60 * 60 * 1000 && _start > Date.now()
+      }
       await supabase.from('audit_log').insert({
         action: 'booking_cancelled_by_admin',
         details: {
           booking_id: bookingId, session_id: sessionId,
           session_type: sessType, credit_returned: false, within_3h: false,
+          within_7d: _within7d,
+          name: freshSession?.name || null,
+          session_date: freshSession?.date, session_time: freshSession?.time_start,
         }
       })
       // Reload
@@ -236,7 +251,7 @@ export default function AdminDashboard() {
 
   async function confirmCancelBooking(creditReturned: boolean) {
     if (!cancelChoice) return
-    const { bookingId, sessionId, within3h } = cancelChoice
+    const { bookingId, sessionId, within3h, sessionType } = cancelChoice
     const cancelLate = !creditReturned
     setCancelChoice(null)
 
@@ -247,9 +262,18 @@ export default function AdminDashboard() {
     // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
     // cancel_late=true verhindert die Rueckbuchung (Credit verfaellt)
 
+    // Welle 6A (Sarah 2026-05-27, Item 12): freshSession aus DB ziehen fuer
+    // korrekten Audit-Snapshot (selectedSession kann stale sein).
+    const { data: _sessAudit } = await supabase.from('sessions')
+      .select('name, date, time_start').eq('id', sessionId).maybeSingle()
     await supabase.from('audit_log').insert({
       action: 'booking_cancelled_by_admin',
-      details: { booking_id: bookingId, session_id: sessionId, credit_returned: creditReturned, within_3h: within3h }
+      details: { booking_id: bookingId, session_id: sessionId, credit_returned: creditReturned,
+                 within_3h: within3h,
+                 // Welle 6A: session_type + name für klares Protokoll
+                 session_type: sessionType || null,
+                 name: _sessAudit?.name || null,
+                 session_date: _sessAudit?.date, session_time: _sessAudit?.time_start }
     })
 
     // Sarah-Regel 2026-05-23: zentraler Helper mit 90-Min-Cutoff.
@@ -257,6 +281,58 @@ export default function AdminDashboard() {
 
     // Reload session detail
     if (selectedSession) loadSessionDetail(selectedSession)
+  }
+
+  // Welle 6 (Sarah 2026-05-27, Item 10/11): Waitlist-Yogi aus Dashboard-Modal
+  // nachruecken. Bei event_free + Ueberbuchung erlaubt (Item 10). Dummys ohne
+  // Credit. Event allgemein ohne Credit. Booking + waitlist.delete + Audit + Mail.
+  async function promoteWaitlistFromDashboard(wlEntry: any) {
+    if (!selectedSession) return
+    const sess = selectedSession
+    const sessType: string = sess.session_type || 'course_session'
+    const isEvent = sessType === 'event_free' || sessType === 'event_paid'
+    const isDummyWl = !!wlEntry.profile?.is_dummy
+    let creditId: string | null = null
+    if (!isEvent && !isDummyWl) {
+      try {
+        const pick = await selectCreditForBooking(supabase, wlEntry.user_id, sess.id, sess.date, sess.time_start)
+        if (pick.ok) creditId = pick.creditId
+      } catch (e) { /* fallback null */ }
+    }
+    const totalNow = sessionBookings.filter(b => b._type === 'booking' && b.status === 'active').length + (sess.external_participants_count || 0)
+    const wasOverbooking = sess.max_spots != null && totalNow >= sess.max_spots
+    const { error } = await supabase.from('bookings').upsert({
+      user_id: wlEntry.user_id, session_id: sess.id,
+      credit_id: creditId, type: 'single', status: 'active',
+      origin_session_id: null, cancelled_at: null, cancel_late: false,
+    }, { onConflict: 'user_id,session_id' })
+    if (error) { alert('Buchung konnte nicht angelegt werden: ' + error.message); return }
+    await supabase.from('waitlist').delete().eq('id', wlEntry.id)
+    await supabase.from('audit_log').insert({
+      action: 'admin_promoted_waitlist_yogi',
+      details: {
+        user_id: wlEntry.user_id, session_id: sess.id, session_type: sessType,
+        credit_used: !!creditId, was_overbooking: wasOverbooking,
+        name: sess.name || null,
+        session_date: sess.date, session_time: sess.time_start,
+        source: 'dashboard',
+      },
+    })
+    if (wlEntry.profile?.email && !isDummyWl) {
+      try {
+        await Email.bookingConfirmed({
+          email: wlEntry.profile.email,
+          firstName: wlEntry.profile.first_name || 'Yogi',
+          courseName: sess.name || sess.course?.name || '',
+          date: sess.date, timeStart: sess.time_start,
+          durationMin: sess.duration_min || 75,
+          isSingle: sessType !== 'course_session',
+          sessionType: sessType,
+        })
+      } catch (e) { /* nicht-blockierend */ }
+    }
+    loadSessionDetail(sess)
+    loadData()
   }
 
   async function loadSessionDetail(session: any) {
@@ -297,18 +373,23 @@ export default function AdminDashboard() {
 
     // Welle 2.10 (Sarah 2026-05-26): Credit-Safety bei Events.
     // event_free/event_paid → KEIN Credit-Abzug, credit_id=null.
+    // Welle 6 (Sarah 2026-05-27, Item 7): zusaetzlich Dummys ohne Credit.
     const evType: string = selectedSession.session_type || 'course_session'
-    if (evType === 'event_free' || evType === 'event_paid') {
+    const isDummy = !!yogi.is_dummy
+    if (evType === 'event_free' || evType === 'event_paid' || isDummy) {
       await supabase.from('bookings').insert({
         user_id: yogi.id, session_id: selectedSession.id,
         credit_id: null, type: 'single', status: 'active',
         origin_session_id: null,
       })
       await supabase.from('audit_log').insert({
-        action: 'admin_added_yogi_to_event',
+        action: isDummy && evType === 'course_session' ? 'admin_added_yogi_to_session' : 'admin_added_yogi_to_event',
         details: {
           user_id: yogi.id, session_id: selectedSession.id, session_type: evType,
           credit_used: false, price_eur: evType === 'event_paid' ? selectedSession.price_eur : null,
+          is_dummy: isDummy || undefined,
+          // Welle 6A (Sarah 2026-05-27): Session-Name fuer Yogi-Protokoll
+          name: selectedSession.name || null,
           source: 'dashboard',
         }
       })
@@ -851,20 +932,61 @@ export default function AdminDashboard() {
                 </>
               )}
 
-              {/* Warteliste */}
-              {sessionBookings.filter(b => b._type === 'waitlist').length > 0 && (
-                <>
-                  <p className="section-label mt-3">Warteliste ({sessionBookings.filter(b => b._type === 'waitlist' && b.type === 'waitlist').length}) · Benachrichtigungen ({sessionBookings.filter(b => b._type === 'waitlist' && b.type === 'notify').length})</p>
-                  {sessionBookings.filter(b => b._type === 'waitlist').map(w => (
-                    <button key={w.id}
-                      onClick={() => { setSelectedSession(null); setSessionBookings([]); router.push(`/admin/yogis/${w.user_id}`) }}
-                      className="card mb-2 w-full text-left flex items-center justify-between bg-transparent border border-yoga-border cursor-pointer hover:opacity-80 transition-opacity">
-                      <div className="text-sm">{w.profile?.first_name} {w.profile?.last_name}</div>
-                      <span className="badge badge-wait">{w.type === 'notify' ? 'Benachrichtigung' : `Pos. ${w.position}`}</span>
-                    </button>
-                  ))}
-                </>
-              )}
+              {/* Welle 6 (Sarah 2026-05-27, Item 11): Warteliste + Notify
+                  in zwei getrennten Sektionen anzeigen. Mit Nachrücken-Button
+                  bei Wartelisten-Yogis (Item 10: bei kostenlosem Event auch
+                  bei Ueberbuchung erlaubt). */}
+              {(() => {
+                const onWaitlist = sessionBookings.filter(b => b._type === 'waitlist' && b.type !== 'notify' && b.position != null)
+                const onNotify = sessionBookings.filter(b => b._type === 'waitlist' && (b.type === 'notify' || b.position == null))
+                return (
+                  <>
+                    {onWaitlist.length > 0 && (
+                      <>
+                        <p className="section-label mt-3">Auf der Warteliste ({onWaitlist.length})</p>
+                        {onWaitlist.map(w => (
+                          <div key={w.id} className="card mb-2 flex items-center justify-between gap-2">
+                            <button
+                              onClick={() => { setSelectedSession(null); setSessionBookings([]); router.push(`/admin/yogis/${w.user_id}`) }}
+                              className="flex-1 text-left bg-transparent border-0 p-0 cursor-pointer hover:opacity-70 transition-opacity min-w-0">
+                              <div className="text-sm font-semibold flex items-center gap-2">
+                                <span className="text-xs text-yoga-text/50 font-normal">#{w.position}</span>
+                                <span>{w.profile?.first_name} {w.profile?.last_name}</span>
+                                {w.profile?.is_dummy && (
+                                  <span className="text-xs bg-yoga-text text-white rounded-full px-2 py-0.5 font-normal">Dummy</span>
+                                )}
+                              </div>
+                              <div className="text-xs text-yoga-text/50 truncate">{w.profile?.email}</div>
+                            </button>
+                            <button onClick={() => promoteWaitlistFromDashboard(w)}
+                              className="text-xs bg-yoga-text text-yoga-bg rounded-full px-2.5 py-1 cursor-pointer font-semibold flex-shrink-0 border-0 hover:opacity-80">
+                              Nachrücken
+                            </button>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                    {onNotify.length > 0 && (
+                      <>
+                        <p className="section-label mt-3">Benachrichtigung aktiviert ({onNotify.length})</p>
+                        {onNotify.map(w => (
+                          <button key={w.id}
+                            onClick={() => { setSelectedSession(null); setSessionBookings([]); router.push(`/admin/yogis/${w.user_id}`) }}
+                            className="card mb-2 w-full text-left flex items-center justify-between bg-transparent border border-yoga-border cursor-pointer hover:opacity-80 transition-opacity">
+                            <div className="text-sm">
+                              {w.profile?.first_name} {w.profile?.last_name}
+                              {w.profile?.is_dummy && (
+                                <span className="ml-2 text-xs bg-yoga-text text-white rounded-full px-2 py-0.5 font-normal">Dummy</span>
+                              )}
+                            </div>
+                            <span className="badge badge-wait">Benachrichtigung</span>
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </>
+                )
+              })()}
 
               {/* Yogi-Suche */}
               {showDashAddYogi && (

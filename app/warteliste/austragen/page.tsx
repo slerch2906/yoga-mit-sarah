@@ -44,8 +44,22 @@ function AustragenInner() {
         else setState('invalid')
         return
       }
+      // Welle 6 (Sarah 2026-05-27): die RPC liefert noch immer course.name —
+      // bei Container-Sessions (Events/Einzelstunden) ist das "SYS · Events"
+      // o.ä. Solange die RPC nicht erweitert ist (Migration siehe Report),
+      // ersetzen wir den SYS-Namen client-side durch einen verständlichen
+      // Fallback aus session_name/session_type.
+      const rawCourse = data.course_name || ''
+      const sessionName = data.session_name || ''
+      const sessionType = data.session_type || ''
+      let displayName = rawCourse
+      if (rawCourse.startsWith('SYS · ') || !rawCourse) {
+        if (sessionType === 'single') displayName = sessionName ? `Einzelstunde · ${sessionName}` : 'Einzelstunde'
+        else if (sessionType === 'event_free' || sessionType === 'event_paid' || sessionType === 'event_credit') displayName = sessionName ? `Event · ${sessionName}` : 'Event'
+        else if (sessionName) displayName = sessionName
+      }
       setInfo({
-        courseName: data.course_name || '',
+        courseName: displayName,
         date: data.date || '',
         timeStart: data.time_start || '',
         type: data.type || 'waitlist',

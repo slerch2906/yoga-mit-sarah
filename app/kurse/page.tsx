@@ -62,6 +62,17 @@ export default function KursePage() {
   const [isNewYogi, setIsNewYogi] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [loading, setLoading] = useState(true)
+  // Welle 6 (Sarah 2026-05-27): "Sarah trägt dich ein"-Banner wegklickbar.
+  // dismissed-state via localStorage, damit das Banner nicht jede Session
+  // wiederkehrt sondern dauerhaft verschwindet.
+  const [newYogiDismissed, setNewYogiDismissed] = useState(false)
+  useEffect(() => {
+    try { setNewYogiDismissed(localStorage.getItem('new_yogi_banner_dismissed') === '1') } catch {}
+  }, [])
+  function dismissNewYogi() {
+    try { localStorage.setItem('new_yogi_banner_dismissed', '1') } catch {}
+    setNewYogiDismissed(true)
+  }
   const router = useRouter()
   const supabase = createClient()
 
@@ -253,12 +264,18 @@ export default function KursePage() {
       {/* Neu-Yogi-Hinweis: noch keine einzige Buchung in der Historie.
           Welle 3 (Sarah 2026-05-26): jetzt auch Einzelstunden + Events erwähnen,
           damit es für Yogis ohne Kursbuchung nicht irreführend wirkt. */}
-      {isNewYogi && (
-        <div className="mx-4 mt-3 bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga px-4 py-3 flex items-start gap-2">
+      {isNewYogi && !newYogiDismissed && (
+        <div className="mx-4 mt-3 bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga px-4 py-3 flex items-start gap-2 relative">
           <i className="ti ti-info-circle text-yoga-amber-text text-base mt-0.5 flex-shrink-0" />
-          <p className="text-sm text-yoga-text/80 leading-snug">
-            Sarah trägt dich nach der Bezahlung in deinen Kurs ein. Einzelstunden &amp; Events kannst du direkt selbst buchen.
+          <p className="text-sm text-yoga-text/80 leading-snug pr-5">
+            {/* Welle 6 (Sarah 2026-05-27): Text-Update — explizit "nach der
+                Bezahlung / nach deiner Anmeldung in einen Kurs". */}
+            Sarah trägt dich nach der Bezahlung / nach deiner Anmeldung in einen Kurs ein. Einzelstunden &amp; Events kannst du direkt selbst buchen.
           </p>
+          <button onClick={dismissNewYogi} aria-label="Hinweis schließen"
+            className="absolute top-1 right-1 p-1 text-yoga-text/40 hover:text-yoga-text/70 bg-transparent border-0 cursor-pointer">
+            <i className="ti ti-x text-base" />
+          </button>
         </div>
       )}
 
@@ -285,25 +302,17 @@ export default function KursePage() {
         </button>
       </div>
 
-      {(() => {
-        const bookedCount = sessions.filter(s => s.my_booking).length
-        if (!bookedCount) return null
-        return (
-          <div className="mx-4 mt-2 bg-yoga-gray border border-yoga-border rounded-yoga px-3 py-2 flex items-center gap-2">
-            <i className="ti ti-circle-check text-base opacity-50" />
-            <p className="text-sm text-yoga-text/75">
-              Du hast <strong>{bookedCount} {bookedCount === 1 ? 'Stunde' : 'Stunden'}</strong> in dieser Woche
-            </p>
-          </div>
-        )
-      })()}
+      {/* Welle 6 (Sarah 2026-05-27): "Du hast X Stunden diese Woche"-Kachel
+          entfernt — Sarah fand sie redundant. Statt dessen wird der grüne
+          Rahmen um die eigene gebuchte Stunde dicker (border-[3px]). */}
 
       <div className="px-4 pb-4 mt-3">
         {/* Welle 2.5 (Sarah 2026-05-26): Events-Sektion oben — Vermarktungs-Wirkung.
             Zeigt Einzelstunden + Events (alle session_type != 'course_session'). */}
         {!loading && eventSessions.length > 0 && (
           <div className="mb-5">
-            <p className="text-xs font-bold mb-2 mt-1 uppercase tracking-wide text-yoga-text">
+            {/* Welle 6 (Sarah 2026-05-27): zentriert */}
+            <p className="text-xs font-bold mb-2 mt-1 uppercase tracking-wide text-yoga-text text-center">
               Events diese Woche
             </p>
             {eventSessions.map(s => {
@@ -317,7 +326,7 @@ export default function KursePage() {
                   disabled={s.is_past || s.is_cancelled}
                   className={`w-full flex items-center gap-3 mb-2 text-left transition-colors rounded-yoga border p-3
                     ${(s.is_past || s.is_cancelled) ? 'opacity-40 cursor-default pointer-events-none' : 'hover:border-yoga-border2 active:scale-[0.98]'}
-                    ${s.my_booking && !s.is_past && !s.is_cancelled ? 'border-2 border-yoga-green-text bg-white' : 'border-yoga-border bg-white'}`}>
+                    ${s.my_booking && !s.is_past && !s.is_cancelled ? 'border-[3px] border-yoga-green-text bg-white' : 'border-yoga-border bg-white'}`}>
                   {s.display_image_url ? (
                     <img src={s.display_image_url} alt="" className="w-16 h-16 rounded-yoga object-cover flex-shrink-0 border border-yoga-border" />
                   ) : (
@@ -347,8 +356,12 @@ export default function KursePage() {
             })}
           </div>
         )}
-        {!loading && courseSessions.length > 0 && (
-          <p className="text-xs font-bold mb-2 uppercase tracking-wide text-yoga-text/70">
+        {/* Welle 6 (Sarah 2026-05-27): "Stunden diese Woche"-Header nur wenn
+            ZUSÄTZLICH Events angezeigt werden — sonst ist die Überschrift
+            redundant (die Stunden stehen ohnehin direkt darunter). Wenn
+            beide gezeigt werden, beide zentriert. */}
+        {!loading && courseSessions.length > 0 && eventSessions.length > 0 && (
+          <p className="text-xs font-bold mb-2 uppercase tracking-wide text-yoga-text/70 text-center">
             Stunden diese Woche
           </p>
         )}
@@ -383,7 +396,7 @@ export default function KursePage() {
                 disabled={s.is_past || s.is_cancelled}
                 className={`w-full flex items-center gap-3 mb-2 text-left transition-colors rounded-yoga border p-3
                   ${(s.is_past || s.is_cancelled) ? 'opacity-40 cursor-default pointer-events-none' : 'hover:border-yoga-border2 active:scale-[0.98]'}
-                  ${s.my_booking && !s.is_past && !s.is_cancelled ? 'border-2 border-yoga-green-text bg-white' : 'border-yoga-border bg-white'}`}>
+                  ${s.my_booking && !s.is_past && !s.is_cancelled ? 'border-[3px] border-yoga-green-text bg-white' : 'border-yoga-border bg-white'}`}>
                 <div className="text-center flex-shrink-0 w-12">
                   <div className={`text-base font-bold ${s.is_past ? 'line-through' : ''}`}>
                     {s.time_start?.slice(0,5)}

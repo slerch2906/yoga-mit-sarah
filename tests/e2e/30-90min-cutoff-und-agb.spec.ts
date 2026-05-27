@@ -393,7 +393,10 @@ test.describe('[E2E] Notify-Subscribers immer', () => {
   test('Helper notifyAllSubscribers triggert notify_place_free Email + löscht notify-Einträge', async () => {
     const helperSrc = fs.readFileSync(path.join(process.cwd(), 'lib/waitlist-promote.ts'), 'utf8')
     expect(helperSrc).toMatch(/Email\.notifyPlaceFree/)
-    expect(helperSrc).toMatch(/\.delete\(\)\.eq\('session_id',\s*sessionId\)\.eq\('type',\s*'notify'\)/)
+    // Welle S2/M4 (Sarah 2026-05-27): Multiline-Delete-Pattern erlauben.
+    // Code-Form: .delete()\n      .eq('session_id', sessionId).eq('type', 'notify')\n      .in('user_id', succeededUserIds)
+    // Wir matchen \s* zwischen .delete() und .eq, damit Mehrzeiler ok ist.
+    expect(helperSrc).toMatch(/\.delete\(\)\s*\.eq\(\s*['"]session_id['"]\s*,\s*sessionId\s*\)\s*\.eq\(\s*['"]type['"]\s*,\s*['"]notify['"]\s*\)/)
   })
 })
 

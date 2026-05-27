@@ -110,6 +110,9 @@ const ALL_ACTIONS: string[] = [
 const SYSTEM_ONLY_ACTIONS = new Set<string>([
   'course_rollover',     // System schiebt Kurs in Folgekurs — kein Yogi-Bezug
   'admin_bulk_mail',     // Admin verschickt an viele — wird ohne user_id geloggt
+  // Welle S2/S3 (Sarah 2026-05-27): 8d-Cleanup-Cron loescht abgelaufene Kurs-
+  // Credits + erstellt Audit-Eintrag ohne user_id (System-Bereinigung).
+  'course_credits_auto_expired',
 ])
 
 // ── Bekannte Drift-Lücken (Stand 2026-05-26) ────────────────────────────────

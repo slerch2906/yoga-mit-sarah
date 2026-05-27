@@ -13,9 +13,15 @@
  * Live-Tests gegen die deployte Function.
  */
 import { test, expect } from '@playwright/test'
+import * as dotenv from 'dotenv'
+
+dotenv.config({ path: '.env.test' })
 
 const FN_URL = 'https://jcczvyablgdijeiyymhc.supabase.co/functions/v1/trigger-admin-email'
-const SECRET = 'oHrn9NKC0bkcYuD-WbNEpsvpwzno8nsncukw5XHTJ7Y3hOe7WujWbVgunN2oBQsr'
+// Welle S1 (Sarah 2026-05-27): Secret aus .env.test lesen (nach Rotation).
+// Falls EDGE_FUNCTION_SECRET nicht gesetzt → tests (c)+(d) werden geskippt
+// statt fehlzuschlagen — Local-Dev ohne Secret bleibt nutzbar.
+const SECRET = process.env.EDGE_FUNCTION_SECRET || ''
 
 test.describe('[E2E] trigger-admin-email Edge Function — Live', () => {
   test('(a) Ohne x-trigger-secret Header → 401 Unauthorized', async () => {
@@ -40,6 +46,7 @@ test.describe('[E2E] trigger-admin-email Edge Function — Live', () => {
   })
 
   test('(c) Gueltiges Secret + nicht-whitelisteter Type → 403 (Type not allowed)', async () => {
+    test.skip(!SECRET, 'EDGE_FUNCTION_SECRET nicht in .env.test gesetzt — Live-Test uebersprungen')
     const res = await fetch(FN_URL, {
       method: 'POST',
       headers: {
@@ -55,6 +62,7 @@ test.describe('[E2E] trigger-admin-email Edge Function — Live', () => {
   })
 
   test('(d) Gueltiges Secret + whitelisteter Type → 200 (oder 500 wenn send-email scheitert)', async () => {
+    test.skip(!SECRET, 'EDGE_FUNCTION_SECRET nicht in .env.test gesetzt — Live-Test uebersprungen')
     // admin_guthaben_2y_expiry ist whitelisted (siehe trigger-admin-email v5
     // ALLOWED_TYPES). Daten sind minimal/dummy — wenn send-email die Mail
     // an Mail@yogamitsarah.me schickt, ist das ok (geht eh nur an Admin).

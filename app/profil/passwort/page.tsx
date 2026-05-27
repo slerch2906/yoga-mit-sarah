@@ -118,7 +118,10 @@ export default function PasswortResetPage() {
   }, [])
 
   async function handleSubmit() {
-    if (password.length < 8) { setError('Passwort muss mindestens 8 Zeichen haben.'); return }
+    // Welle S2/M8 (Sarah 2026-05-27): zentrale Passwort-Policy (Länge + Common-Block).
+    const { validatePassword } = await import('@/lib/password-policy')
+    const pwError = validatePassword(password)
+    if (pwError) { setError(pwError); return }
     if (password !== confirm) { setError('Passwörter stimmen nicht überein.'); return }
     setLoading(true); setError('')
 

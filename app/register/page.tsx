@@ -76,6 +76,10 @@ function RegisterInner() {
     e.preventDefault()
     if (!firstName.trim()) { setError('Bitte gib deinen Vornamen ein.'); return }
     if (!lastName.trim()) { setError('Bitte gib deinen Nachnamen ein.'); return }
+    // Welle S2/M8 (Sarah 2026-05-27): Passwort-Policy clientseitig.
+    const { validatePassword } = await import('@/lib/password-policy')
+    const pwError = validatePassword(password)
+    if (pwError) { setError(pwError); return }
     // Sarah-Wunsch 2026-05-23: Geburtsdatum Pflicht bei Registrierung
     if (!birthdate) { setError('Bitte gib dein Geburtsdatum ein.'); return }
     const bd = new Date(birthdate)

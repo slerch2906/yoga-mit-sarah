@@ -38,11 +38,17 @@ test.describe('[E2E] Notifications: DB-Schema', () => {
 
   test('Bestehende Yogis haben notify_booking_confirmations=true (Default greift)', async () => {
     const db = getServiceClient()
+    // Welle 6 (Sarah 2026-05-27): Test fokussiert nur auf gerade-eingerichtete
+    // Test-Accounts (nicht produktive User die ihre Settings selbst verstellt haben).
     const { data } = await db.from('profiles')
-      .select('notify_booking_confirmations').limit(5)
+      .select('notify_booking_confirmations, email')
+      .like('email', 'test.%@yogamitsarah.me')
+    expect((data || []).length).toBeGreaterThan(0)
     for (const p of (data || [])) {
-      // Default 'true' wirkt aber kann explizit auf null/false gesetzt sein
-      expect([true, null].includes((p as any).notify_booking_confirmations)).toBe(true)
+      expect(
+        [true, null].includes((p as any).notify_booking_confirmations),
+        `Test-Account ${(p as any).email} hat notify_booking_confirmations=${(p as any).notify_booking_confirmations}, erwartet true (Default)`,
+      ).toBe(true)
     }
   })
 })

@@ -517,12 +517,13 @@ test.describe('[E2E-SYS] BLOCK F: PWA + System-Health-Konsistenz', () => {
 // ════════════════════════════════════════════════════════════════════════════
 test.describe('[E2E-SYS] BLOCK G: Audit-Log Konsistenz', () => {
   test('G1 — anonymize_user_audit_logs RPC entfernt PII aus details', async () => {
-    const db = await getAdminClient()
-    // RPC existiert (call mit echtem UUID hätte Side-Effects, daher nur schema check)
+    // Welle S1 (Sarah 2026-05-27): SECURITY-DEFINER-Funktion ist von authenticated
+    // REVOKEd (privilegierte Operation). Test muss über service_role gehen.
+    const { getServiceClient } = await import('../utils/db')
+    const db = getServiceClient()
     const { error } = await db.rpc('anonymize_user_audit_logs' as any, {
-      target_user_id: '00000000-0000-0000-0000-000000000000', // existiert nicht
+      target_user_id: '00000000-0000-0000-0000-000000000000',
     })
-    // Sollte ohne error returnen (no-op auf non-existent user)
     expect(error?.message || '').toBe('')
   })
 

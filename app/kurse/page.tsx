@@ -11,6 +11,7 @@ import BottomNav from '@/components/layout/BottomNav'
 import WeekPickerPopover from '@/components/WeekPickerPopover'
 import AdminAnnouncementBubble from '@/components/AdminAnnouncementBubble'
 import YogiCreditExpiryBanner from '@/components/YogiCreditExpiryBanner'
+import YogiCancelNotifications from '@/components/YogiCancelNotifications'
 import OnboardingTour from '@/components/OnboardingTour'
 
 const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
@@ -256,6 +257,10 @@ export default function KursePage() {
 
       {/* Sarah-Nachricht (nur sichtbar wenn Admin sie aktiviert hat) */}
       <AdminAnnouncementBubble />
+
+      {/* Welle 6.1 (Sarah 2026-05-27): Banner für abgesagte Stunden/Events
+          die der Yogi gebucht hatte. Weißer Hintergrund, kein Icon, wegklickbar. */}
+      {!profile?.is_admin && <YogiCancelNotifications />}
 
       {/* Sarah-Wunsch 2026-05-25: Credit-Ablauf-Warnungen — NUR fuer Yogis,
           nicht fuer Admins (Admins haben i.d.R. keine eigenen Credits zu tracken) */}

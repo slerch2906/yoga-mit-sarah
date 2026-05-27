@@ -778,6 +778,23 @@ export default function AdminSessionPage() {
           })
         }
       }
+      // Welle 6.1 (Sarah 2026-05-27): Yogi-Dashboard-Banner anlegen
+      const isEvent = session?.session_type === 'event_free' || session?.session_type === 'event_paid'
+      await supabase.from('yogi_notifications').insert({
+        user_id: booking.user_id,
+        type: isEvent ? 'event_cancelled' : 'session_cancelled',
+        payload: {
+          session_id: id,
+          title: (session?.session_type && session.session_type !== 'course_session')
+            ? (session?.name || '')
+            : (session?.course?.name || ''),
+          session_type: session?.session_type,
+          date: session?.date,
+          time_start: session?.time_start,
+          price_eur: (session as any)?.price_eur ?? null,
+          reason: reason || null,
+        },
+      })
     }
 
     // 4) Warteliste löschen

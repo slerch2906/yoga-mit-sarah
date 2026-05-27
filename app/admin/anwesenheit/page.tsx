@@ -81,6 +81,20 @@ function AnwesenheitInner() {
           sessionType: sessType,
         })
       }
+      // Welle 6.1 (Sarah 2026-05-27): Yogi-Dashboard-Banner anlegen
+      await supabase.from('yogi_notifications').insert({
+        user_id: b.user_id,
+        type: isEvent ? 'event_cancelled' : 'session_cancelled',
+        payload: {
+          session_id: sessionId,
+          title: mailName,
+          session_type: sessType,
+          date: (session as any)?.date,
+          time_start: (session as any)?.time_start,
+          price_eur: (session as any)?.price_eur ?? null,
+          reason: null,
+        },
+      })
     }
 
     await supabase.from('audit_log').insert({

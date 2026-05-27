@@ -11,6 +11,7 @@ import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import WeekPickerPopover from '@/components/WeekPickerPopover'
 import AdminAnnouncementBubble from '@/components/AdminAnnouncementBubble'
+import AdminBirthdayBanner from '@/components/AdminBirthdayBanner'
 import { sessionDisplayName } from '@/lib/session-display'
 
 const WEEKDAYS = ['So','Mo','Di','Mi','Do','Fr','Sa']
@@ -475,11 +476,30 @@ export default function AdminDashboard() {
 
     // Credits für alle aktiven Buchungen freigeben
     const activeBookings = sessionBookings.filter(b => b._type === 'booking' && b.status === 'active')
+    const _sessType = selectedSession.session_type
+    const _isEvent = _sessType === 'event_free' || _sessType === 'event_paid'
+    const _bannerTitle = (_sessType && _sessType !== 'course_session')
+      ? (selectedSession.name || '')
+      : ((selectedSession as any).course?.name || selectedSession.course_name || '')
     for (const b of activeBookings) {
       await supabase.from('bookings').update({
         status: 'cancelled', cancelled_at: new Date().toISOString()
       }).eq('id', b.id)
       // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
+      // Welle 6.1 (Sarah 2026-05-27): Yogi-Dashboard-Banner anlegen
+      await supabase.from('yogi_notifications').insert({
+        user_id: b.user_id,
+        type: _isEvent ? 'event_cancelled' : 'session_cancelled',
+        payload: {
+          session_id: selectedSession.id,
+          title: _bannerTitle,
+          session_type: _sessType,
+          date: selectedSession.date,
+          time_start: selectedSession.time_start,
+          price_eur: (selectedSession as any).price_eur ?? null,
+          reason: replacementDate ? null : 'Abgesagt',
+        },
+      })
     }
 
     // Ersatztermin anlegen?
@@ -689,6 +709,10 @@ export default function AdminDashboard() {
       <AppHeader title="Admin Dashboard" isAdmin />
       {/* Sprechblase auch für Admin sichtbar — Erinnerung dass die Nachricht aktiv ist */}
       <AdminAnnouncementBubble />
+
+      {/* Welle 6.1 (Sarah 2026-05-27): Geburtstags-Hinweis für Yogis mit
+          Geburtstag in der aktuellen Woche. */}
+      <AdminBirthdayBanner />
 
       {/* Sarah-Wunsch 2026-05-24: Action-Kachel für offene Kursabbruch-Aufgaben.
           Erscheint NUR wenn Aufgaben offen sind. Klick → /admin/kursabbruch */}

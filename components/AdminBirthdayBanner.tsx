@@ -112,7 +112,10 @@ export default function AdminBirthdayBanner() {
         className="absolute top-2 right-2 w-7 h-7 rounded-full hover:bg-yoga-gray text-yoga-text/50 hover:text-yoga-text flex items-center justify-center cursor-pointer bg-transparent border-0">
         <i className="ti ti-x text-base" />
       </button>
-      <p className="text-sm font-bold text-yoga-text mb-1">Geburtstage diese Woche</p>
+      <div className="flex items-center gap-2 mb-1">
+        <i className="ti ti-cake text-yoga-text text-base" />
+        <p className="text-sm font-bold text-yoga-text">Geburtstage diese Woche</p>
+      </div>
       <ul className="space-y-1 mt-1">
         {yogis.map(y => (
           <li key={y.id} className="text-sm text-yoga-text/85 leading-snug">

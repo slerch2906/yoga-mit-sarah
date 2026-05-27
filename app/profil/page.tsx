@@ -388,6 +388,14 @@ export default function ProfilPage() {
     await Email.adminDsgvoDeletion({ fullName, email })
 
     // 6) Auth User löschen + sofort ausloggen
+    // Welle S1/H1 (Sarah 2026-05-27): Bearer-Token VOR signOut greifen — die API-Route
+    // braucht ihn um den Caller zu authentifizieren (vorher: unauthorized POST).
+    let accessToken = ''
+    try {
+      const { data: { session: sess } } = await supabase.auth.getSession()
+      accessToken = sess?.access_token || ''
+    } catch {}
+
     // Erst lokal ausloggen (Session löschen), dann Auth-User löschen
     try { await supabase.auth.signOut({ scope: 'global' }) } catch {}
     localStorage.clear()
@@ -396,7 +404,10 @@ export default function ProfilPage() {
     // Auth-User asynchron löschen (muss nach signOut passieren)
     fetch('/api/delete-account', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
       body: JSON.stringify({ userId: user.id })
     }).catch(e => console.error('Delete account:', e))
 

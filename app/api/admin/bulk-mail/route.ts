@@ -58,6 +58,8 @@ export async function POST(req: NextRequest) {
           'Content-Type': 'application/json',
           'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY!,
           'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+          // Welle S1/H6 (Sarah 2026-05-27): bevorzugt EDGE_FUNCTION_SECRET (server-only).
+          // NEXT_PUBLIC_EDGE_SECRET nur als Fallback fuer Uebergangsphase.
           'x-function-secret': process.env.EDGE_FUNCTION_SECRET || process.env.NEXT_PUBLIC_EDGE_SECRET || '',
         },
         body: JSON.stringify({

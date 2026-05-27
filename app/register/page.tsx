@@ -26,39 +26,46 @@ function RegisterInner() {
     async function loadInvitation() {
       const supabase = createClient()
 
-      // Direkt via REST laden - umgeht Auth-State-Probleme
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      const res = await fetch(
-        `${supabaseUrl}/rest/v1/invitations?token=eq.${token}&select=*,course:courses(name,total_units)`,
-        { headers: { 'apikey': supabaseKey!, 'Authorization': `Bearer ${supabaseKey}` } }
-      )
-      const rows = await res.json()
-      const data = Array.isArray(rows) && rows.length > 0 ? rows[0] : null
-      const fetchError = !res.ok
+      // Welle S1/H2 (Sarah 2026-05-27): Invitation via SECURITY DEFINER RPC laden,
+      // statt anon-REST-Read auf invitations-Tabelle. RPC validiert token + expires_at
+      // serverseitig und liefert nur die Felder die der Yogi sehen darf
+      // (inkl. course_name). Damit kann die invitations-RLS auf Service-Role-only
+      // verschaerft werden (Schritt am Ende von Sarah).
+      const { data, error: rpcErr } = await supabase.rpc('read_invitation_by_token', {
+        p_token: token,
+      })
+      // RPC kann entweder ein Array oder ein Einzel-Objekt liefern — beide Faelle
+      // tolerieren, damit Refactor robust bleibt.
+      const row = Array.isArray(data) ? (data[0] || null) : (data || null)
 
-      if (fetchError || !data) {
+      if (rpcErr || !row) {
         setError('Einladung ist abgelaufen oder ungültig. Bitte wende dich an Sarah.')
         setChecking(false)
         return
       }
-      if (data.used) {
+      if (row.used) {
         setError('Dieser Einladungslink wurde bereits verwendet.')
         setChecking(false)
         return
       }
-      if (new Date(data.expires_at) < new Date()) {
-        // Sarah-Regel 2026-05-22: Admin kann Einladung "zurückziehen" indem er sie löscht
-        // (soft-delete via expires_at = now). Dieser Pfad fängt beide Fälle ab.
+      if (row.expires_at && new Date(row.expires_at) < new Date()) {
+        // Sarah-Regel 2026-05-22: Admin kann Einladung "zurueckziehen" indem er sie loescht
+        // (soft-delete via expires_at = now). Dieser Pfad faengt beide Faelle ab.
         setError('Einladung ist abgelaufen. Bitte wende dich an Sarah.')
         setChecking(false)
         return
       }
 
-      setInvitation(data)
-      setEmail(data.email || '')
-      if (data.first_name) setFirstName(data.first_name)
-      if (data.last_name) setLastName(data.last_name)
+      // course-Feld wie vorher als Sub-Objekt {name, total_units} bereitstellen,
+      // damit der bestehende UI-Code (invitation?.course?.name) ohne Umbau passt.
+      const invitationShape = {
+        ...row,
+        course: row.course_name ? { name: row.course_name, total_units: row.course_total_units } : null,
+      }
+      setInvitation(invitationShape)
+      setEmail(row.email || '')
+      if (row.first_name) setFirstName(row.first_name)
+      if (row.last_name) setLastName(row.last_name)
       setChecking(false)
     }
 
@@ -127,7 +134,12 @@ function RegisterInner() {
         birthdate, // YYYY-MM-DD
       })
 
-      await supabase.from('invitations').update({ used: true, accepted_at: new Date().toISOString() }).eq('token', token!)
+      // Welle S1/H3 (Sarah 2026-05-27): Invitation via SECURITY DEFINER RPC
+      // konsumieren — statt direktem UPDATE auf invitations-Tabelle. Damit kann
+      // die invitations-RLS auf Service-Role-only verschaerft werden.
+      try {
+        await supabase.rpc('consume_invitation_by_token', { p_token: token! })
+      } catch (e) { console.error('consume_invitation_by_token:', e) }
 
       // Welcome Email senden — Fehler hier nicht fatal
       try {

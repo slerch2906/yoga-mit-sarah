@@ -15,14 +15,21 @@ export default function KursabbruchPage() {
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
-        .from('course_cancellation_responses')
-        .select('*, course:courses(name)')
-        .eq('token', token)
-        .maybeSingle()
-      setEntry(data)
+      // Welle S1/H5 (Sarah 2026-05-27): Lesezugriff via SECURITY DEFINER RPC
+      // statt direktem Tabellen-Read auf course_cancellation_responses. Damit
+      // kann die RLS auf Service-Role-only verschaerft werden.
+      const { data: rpcData } = await supabase.rpc('read_cancellation_response_by_token', {
+        p_token: token,
+      })
+      const row = Array.isArray(rpcData) ? (rpcData[0] || null) : (rpcData || null)
+      // course-Feld als Sub-Objekt nachbauen, damit UI ohne Umbau funktioniert.
+      const shaped = row ? {
+        ...row,
+        course: row.course_name ? { name: row.course_name } : null,
+      } : null
+      setEntry(shaped)
       setLoading(false)
-      if (data?.choice) setDone(data.choice as 'guthaben' | 'erstattung')
+      if (shaped?.choice) setDone(shaped.choice as 'guthaben' | 'erstattung')
     }
     load()
   }, [token])

@@ -1,19 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
+// Welle S1/H1 (Sarah 2026-05-27): Auth-Check für DSGVO-Account-Loeschung.
+// Vorher: jeder konnte mit fremder userId einen Admin-Delete ausloesen. Jetzt:
+// Bearer-Token Pflicht. User darf nur sich selbst loeschen, ausser er ist Admin.
 export async function POST(req: NextRequest) {
   try {
     const { userId } = await req.json()
     if (!userId) return NextResponse.json({ error: 'No userId' }, { status: 400 })
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    // Versuche Service Role Key (server-side), fallback auf anon key
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
     if (!serviceKey) {
       return NextResponse.json({ error: 'Service key not configured' }, { status: 500 })
     }
 
-    // Auth-User löschen (das invalidiert automatisch alle Sessions)
+    // Welle S1/H1: Bearer-Token aus Authorization-Header pruefen.
+    const authHeader = req.headers.get('authorization') || ''
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim()
+    if (!token) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+    const sb = createClient(supabaseUrl, serviceKey)
+    const { data: userRes, error: userErr } = await sb.auth.getUser(token)
+    if (userErr || !userRes?.user) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    }
+    const callerId = userRes.user.id
+
+    // Admin-Override: Admin darf fremde User loeschen (selten, aber DSGVO-Helfer).
+    let allowed = callerId === userId
+    if (!allowed) {
+      const { data: prof } = await sb.from('profiles').select('is_admin').eq('id', callerId).maybeSingle()
+      allowed = !!prof?.is_admin
+    }
+    if (!allowed) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+
+    // Auth-User loeschen (das invalidiert automatisch alle Sessions)
     const res = await fetch(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
       method: 'DELETE',
       headers: {
@@ -25,8 +47,8 @@ export async function POST(req: NextRequest) {
     if (!res.ok) {
       const errText = await res.text().catch(() => '')
       console.error('Delete user error:', res.status, errText)
-      // Fehler im Response aber trotzdem success zurückgeben
-      // (User ist bereits anonymisiert, Auth-Löschung ist optional)
+      // Fehler im Response aber trotzdem success zurueckgeben
+      // (User ist bereits anonymisiert, Auth-Loeschung ist optional)
       return NextResponse.json({ success: true, warning: 'Auth deletion failed but profile anonymized' })
     }
 

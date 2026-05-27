@@ -132,9 +132,11 @@ export default function KursePage() {
 
     // Welle 2.5 (Sarah 2026-05-26): session-eigene Felder mitladen (Einzelstunden/
     // Events haben eigenen name/max_spots/etc., der Container-Kurs hat NULL/0).
+    // Welle S1/H4 (Sarah 2026-05-27): KEIN bookings-JOIN mehr — sonst leakt
+    // user_id-Liste an alle Yogis. Counts via RPC + eigene Buchung separat.
     const { data, error } = await supabase
       .from('sessions')
-      .select(`id, date, time_start, duration_min, session_type, name, location, description, max_spots, image_url, price_eur, bring_along, difficulty, external_participants_count, course:courses(id, name, max_spots, difficulty, is_free, image_url, location, description, bring_along), bookings!bookings_session_id_fkey(id, user_id, status)`)
+      .select(`id, date, time_start, duration_min, session_type, name, location, description, max_spots, image_url, price_eur, bring_along, difficulty, external_participants_count, course:courses(id, name, max_spots, difficulty, is_free, image_url, location, description, bring_along)`)
       .gte('date', weekStart.toISOString().split('T')[0])
       .lte('date', weekEnd.toISOString().split('T')[0])
       .eq('is_cancelled', false)
@@ -156,6 +158,29 @@ export default function KursePage() {
       }
     }
 
+    // Welle S1/H4 (Sarah 2026-05-27): Booking-Counts via RPC (SECURITY DEFINER)
+    // statt JOIN — die RPC liefert nur den Count, keine user_ids. Eigene Buchungen
+    // separat ueber user_id-Filter. Ergebnis im UI identisch.
+    const countMap: Record<string, number> = {}
+    const myBookingMap: Record<string, any> = {}
+    if (visibleIds.length > 0) {
+      const { data: counts } = await supabase.rpc('get_session_booking_counts', {
+        p_session_ids: visibleIds,
+      })
+      for (const row of (counts || []) as any[]) {
+        countMap[row.session_id] = row.booking_count ?? 0
+      }
+      const { data: myBookings } = await supabase
+        .from('bookings')
+        .select('id, session_id, status')
+        .eq('user_id', userId!)
+        .eq('status', 'active')
+        .in('session_id', visibleIds)
+      for (const b of (myBookings || []) as any[]) {
+        myBookingMap[b.session_id] = b
+      }
+    }
+
     const now = new Date()
     // Welle 2.5: für Container-Sessions (single/event_*) zeigt course.name den
     // SYS-Container ("SYS · Events (bezahlt)") — daher session.name als Override.
@@ -171,8 +196,10 @@ export default function KursePage() {
       const display_difficulty = s.difficulty ?? s.course?.difficulty
       return {
         ...s,
-        booking_count: s.bookings.filter((b: any) => b.status === 'active').length,
-        my_booking: s.bookings.find((b: any) => b.user_id === userId && b.status === 'active') || null,
+        // Welle S1/H4 (Sarah 2026-05-27): Count + own booking aus separaten Quellen
+        // (s. RPC + my-bookings-Query oben). Vorher: bookings-JOIN mit user_id-Leak.
+        booking_count: countMap[s.id] ?? 0,
+        my_booking: myBookingMap[s.id] || null,
         is_past: new Date(`${s.date}T${s.time_start}`) < now,
         is_replacement: !!originMap[s.id],
         original_session: originMap[s.id] || null,

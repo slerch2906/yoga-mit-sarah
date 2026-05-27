@@ -1,22 +1,58 @@
+// Welle S1/H6 (Sarah 2026-05-27):
+// Im Browser → POST an /api/email mit Bearer-Token (Server-Proxy versteckt das
+// Edge-Secret). Im Server-Kontext (API-Routes, RPC-Handler, Edge-Cron-Trigger)
+// → direkter Edge-Function-Call mit server-only EDGE_FUNCTION_SECRET. So bleibt
+// das Secret aus dem Client-Bundle, ohne dass Server-Code einen HTTP-Hop ueber
+// sich selbst nimmt.
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 async function sendEmail(type: string, data: Record<string, any>): Promise<void> {
+  // Server-side: direkter Edge-Call mit server-only Secret.
+  if (typeof window === 'undefined') {
+    try {
+      const edgeSecret = process.env.EDGE_FUNCTION_SECRET || process.env.NEXT_PUBLIC_EDGE_SECRET || ''
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`,
+          'x-function-secret': edgeSecret,
+        },
+        body: JSON.stringify({ type, data }),
+      })
+      const result = await res.json().catch(() => ({}))
+      console.log('Email sent (server):', type, res.status, result)
+    } catch (e) {
+      console.error('Email send error (server):', type, e)
+    }
+    return
+  }
+
+  // Client-side: ueber /api/email-Proxy. Bearer-Token best-effort beilegen,
+  // damit der Server eingeloggte vs. ausgeloggte Caller unterscheiden kann.
   try {
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+    let accessToken = ''
+    try {
+      const { createClient } = await import('@/lib/supabase/client')
+      const sb = createClient()
+      const { data: { session } } = await sb.auth.getSession()
+      accessToken = session?.access_token || ''
+    } catch {}
+    const res = await fetch('/api/email', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'x-function-secret': process.env.NEXT_PUBLIC_EDGE_SECRET || '',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
       },
       body: JSON.stringify({ type, data }),
     })
     const result = await res.json().catch(() => ({}))
-    console.log('Email sent:', type, res.status, result)
+    console.log('Email sent (client):', type, res.status, result)
   } catch (e) {
-    console.error('Email send error:', type, e)
+    console.error('Email send error (client):', type, e)
   }
 }
 

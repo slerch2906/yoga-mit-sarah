@@ -9,25 +9,24 @@ import { getCurrentAgbVersion, getAgbChangelogSince, type AgbVersion } from '@/l
 
 // Einfaches PDF als Base64 via HTML-Canvas-Trick mit jsPDF-ähnlichem Ansatz
 // Wir bauen das PDF manuell als minimales PDF-Binary
+// Welle S1/H8 (Sarah 2026-05-27): Direkter Edge-Call ersetzt durch Server-Proxy
+// /api/agb-drive-upload — damit verlaesst NEXT_PUBLIC_EDGE_SECRET das Bundle.
+// Die API-Route prueft den Bearer-Token serverseitig.
 async function uploadToEdgeFunction(fullName: string, email: string, acceptedAt: string, accessToken: string): Promise<void> {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     const datePart = new Date(acceptedAt).toISOString().split('T')[0]
     const safeName = fullName.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_')
     const filename = `AGB_${safeName}_${datePart}.pdf`
 
-    const response = await fetch(`${supabaseUrl}/functions/v1/agb-drive-upload`, {
+    const response = await fetch('/api/agb-drive-upload', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
-        'apikey': supabaseKey!,
-        'x-function-secret': process.env.NEXT_PUBLIC_EDGE_SECRET || '',
       },
       body: JSON.stringify({ fullName, email, acceptedAt, filename, userAgent: navigator.userAgent }),
     })
-    const result = await response.json()
+    const result = await response.json().catch(() => ({}))
     console.log('Drive upload result:', result)
   } catch (e) {
     console.error('Drive upload error:', e)

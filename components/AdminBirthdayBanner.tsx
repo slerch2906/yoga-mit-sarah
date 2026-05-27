@@ -37,11 +37,31 @@ function getMonday(d: Date): Date {
   return m
 }
 
+/** Welle 6.1 Hotfix (Sarah 2026-05-27): Per-Woche dismiss-Key —
+ * Sarah klickt einmal weg, kommt erst nächste Woche wieder. */
+function getWeekDismissKey(): string {
+  const d = new Date()
+  const monday = getMonday(d)
+  const yyyy = monday.getFullYear()
+  const mm = String(monday.getMonth() + 1).padStart(2, '0')
+  const dd = String(monday.getDate()).padStart(2, '0')
+  return `birthday_banner_dismissed_${yyyy}-${mm}-${dd}`
+}
+
 export default function AdminBirthdayBanner() {
   const [yogis, setYogis] = useState<BirthdayYogi[]>([])
+  const [dismissed, setDismissed] = useState(false)
   const supabase = createClient()
 
-  useEffect(() => { void load() }, [])
+  useEffect(() => {
+    try { setDismissed(localStorage.getItem(getWeekDismissKey()) === '1') } catch {}
+    void load()
+  }, [])
+
+  function dismiss() {
+    try { localStorage.setItem(getWeekDismissKey(), '1') } catch {}
+    setDismissed(true)
+  }
 
   async function load() {
     const { data } = await supabase
@@ -82,14 +102,17 @@ export default function AdminBirthdayBanner() {
     setYogis(matches)
   }
 
-  if (yogis.length === 0) return null
+  if (yogis.length === 0 || dismissed) return null
 
   return (
-    <div className="mx-4 mt-3 bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga px-4 py-3">
-      <div className="flex items-center gap-2 mb-1">
-        <i className="ti ti-cake text-yoga-amber-text text-base" />
-        <p className="text-sm font-bold text-yoga-amber-text">Geburtstage diese Woche</p>
-      </div>
+    <div className="mx-4 mt-3 bg-white border border-yoga-border rounded-yoga px-4 py-3 relative pr-9 shadow-sm">
+      <button
+        onClick={dismiss}
+        aria-label="Geburtstags-Hinweis schließen"
+        className="absolute top-2 right-2 w-7 h-7 rounded-full hover:bg-yoga-gray text-yoga-text/50 hover:text-yoga-text flex items-center justify-center cursor-pointer bg-transparent border-0">
+        <i className="ti ti-x text-base" />
+      </button>
+      <p className="text-sm font-bold text-yoga-text mb-1">Geburtstage diese Woche</p>
       <ul className="space-y-1 mt-1">
         {yogis.map(y => (
           <li key={y.id} className="text-sm text-yoga-text/85 leading-snug">

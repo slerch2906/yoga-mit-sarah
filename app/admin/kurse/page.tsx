@@ -1226,21 +1226,38 @@ export default function AdminKursePage() {
     // OHNE Credit (kein Credit-Anlegen, kein credit_id-Link). Sie sind reine
     // Anzeige-Platzhalter und sollen den Credit-Topf nicht verbrauchen.
     if (yogi.is_dummy) {
+      // Welle S3/M14 (Sarah 2026-05-27): vorher 1-2 sequentielle Round-Trips
+      // pro Session. Jetzt 1× existierende Bookings laden, dann Bulk-Insert
+      // + Bulk-Update statt N+1.
+      const sessionIds = sessionList.map((s: any) => s.id)
+      const { data: existingDummy } = sessionIds.length > 0
+        ? await supabase.from('bookings').select('id, session_id')
+            .eq('user_id', yogi.id).in('session_id', sessionIds)
+        : { data: [] as any[] }
+      const existingMap: Record<string, string> = {}
+      for (const ex of (existingDummy || []) as any[]) existingMap[ex.session_id] = ex.id
+
+      const toInsert: any[] = []
+      const toUpdateIds: string[] = []
       for (const s of sessionList) {
-        const { data: ex } = await supabase.from('bookings').select('id')
-          .eq('user_id', yogi.id).eq('session_id', s.id).maybeSingle()
-        if (ex) {
-          await supabase.from('bookings').update({
-            status: 'active', credit_id: null,
-            cancelled_at: null, cancel_late: false, type: 'course',
-          }).eq('id', ex.id)
-        } else {
-          await supabase.from('bookings').insert({
-            user_id: yogi.id, session_id: s.id,
-            credit_id: null, type: 'course', status: 'active',
-          })
-        }
+        const exId = existingMap[s.id]
+        if (exId) toUpdateIds.push(exId)
+        else toInsert.push({
+          user_id: yogi.id, session_id: s.id,
+          credit_id: null, type: 'course', status: 'active',
+        })
       }
+      await Promise.all([
+        toInsert.length > 0
+          ? supabase.from('bookings').insert(toInsert)
+          : Promise.resolve(),
+        toUpdateIds.length > 0
+          ? supabase.from('bookings').update({
+              status: 'active', credit_id: null,
+              cancelled_at: null, cancel_late: false, type: 'course',
+            }).in('id', toUpdateIds)
+          : Promise.resolve(),
+      ])
       await supabase.from('audit_log').insert({
         action: 'yogi_enrolled_by_admin',
         details: {
@@ -1300,24 +1317,42 @@ export default function AdminKursePage() {
       creditPerSession.push(assigned || newCourseCreditId)
     }
 
-    // Bookings reaktivieren / anlegen (mit credit_id-Link)
+    // Welle S3/M14 (Sarah 2026-05-27): N+1-Loop entfernt.
+    // Vorher 1-2 sequentielle Round-Trips pro Session. Jetzt:
+    // 1× existierende Bookings laden, dann Bulk-Insert + Updates parallel.
+    const sessionIds = sessionList.map((s: any) => s.id)
+    const { data: existingBookings } = sessionIds.length > 0
+      ? await supabase.from('bookings').select('id, session_id')
+          .eq('user_id', yogi.id).in('session_id', sessionIds)
+      : { data: [] as any[] }
+    const existingBookingMap: Record<string, string> = {}
+    for (const ex of (existingBookings || []) as any[]) existingBookingMap[ex.session_id] = ex.id
+
+    const toInsert: any[] = []
+    const updatePromises: any[] = []
     for (let i = 0; i < sessionList.length; i++) {
       const s = sessionList[i]
       const creditId = creditPerSession[i]
-      const { data: ex } = await supabase.from('bookings').select('id')
-        .eq('user_id', yogi.id).eq('session_id', s.id).maybeSingle()
-      if (ex) {
-        await supabase.from('bookings').update({
-          status: 'active', credit_id: creditId,
-          cancelled_at: null, cancel_late: false, type: 'course',
-        }).eq('id', ex.id)
+      const exId = existingBookingMap[s.id]
+      if (exId) {
+        // Update muss pro Booking-ID mit individuellem credit_id passieren.
+        updatePromises.push(
+          supabase.from('bookings').update({
+            status: 'active', credit_id: creditId,
+            cancelled_at: null, cancel_late: false, type: 'course',
+          }).eq('id', exId)
+        )
       } else {
-        await supabase.from('bookings').insert({
+        toInsert.push({
           user_id: yogi.id, session_id: s.id,
           credit_id: creditId, type: 'course', status: 'active',
         })
       }
     }
+    await Promise.all([
+      toInsert.length > 0 ? supabase.from('bookings').insert(toInsert) : Promise.resolve(),
+      ...updatePromises,
+    ])
 
     // Admin-Info wenn Guthaben verrechnet (Buchhaltungs-Info)
     if (guthabenUsable > 0) {

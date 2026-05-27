@@ -181,7 +181,7 @@ function CreditsVergebenInner() {
           <div>
             <label className="field-label">Anzahl Credits</label>
             <input className="field-input" type="number" min={1} max={50} value={amount}
-              onChange={e => setAmount(parseInt(e.target.value))} required />
+              onChange={e => setAmount(parseInt(e.target.value, 10))} required />
           </div>
 
           {model === 'tenpack' && (

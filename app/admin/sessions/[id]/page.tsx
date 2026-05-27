@@ -10,6 +10,8 @@ import { selectCreditForBooking } from '@/lib/credit-selector'
 import { escapeForOrFilter } from '@/lib/search-sanitize'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
+// Welle S3/Pattern 3 (Sarah 2026-05-27): defensive Date-Parsing.
+import { parseSessionDateTime } from '@/lib/session-time'
 
 export default function AdminSessionPage() {
   const { id } = useParams<{ id: string }>()
@@ -146,8 +148,12 @@ export default function AdminSessionPage() {
     // Standard-Pfad (course_session / single / event_credit): 3h-Frist-Modal
     let within3h = false
     if (freshSession) {
-      const sessionStart = new Date(`${freshSession.date}T${freshSession.time_start}`).getTime()
-      within3h = (sessionStart - Date.now()) <= 3 * 60 * 60 * 1000 && sessionStart > Date.now()
+      // Welle S3/Pattern 3: defensive Date-Parsing.
+      const dt = parseSessionDateTime(freshSession.date, freshSession.time_start)
+      if (dt) {
+        const sessionStart = dt.getTime()
+        within3h = (sessionStart - Date.now()) <= 3 * 60 * 60 * 1000 && sessionStart > Date.now()
+      }
     }
     // Modal oeffnen — eigentliche Cancellation passiert in confirmCancelBooking(...)
     setCancelChoice({ bookingId, sessionId, within3h, sessionType: sessType })
@@ -1419,12 +1425,12 @@ export default function AdminSessionPage() {
                 <div>
                   <label className="field-label">Dauer (Min.)</label>
                   <input className="field-input" type="number" value={editForm.duration_min}
-                    onChange={e => setEditForm({ ...editForm, duration_min: parseInt(e.target.value) || 0 })} />
+                    onChange={e => setEditForm({ ...editForm, duration_min: parseInt(e.target.value, 10) || 0 })} />
                 </div>
                 <div>
                   <label className="field-label">Max. Teilnehmer</label>
                   <input className="field-input" type="number" min={1} max={200} value={editForm.max_spots}
-                    onChange={e => setEditForm({ ...editForm, max_spots: parseInt(e.target.value) || 0 })} />
+                    onChange={e => setEditForm({ ...editForm, max_spots: parseInt(e.target.value, 10) || 0 })} />
                 </div>
               </div>
               <div>

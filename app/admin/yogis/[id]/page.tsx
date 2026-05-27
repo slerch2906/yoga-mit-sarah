@@ -286,8 +286,8 @@ export default function AdminYogiDetailPage() {
     let fromUnit = 1
     let untilUnit: number | null = null
     if (enrollRangeMode) {
-      const fromN = parseInt(enrollFromUnit)
-      const untilN = parseInt(enrollUntilUnit)
+      const fromN = parseInt(enrollFromUnit, 10)
+      const untilN = parseInt(enrollUntilUnit, 10)
       if (!Number.isFinite(fromN) || !Number.isFinite(untilN) || fromN < 1 || untilN < fromN || untilN > remaining) {
         alert(`Ungültiger Bereich. Möglich: 1 bis ${remaining}.`)
         setEnrolling(false); return
@@ -1037,6 +1037,19 @@ export default function AdminYogiDetailPage() {
         const reason = d.reason ? ` (Grund: ${d.reason})` : ''
         return { text: `Admin hat Yogi-Account DSGVO-konform gelöscht${reason}`, subject: '' }
       }
+      // ── Welle S2/S3 (Sarah 2026-05-27): Folge-Audits Sicherheits-/Logik-Fixes ──
+      case 'replacement_credit_invalid': {
+        const r = d.reason === 'expires_before_replacement' ? 'Credit war abgelaufen' : 'Credit galt noch nicht'
+        return { text: `Ersatztermin-Buchung NICHT automatisch erstellt (${r}) — Yogi muss selbst handeln`, subject: termin }
+      }
+      case 'kursabbruch_token_reclicked':
+        return { text: `Yogi hat Kursabbruch-Link erneut geklickt (Original-Wahl: ${d.original_choice || '?'})`, subject: '' }
+      case 'apply_cancellation_refund_failed':
+        return { text: `Erstattungs-Workflow fehlgeschlagen (${d.error || 'unbekannt'}) — Sarah muss manuell prüfen`, subject: '' }
+      case 'profile_email_update_failed':
+        return { text: `Email-Update fehlgeschlagen (${d.error || 'unbekannt'}) — Rollback versucht`, subject: '' }
+      case 'waitlist_offer_rollback':
+        return { text: `Warteliste-Angebot zurückgerollt (${d.reason || 'unbekannt'})`, subject: termin }
       default:
         return { text: `${entry.action} — keine lesbare Beschreibung verfügbar (bitte Mapping ergänzen)`, subject: '' }
     }
@@ -1080,7 +1093,7 @@ export default function AdminYogiDetailPage() {
                   <div className="flex items-center gap-2 mb-2">
                     <label className="text-xs text-yoga-text/60">Neue Gesamtzahl:</label>
                     <input type="number" min={c.used} max={100} value={editCreditAmount}
-                      onChange={e => setEditCreditAmount(parseInt(e.target.value))}
+                      onChange={e => setEditCreditAmount(parseInt(e.target.value, 10))}
                       className="field-input w-20 text-center py-1" />
                   </div>
                   <div className="flex gap-2">
@@ -1367,7 +1380,7 @@ export default function AdminYogiDetailPage() {
                     </div>
                     <p className="text-xs text-yoga-text/50 mt-2">
                       {(() => {
-                        const f = parseInt(enrollFromUnit), u = parseInt(enrollUntilUnit)
+                        const f = parseInt(enrollFromUnit, 10), u = parseInt(enrollUntilUnit, 10)
                         if (!Number.isFinite(f) || !Number.isFinite(u)) return 0
                         return Math.max(0, u - f + 1)
                       })()} Credits werden vergeben

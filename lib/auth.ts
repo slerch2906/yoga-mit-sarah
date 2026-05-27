@@ -20,11 +20,19 @@ export async function getCurrentUser() {
       .eq('id', session.user.id)
       .single()
 
-    const timeoutPromise = new Promise<null>((resolve) => 
-      setTimeout(() => resolve(null), 5000)
-    )
+    // Welle S3/N8 (Sarah 2026-05-27): Timeout-Helper rumte vorher 5s lang
+    // im Hintergrund weiter, auch wenn die echte Query schon zurueck war.
+    // Jetzt: clearTimeout sobald die Profile-Query auf Tour ist.
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    const profileRaced = profilePromise.then((v) => {
+      if (timeoutId) { clearTimeout(timeoutId); timeoutId = null }
+      return v
+    })
+    const timeoutPromise = new Promise<null>((resolve) => {
+      timeoutId = setTimeout(() => resolve(null), 5000)
+    })
 
-    const result = await Promise.race([profilePromise, timeoutPromise])
+    const result = await Promise.race([profileRaced, timeoutPromise])
     
     if (result === null) return session.user
 

@@ -26,6 +26,13 @@ export async function POST(
     .eq('token', token).maybeSingle()
   if (!offer) return NextResponse.json({ error: 'invalid_token' }, { status: 404 })
 
+  // Welle S3/M6 (Sarah 2026-05-27): Expiry-Check via waitlist_offers.expires_at
+  // — bisher haben wir nur den Session-Start geprueft. expires_at ist
+  // praeziser (z.B. wenn Sarah den Offer manuell vorzeitig schliessen will).
+  if ((offer as any).expires_at && new Date((offer as any).expires_at) < new Date()) {
+    return NextResponse.json({ error: 'expired', message: 'Token abgelaufen' }, { status: 410 })
+  }
+
   // 2) Bereits abgelaufen? (Session-Start vorbei)
   const sessionStart = new Date(`${(offer as any).session?.date}T${(offer as any).session?.time_start}`).getTime()
   if (Date.now() >= sessionStart || (offer as any).session?.is_cancelled) {
@@ -56,6 +63,27 @@ export async function POST(
     return NextResponse.json({ error: 'too_late' }, { status: 409 })
   }
 
+  // Welle S3/M20 (Sarah 2026-05-27): Rollback-Helper. Wenn nach dem
+  // resolved_winner_user_id-Set IRGENDETWAS schiefgeht (no_credit, booking-Fail,
+  // waitlist-delete-Fail), rollen wir das Offer zurueck — sonst bleibt der
+  // Platz fuer immer "vergeben" obwohl niemand drin sitzt.
+  const rollbackOffer = async (reason: string, extra?: any) => {
+    await supabase.from('waitlist_offers').update({ resolved_winner_user_id: null, claimed_at: null })
+      .eq('session_id', (offer as any).session_id)
+    try {
+      await supabase.from('audit_log').insert({
+        user_id: (offer as any).user_id,
+        action: 'waitlist_offer_rollback',
+        details: {
+          session_id: (offer as any).session_id,
+          offer_id: (offer as any).id,
+          reason,
+          ...(extra || {}),
+        },
+      })
+    } catch (e) { console.error('audit waitlist_offer_rollback:', e) }
+  }
+
   // 5) Yogi-Credit picken (single oder course)
   const nowIso = new Date().toISOString()
   const { data: credits } = await supabase.from('credits')
@@ -64,22 +92,32 @@ export async function POST(
   const free = (credits || []).filter((c: any) => c.total > c.used && c.model !== 'guthaben')
   if (free.length === 0) {
     // Yogi hat keine Credits mehr — Angebot zurückrollen damit nächster Yogi noch klicken kann
-    await supabase.from('waitlist_offers').update({ resolved_winner_user_id: null, claimed_at: null })
-      .eq('session_id', (offer as any).session_id)
+    await rollbackOffer('no_credit')
     return NextResponse.json({ error: 'no_credit' }, { status: 402 })
   }
   const credit = free[0]
 
   // 6) Booking anlegen
-  await supabase.from('bookings').upsert({
+  const { error: bookingErr } = await supabase.from('bookings').upsert({
     user_id: (offer as any).user_id, session_id: (offer as any).session_id,
     credit_id: credit.id, type: 'single', status: 'active',
     cancelled_at: null, cancel_late: false,
   }, { onConflict: 'user_id,session_id' })
+  if (bookingErr) {
+    await rollbackOffer('booking_upsert_failed', { error_message: bookingErr.message })
+    return NextResponse.json({ error: 'booking_failed', message: bookingErr.message }, { status: 500 })
+  }
 
   // 7) Waitlist-Eintrag entfernen
-  await supabase.from('waitlist')
+  const { error: waitlistDelErr } = await supabase.from('waitlist')
     .delete().eq('user_id', (offer as any).user_id).eq('session_id', (offer as any).session_id)
+  if (waitlistDelErr) {
+    // Booking ist schon angelegt — wir rollen Offer trotzdem zurueck und
+    // melden Fehler. Buchung wird beim naechsten Promote-Lauf nicht doppelt
+    // angelegt (onConflict-Klausel).
+    await rollbackOffer('waitlist_delete_failed', { error_message: waitlistDelErr.message })
+    return NextResponse.json({ error: 'waitlist_delete_failed', message: waitlistDelErr.message }, { status: 500 })
+  }
 
   // 8) Audit-Log
   await supabase.from('audit_log').insert({

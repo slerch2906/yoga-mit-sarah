@@ -18,6 +18,21 @@ export async function POST(
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   )
 
+  // Welle S3/M6 (Sarah 2026-05-27): Expiry-Check VOR der Wahl-Logik.
+  // Wenn der Token abgelaufen ist, klare 410-Antwort statt stillem Fail.
+  // Der bestehende `is('choice', null)`-Branch fuehrte bisher zu einem
+  // verwirrenden "alreadyChosen: null"-Response bei abgelaufenen Tokens.
+  {
+    const { data: row } = await supabase
+      .from('course_cancellation_responses')
+      .select('expires_at, choice')
+      .eq('token', token)
+      .maybeSingle()
+    if (row && (row as any).expires_at && new Date((row as any).expires_at) < new Date() && (row as any).choice === null) {
+      return NextResponse.json({ error: 'expired', message: 'Token abgelaufen' }, { status: 410 })
+    }
+  }
+
   // Atomic update – only if choice is still null
   const now = new Date().toISOString()
   const { data: updated, error } = await supabase

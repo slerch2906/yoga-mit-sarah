@@ -12,6 +12,8 @@ import WeekPickerPopover from '@/components/WeekPickerPopover'
 import AdminAnnouncementBubble from '@/components/AdminAnnouncementBubble'
 import YogiCreditExpiryBanner from '@/components/YogiCreditExpiryBanner'
 import YogiCancelNotifications from '@/components/YogiCancelNotifications'
+// Welle S3/Pattern 3 (Sarah 2026-05-27): defensive Date-Parsing.
+import { parseSessionDateTime } from '@/lib/session-time'
 import OnboardingTour from '@/components/OnboardingTour'
 
 const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
@@ -53,7 +55,8 @@ export default function KursePage() {
   const [offset, setOffset] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = sessionStorage.getItem('kurse_week_offset')
-      return saved ? parseInt(saved) : 0
+      // Welle S3/N1 (Sarah 2026-05-27): parseInt mit expliziter Basis 10.
+      return saved ? parseInt(saved, 10) : 0
     }
     return 0
   })
@@ -200,7 +203,8 @@ export default function KursePage() {
         // (s. RPC + my-bookings-Query oben). Vorher: bookings-JOIN mit user_id-Leak.
         booking_count: countMap[s.id] ?? 0,
         my_booking: myBookingMap[s.id] || null,
-        is_past: new Date(`${s.date}T${s.time_start}`) < now,
+        // Welle S3/Pattern 3: bei null-Werten defensiv "nicht past".
+        is_past: (() => { const dt = parseSessionDateTime(s.date, s.time_start); return dt ? dt < now : false })(),
         is_replacement: !!originMap[s.id],
         original_session: originMap[s.id] || null,
         display_name, display_max_spots, display_image_url, display_location,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/auth'
@@ -9,6 +9,8 @@ import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import { getCurrentAgbVersion } from '@/lib/agb-version'
 import { sessionDisplayName } from '@/lib/session-display'
+// Welle S3/Pattern 3 (Sarah 2026-05-27): defensive Date-Parsing.
+import { parseSessionDateTime } from '@/lib/session-time'
 
 export default function MeinePage() {
   const [profile, setProfile] = useState<any>(null)
@@ -91,15 +93,48 @@ export default function MeinePage() {
 
       if (enrols && enrols.length > 0) {
         const sessionsMap: Record<string, any[]> = {}
+        // Welle S3/M16 (Sarah 2026-05-27): vorher pro enrolled course 2 queries
+        // (sessions + bookings). Bei 3 enrollments = 6 Round-Trips. Jetzt:
+        // 1× sessions fuer alle Kurse, 1× bookings fuer alle Sessions, danach
+        // lokale Gruppierung pro Enrollment.
+        const courseIds = enrols.map((e: any) => e.course_id)
+        // Aelteste enrolledFrom-Schranke pro Kurs ermitteln (wenn der gleiche
+        // Kurs zweimal enrolled waere — defensive).
+        const minEnrolledFromByCourse: Record<string, string> = {}
+        for (const e of enrols) {
+          const ef = e.created_at ? e.created_at.split('T')[0] : '2000-01-01'
+          const prev = minEnrolledFromByCourse[e.course_id]
+          if (!prev || ef < prev) minEnrolledFromByCourse[e.course_id] = ef
+        }
+        const minEnrolledFromGlobal = Object.values(minEnrolledFromByCourse).reduce(
+          (m: string, v: string) => (v < m ? v : m), '9999-12-31'
+        )
+        const { data: allSessions } = await supabase
+          .from('sessions').select('*')
+          .in('course_id', courseIds)
+          .gte('date', minEnrolledFromGlobal)
+          .order('date')
+        const allSessionIds = (allSessions || []).map((s: any) => s.id)
+        const { data: allMyBookings } = allSessionIds.length > 0
+          ? await supabase.from('bookings')
+              .select('*, origin:sessions!bookings_origin_session_id_fkey(id, date, time_start, course:courses(name))')
+              .eq('user_id', user.id)
+              .in('session_id', allSessionIds)
+          : { data: [] as any[] }
+
+        // Gruppieren: sessions pro course_id
+        const sessionsByCourse: Record<string, any[]> = {}
+        for (const s of (allSessions || []) as any[]) {
+          (sessionsByCourse[s.course_id] ||= []).push(s)
+        }
+
         for (const enrol of enrols) {
           // Nur Stunden ab Einbuchungsdatum anzeigen
           const enrolledFrom = enrol.created_at ? enrol.created_at.split('T')[0] : '2000-01-01'
-          const { data: sessions } = await supabase
-            .from('sessions').select('*').eq('course_id', enrol.course_id)
-            .gte('date', enrolledFrom).order('date')
-          const { data: myBookings } = await supabase
-            .from('bookings').select('*, origin:sessions!bookings_origin_session_id_fkey(id, date, time_start, course:courses(name))').eq('user_id', user.id)
-            .in('session_id', (sessions || []).map((s: any) => s.id))
+          const sessions = (sessionsByCourse[enrol.course_id] || [])
+            .filter((s: any) => (s.date || '') >= enrolledFrom)
+          const sessionIdsThisCourse = new Set(sessions.map((s: any) => s.id))
+          const myBookings = (allMyBookings || []).filter((b: any) => sessionIdsThisCourse.has(b.session_id))
           // Ausgeschlossene Stunden nie anzeigen (Setup-Excluded zählt nicht als Termin).
           const visibleSessions = (sessions || []).filter((s: any) => !isExcluded(s))
           // Range anwenden: nur Einheiten zwischen enrolled_from_unit und enrolled_until_unit
@@ -193,12 +228,21 @@ export default function MeinePage() {
   // Anzeige-Filter: Guthaben/Tenpack/Single mit 0 freien Credits ausblenden
   // (sind komplett aufgebraucht und liefern dem Yogi keine Info mehr).
   // Course-Credits IMMER zeigen (zeigen Kursfortschritt + Verfallsdatum).
-  const visibleCredits = credits.filter((c: any) => {
+  // Welle S3/M18 (Sarah 2026-05-27): Credit-Aggregation in useMemo — bei jedem
+  // Re-Render wurden filter+reduce+sort neu berechnet. Bei vielen Yogi-Credits
+  // pro User unnoetig.
+  const visibleCredits = useMemo(() => credits.filter((c: any) => {
     if (c.model === 'course') return true
     return Math.max(0, c.total - c.used) > 0
-  })
-  const totalFreeCredits = visibleCredits.reduce((sum, c) => sum + computeFreeMeine(c), 0)
-  const firstExpiry = [...visibleCredits].sort((a, b) => new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime())[0]
+  }), [credits])
+  const totalFreeCredits = useMemo(
+    () => visibleCredits.reduce((sum, c) => sum + computeFreeMeine(c), 0),
+    [visibleCredits],
+  )
+  const firstExpiry = useMemo(
+    () => [...visibleCredits].sort((a, b) => new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime())[0],
+    [visibleCredits],
+  )
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" /></div>
 
@@ -480,13 +524,19 @@ export default function MeinePage() {
             // ausblenden — Yogi sieht in /meine nur ZUKÜNFTIGE Stunden in der Liste.
             // Past-Stunden bleiben im DB-Audit, sind nur nicht mehr im aktiven Feed.
             .filter((b: any) => {
-              if (!b.session?.date || !b.session?.time_start) return false
-              const sessDt = new Date(`${b.session.date}T${b.session.time_start}`).getTime()
-              return sessDt >= nowMs
+              // Welle S3/Pattern 3: defensive Date-Parsing. Bei null-Werten
+              // defensiv "ausblenden" (nicht zukunftig).
+              const dt = parseSessionDateTime(b.session?.date, b.session?.time_start)
+              if (!dt) return false
+              return dt.getTime() >= nowMs
             })
             .sort((a: any, b: any) => {
-              const ad = new Date(`${a.session?.date}T${a.session?.time_start}`).getTime()
-              const bd = new Date(`${b.session?.date}T${b.session?.time_start}`).getTime()
+              // Welle S3/Pattern 3: defensive Date-Parsing. NaN-fallback sortiert
+              // unparsbare Stunden ans Ende.
+              const adt = parseSessionDateTime(a.session?.date, a.session?.time_start)
+              const bdt = parseSessionDateTime(b.session?.date, b.session?.time_start)
+              const ad = adt ? adt.getTime() : Number.MAX_SAFE_INTEGER
+              const bd = bdt ? bdt.getTime() : Number.MAX_SAFE_INTEGER
               return ad - bd
             })
           if (singles.length === 0) return null

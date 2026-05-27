@@ -12,6 +12,8 @@ import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import { sessionDisplayName } from '@/lib/session-display'
+// Welle S3/Pattern 3 (Sarah 2026-05-27): defensive Date-Parsing.
+import { parseSessionDateTime } from '@/lib/session-time'
 
 // Welle 3 (Sarah 2026-05-26): Helper für Emails — bei Einzelstunden/Events
 // soll NICHT der SYS-Container-Name ("SYS · Einzelstunden") in der Mail
@@ -133,19 +135,25 @@ export default function SessionDetailPage() {
 
   function isWithin3Hours() {
     if (!session) return false
-    const dt = new Date(`${session.date}T${session.time_start}`)
+    // Welle S3/Pattern 3: bei null-Werten defensiv "false" (nicht within3h).
+    const dt = parseSessionDateTime(session.date, session.time_start)
+    if (!dt) return false
     const diff = dt.getTime() - Date.now()
     return diff < 3 * 60 * 60 * 1000 && diff > 0
   }
 
   function isPast() {
     if (!session) return false
-    return new Date(`${session.date}T${session.time_start}`) < new Date()
+    // Welle S3/Pattern 3: bei null-Werten defensiv "false" (nicht past).
+    const dt = parseSessionDateTime(session.date, session.time_start)
+    if (!dt) return false
+    return dt < new Date()
   }
 
   function cancelDeadline() {
     if (!session) return ''
-    const dt = new Date(`${session.date}T${session.time_start}`)
+    const dt = parseSessionDateTime(session.date, session.time_start)
+    if (!dt) return ''
     dt.setHours(dt.getHours() - 3)
     return dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr'
   }

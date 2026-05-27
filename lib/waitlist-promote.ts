@@ -71,6 +71,30 @@ export async function promoteWaitlistOrOfferLate(
   // 5) ≤ 90 Min: Late-Offer an alle Waitlist-Yogis schicken
   for (const wl of waitlist) {
     if (!wl.profile?.email) continue
+    // Welle S3/M2 (Sarah 2026-05-27): Wenn fuer diese Session bereits ein
+    // Winner resolved ist (irgendein Offer mit resolved_winner_user_id!=null),
+    // dann KEINE neuen Offers anlegen / ueberschreiben. Sonst wuerde ein
+    // spaeteres Promote den bereits gewonnenen Platz "zuruecksetzen".
+    const { data: existingWinnerCheck } = await supabase.from('waitlist_offers')
+      .select('id, resolved_winner_user_id')
+      .eq('session_id', sessionId)
+      .not('resolved_winner_user_id', 'is', null)
+      .limit(1)
+      .maybeSingle()
+    if (existingWinnerCheck) {
+      // Schon vergeben — keine weiteren Late-Offers verschicken.
+      break
+    }
+    // Pruefen ob bereits ein Offer fuer (session,user) existiert. Falls ja
+    // und resolved_winner_user_id NICHT null → ueberspringen (defensive doppelt).
+    const { data: existingOffer } = await supabase.from('waitlist_offers')
+      .select('id, token, resolved_winner_user_id')
+      .eq('session_id', sessionId).eq('user_id', wl.user_id)
+      .maybeSingle()
+    if (existingOffer && (existingOffer as any).resolved_winner_user_id) {
+      // Offer existiert + bereits resolved (sollte schon im check oben gefangen sein)
+      continue
+    }
     // Insert waitlist_offer-Row (token wird in DB generiert via DEFAULT)
     const expiresAt = new Date(sessionStart).toISOString()
     const { data: offer } = await supabase.from('waitlist_offers').upsert({

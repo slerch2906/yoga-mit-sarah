@@ -1085,7 +1085,7 @@ export default function ProfilPage() {
               className="text-xs border border-yoga-border2 rounded-full px-3 py-1.5 text-yoga-text/70 bg-white outline-none focus:border-yoga-text/40 flex-shrink-0"
               value={profile?.notify_session_reminder_hours ?? ''}
               onChange={async e => {
-                const v = e.target.value === '' ? null : parseInt(e.target.value)
+                const v = e.target.value === '' ? null : parseInt(e.target.value, 10)
                 setProfile((p: any) => ({ ...p, notify_session_reminder_hours: v }))
                 await supabase.from('profiles').update({ notify_session_reminder_hours: v }).eq('id', profile.id)
               }}>

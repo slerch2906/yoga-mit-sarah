@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import AppHeader from '@/components/layout/AppHeader'
@@ -56,6 +56,13 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   course_archived:                { label: 'Kurs archiviert',                color: 'text-yoga-amber-text' },
   course_deleted:                 { label: 'Kurs gelöscht',                  color: 'text-yoga-red-text' },
   course_open_toggled:            { label: 'Kurs freigegeben/gesperrt',      color: 'text-yoga-amber-text' },
+  // ── Welle S2/S3 (Sarah 2026-05-27): Folge-Audits aus Sicherheits-/Logik-Fixes ─
+  replacement_credit_invalid:     { label: 'Ersatztermin — Credit ungültig (nicht umgebucht)', color: 'text-yoga-amber-text' },
+  kursabbruch_token_reclicked:    { label: 'Kursabbruch-Token erneut geklickt', color: 'text-yoga-amber-text' },
+  apply_cancellation_refund_failed: { label: 'Erstattungs-RPC fehlgeschlagen', color: 'text-yoga-red-text' },
+  profile_email_update_failed:    { label: 'Profil-Email-Update fehlgeschlagen', color: 'text-yoga-red-text' },
+  waitlist_offer_rollback:        { label: 'Warteliste-Angebot zurückgerollt', color: 'text-yoga-amber-text' },
+  course_credits_auto_expired:    { label: '8d-Cleanup: Kurs + Credits gelöscht', color: 'text-yoga-amber-text' },
 }
 
 const SESSION_TYPE_LABEL: Record<string, string> = {
@@ -141,15 +148,21 @@ export default function ProtokolPage() {
       ` · ${d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`
   }
 
-  const filtered = logs.filter(log => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    const actor = profiles[log.user_id]
-    const actorName = actor ? `${actor.first_name || ''} ${actor.last_name || ''} ${actor.email || ''}`.toLowerCase() : ''
-    const action = (ACTION_LABELS[log.action]?.label || log.action).toLowerCase()
-    const details = JSON.stringify(log.details || {}).toLowerCase()
-    return actorName.includes(q) || action.includes(q) || details.includes(q)
-  })
+  // Welle S3/M18 (Sarah 2026-05-27): teurer .filter mit JSON.stringify pro Log
+  // — bei 200 Eintraegen + jedem Tastendruck im Suchfeld wurde das pro Render
+  // neu berechnet (inkl. JSON.stringify). useMemo skipt das wenn sich logs/
+  // profiles/search nicht aendern.
+  const filtered = useMemo(() => {
+    return logs.filter(log => {
+      if (!search) return true
+      const q = search.toLowerCase()
+      const actor = profiles[log.user_id]
+      const actorName = actor ? `${actor.first_name || ''} ${actor.last_name || ''} ${actor.email || ''}`.toLowerCase() : ''
+      const action = (ACTION_LABELS[log.action]?.label || log.action).toLowerCase()
+      const details = JSON.stringify(log.details || {}).toLowerCase()
+      return actorName.includes(q) || action.includes(q) || details.includes(q)
+    })
+  }, [logs, profiles, search])
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">

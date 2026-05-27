@@ -58,6 +58,11 @@ export default function LoginPage() {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
+      // Welle S3/N3 (Sarah 2026-05-27): konstanter 800ms-Delay im Fehler-Branch
+      // gegen Timing-Enumeration. Falsche Email vs. falsches Passwort sollen
+      // gleich lange dauern — sonst koennen Angreifer ableiten welche Emails
+      // existieren. Erfolg laeuft ohne Delay.
+      await new Promise(r => setTimeout(r, 800))
       setError('E-Mail oder Passwort falsch. Bitte nochmal versuchen.')
       setLoading(false)
       return
@@ -74,7 +79,14 @@ export default function LoginPage() {
   async function handleReset(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    await Email.passwordResetRequest({ email })
+    try {
+      await Email.passwordResetRequest({ email })
+    } catch {
+      // Welle S3/N3 (Sarah 2026-05-27): bei Fehler 800ms-Delay damit
+      // existierende vs. nicht-existierende Email-Adressen via Antwortzeit
+      // nicht unterscheidbar sind. Erfolg laeuft normal.
+      await new Promise(r => setTimeout(r, 800))
+    }
     setResetSent(true)
     setLoading(false)
   }

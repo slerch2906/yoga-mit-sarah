@@ -30,12 +30,25 @@ export default function UpdateBanner() {
   const [reloading, setReloading] = useState(false)
 
   useEffect(() => {
+    // Welle S3/M17 (Sarah 2026-05-27): drei Probleme behoben —
+    // 1) AbortController fuer in-flight fetches beim Unmount.
+    // 2) Per-call Timeout (8s) damit ein haengender Request den naechsten
+    //    Poll nicht blockiert.
+    // 3) Tab-Hidden Polling-Pause via visibilitychange — kein Strom-/
+    //    Bandbreiten-Verbrauch wenn der Tab im Hintergrund liegt.
     let cancelled = false
     let intervalId: number | undefined
+    let initialTimeoutId: number | undefined
+    const controllers = new Set<AbortController>()
 
     async function check() {
+      if (cancelled) return
+      if (typeof document !== 'undefined' && document.hidden) return
+      const controller = new AbortController()
+      controllers.add(controller)
+      const callTimeout = window.setTimeout(() => controller.abort(), 8000)
       try {
-        const res = await fetch('/api/version', { cache: 'no-store' })
+        const res = await fetch('/api/version', { cache: 'no-store', signal: controller.signal })
         if (!res.ok) return
         const json = await res.json()
         const v = json?.update_banner_version || null
@@ -51,18 +64,53 @@ export default function UpdateBanner() {
           setCurrentBannerVersion(v)
         }
       } catch {}
+      finally {
+        window.clearTimeout(callTimeout)
+        controllers.delete(controller)
+      }
+    }
+
+    function startInterval() {
+      if (intervalId !== undefined) return
+      intervalId = window.setInterval(check, POLL_INTERVAL_MS)
+    }
+    function stopInterval() {
+      if (intervalId !== undefined) {
+        window.clearInterval(intervalId)
+        intervalId = undefined
+      }
+    }
+
+    function onVisibility() {
+      if (cancelled) return
+      if (document.hidden) {
+        stopInterval()
+      } else {
+        // Sofort prüfen + Polling wieder starten
+        check()
+        startInterval()
+      }
     }
 
     // Initial-Check nach kurzer Verzögerung
-    setTimeout(() => {
+    initialTimeoutId = window.setTimeout(() => {
       if (cancelled) return
       check()
-      intervalId = window.setInterval(check, POLL_INTERVAL_MS)
+      startInterval()
     }, INITIAL_DELAY_MS)
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibility)
+    }
 
     return () => {
       cancelled = true
-      if (intervalId) window.clearInterval(intervalId)
+      if (initialTimeoutId !== undefined) window.clearTimeout(initialTimeoutId)
+      stopInterval()
+      controllers.forEach(c => c.abort())
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibility)
+      }
     }
   }, [])
 

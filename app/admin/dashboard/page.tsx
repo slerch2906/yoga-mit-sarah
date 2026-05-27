@@ -13,6 +13,8 @@ import BottomNav from '@/components/layout/BottomNav'
 import WeekPickerPopover from '@/components/WeekPickerPopover'
 import AdminAnnouncementBubble from '@/components/AdminAnnouncementBubble'
 import AdminBirthdayBanner from '@/components/AdminBirthdayBanner'
+// Welle S3/Pattern 3 (Sarah 2026-05-27): defensive Date-Parsing.
+import { parseSessionDateTime } from '@/lib/session-time'
 import { sessionDisplayName } from '@/lib/session-display'
 
 const WEEKDAYS = ['So','Mo','Di','Mi','Do','Fr','Sa']
@@ -148,21 +150,25 @@ export default function AdminDashboard() {
       }
     }
 
-    // Weekly stats
-    const { count: bookCount } = await supabase.from('audit_log')
-      .select('*', { count: 'exact', head: true })
-      .eq('action', 'booking_created')
-      .gte('created_at', weekStart.toISOString())
-      .lte('created_at', weekEnd.toISOString())
-
-    const { count: cancelCount } = await supabase.from('audit_log')
-      .select('*', { count: 'exact', head: true })
-      .eq('action', 'booking_cancelled')
-      .gte('created_at', weekStart.toISOString())
-      .lte('created_at', weekEnd.toISOString())
-
-    const { count: waitCount } = await supabase.from('waitlist')
-      .select('*', { count: 'exact', head: true })
+    // Welle S3/M13 (Sarah 2026-05-27): die drei count-Queries vorher seriell —
+    // 3× Round-Trip. Jetzt parallel via Promise.all. Audit-Log-Counts nutzen
+    // den neuen idx_audit_log_created_at_desc-Index (Welle S3 just added)
+    // durch gte/lte-Filter auf created_at.
+    const weeklyStatsP = Promise.all([
+      supabase.from('audit_log')
+        .select('*', { count: 'exact', head: true })
+        .eq('action', 'booking_created')
+        .gte('created_at', weekStart.toISOString())
+        .lte('created_at', weekEnd.toISOString()),
+      supabase.from('audit_log')
+        .select('*', { count: 'exact', head: true })
+        .eq('action', 'booking_cancelled')
+        .gte('created_at', weekStart.toISOString())
+        .lte('created_at', weekEnd.toISOString()),
+      supabase.from('waitlist')
+        .select('*', { count: 'exact', head: true }),
+    ])
+    const [{ count: bookCount }, { count: cancelCount }, { count: waitCount }] = await weeklyStatsP
 
     setSessions((sessionData || [])
       .filter((s: any) => s.course?.is_active !== false)
@@ -187,12 +193,15 @@ export default function AdminDashboard() {
     // Sarah-Wunsch 2026-05-24: Offene Kursabbruch-Aufgaben zählen
     // refunds = Yogi wählte Erstattung, noch nicht überwiesen
     // openChoices = Token nicht verfallen, Yogi hat noch nicht gewählt
-    const { count: refundsCount } = await supabase.from('course_cancellation_responses')
-      .select('id', { count: 'exact', head: true })
-      .eq('choice', 'erstattung').eq('refund_paid', false)
-    const { count: openCount } = await supabase.from('course_cancellation_responses')
-      .select('id', { count: 'exact', head: true })
-      .is('choice', null).gte('expires_at', new Date().toISOString())
+    // Welle S3/M13 (Sarah 2026-05-27): parallel statt seriell.
+    const [{ count: refundsCount }, { count: openCount }] = await Promise.all([
+      supabase.from('course_cancellation_responses')
+        .select('id', { count: 'exact', head: true })
+        .eq('choice', 'erstattung').eq('refund_paid', false),
+      supabase.from('course_cancellation_responses')
+        .select('id', { count: 'exact', head: true })
+        .is('choice', null).gte('expires_at', new Date().toISOString()),
+    ])
     setPendingCancellations({ refunds: refundsCount || 0, openChoices: openCount || 0 })
 
     setLoading(false)
@@ -245,8 +254,12 @@ export default function AdminDashboard() {
 
     let within3h = false
     if (freshSession) {
-      const sessionStart = new Date(`${freshSession.date}T${freshSession.time_start}`).getTime()
-      within3h = (sessionStart - Date.now()) <= 3 * 60 * 60 * 1000 && sessionStart > Date.now()
+      // Welle S3/Pattern 3: defensive Date-Parsing. Bei null-Werten "not within3h".
+      const dt = parseSessionDateTime(freshSession.date, freshSession.time_start)
+      if (dt) {
+        const sessionStart = dt.getTime()
+        within3h = (sessionStart - Date.now()) <= 3 * 60 * 60 * 1000 && sessionStart > Date.now()
+      }
     }
     setCancelChoice({ bookingId, sessionId, within3h, sessionType: sessType })
   }

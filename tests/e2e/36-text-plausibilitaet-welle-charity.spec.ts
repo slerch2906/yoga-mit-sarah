@@ -30,8 +30,10 @@ test.describe('[E2E-Text] Charity-Konsistenz — kein Credit-Hinweis bei is_free
 
   test('Detail-Page "Angemeldet"-Branch: Charity-Pfad hat keinen Credit-Text', async () => {
     const src = read('app/kurse/[id]/page.tsx')
-    // Block: course?.is_free ? '...jederzeit...' : <>...Credit...</>
-    const block = src.match(/course\?\.is_free[\s\S]{0,300}jederzeit[\s\S]{0,300}danach gilt/)
+    // Block: course?.is_free ? '...jederzeit...' : ... : <>...danach gilt...</>
+    // Sarah 2026-05-28: Fenster erweitert — zwischen "jederzeit" und "danach gilt"
+    // liegen jetzt die isEventPaid- und inPromoteGrace-Branches (Nachrück-Gnadenfrist).
+    const block = src.match(/course\?\.is_free[\s\S]{0,300}jederzeit[\s\S]{0,900}danach gilt/)
     expect(block).not.toBeNull()
     // Beide Texte da, also Ternary korrekt
   })
@@ -147,7 +149,8 @@ test.describe('[E2E-Text] Email-Helper — Charity-Path verwendet Standard-waitl
   test('Charity-Auto-Promote in lib/waitlist-promote.ts sendet Email.waitlistPromoted (selber Template)', async () => {
     const src = read('lib/waitlist-promote.ts')
     // tryAutoPromoteOneFree sendet die gleiche Email wie der Standard-Pfad
-    expect(src).toMatch(/tryAutoPromoteOneFree[\s\S]{0,600}Email\.waitlistPromoted/)
+    // Sarah 2026-05-28: Fenster erweitert (promoted_at-Logik im Upsert ergänzt).
+    expect(src).toMatch(/tryAutoPromoteOneFree[\s\S]{0,900}Email\.waitlistPromoted/)
   })
 })
 

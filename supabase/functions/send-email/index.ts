@@ -173,7 +173,7 @@ serve(async (req) => {
         subject = `Abmeldung bestätigt: ${data.courseName}`
         let infoLine = ''
         if (isPaidEvent) infoLine = '✅ Deine Abmeldung war rechtzeitig (vor der 7-Tage-Frist) und somit kostenfrei.'
-        else if (isFreeEvent) infoLine = '✅ Deine Abmeldung wurde bestätigt. Vielleicht sehen wir uns beim nächsten Event!'
+        else if (isFreeEvent) infoLine = '✅ Deine Abmeldung ist bestätigt — die Teilnahme war kostenlos, es entstehen dir keine Kosten. Vielleicht sehen wir uns beim nächsten Event!'
         else infoLine = data.creditReturned ? '✅ Du bekommst einen Credit gutgeschrieben.' : '❌ Credit nicht zurückgebucht (unter 3h).'
         html = base(`<p style="font-size:15px">Hallo ${fn},</p><p style="font-size:15px">deine Abmeldung wurde bestätigt.</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 ${fmtDate(data.date,data.timeStart)}</p><p style="margin:4px 0;font-size:14px">${KL}: ${cn}</p><p style="margin:4px 0;font-size:14px">${infoLine}</p>`)}${(isEvent || data.creditReturned) ? btn('Zur App',APP_URL+'/meine') : btn('Zur App',APP_URL)}${LG}`)
         break

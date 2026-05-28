@@ -141,6 +141,27 @@ export default function AdminSessionPage() {
         }
       })
       // Keine credit-Aktion noetig (credit_id war null bei Events)
+      // Bug-Fix (Sarah 2026-05-28): Abmelde-Bestätigung an Yogi — fehlte beim
+      // Admin-Austrag aus Events. booking_cancelled-Mail differenziert
+      // event_free/event_paid (kostenlos → "Abmeldung kostenlos erfolgt").
+      try {
+        const { data: _bk } = await supabase.from('bookings').select('user_id').eq('id', bookingId).maybeSingle()
+        const _uid = (_bk as any)?.user_id
+        if (_uid) {
+          const { data: _prof } = await supabase.from('profiles').select('email, first_name').eq('id', _uid).maybeSingle()
+          if ((_prof as any)?.email) {
+            await Email.bookingCancelled({
+              email: (_prof as any).email,
+              firstName: (_prof as any).first_name || 'Yogi',
+              courseName: freshSession?.name || '',
+              date: freshSession?.date || '',
+              timeStart: freshSession?.time_start || '',
+              creditReturned: false,
+              sessionType: sessType || undefined,
+            })
+          }
+        }
+      } catch (e) { console.error('bookingCancelled mail (sessions event):', e) }
       // Bug-Fix (Sarah 2026-05-28): Warteliste nachrücken lassen — fehlte auch
       // hier (wie im Dashboard). Sonst rückt bei Events niemand nach.
       try { await promoteWaitlistOrOfferLate(supabase, sessionId) } catch (e) { console.error('promote (sessions event):', e) }

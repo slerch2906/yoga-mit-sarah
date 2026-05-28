@@ -61,34 +61,26 @@ export default function MeinePage() {
         router.push('/rechtliches'); return
       }
       setProfile(prof)
-      // Welle 6 (Sarah 2026-05-27): Beendete Kurse bleiben für 8 Tage sichtbar
-      // wenn der Yogi noch freie Credits aus diesem Kurs hat (Kurs-Reste, die
-      // er noch in Drop-In-Stunden verwenden kann). Nach 8 Tagen löscht der
-      // Cron-Job alle übrigen Reste (siehe Migration-Skizze im Report).
-      const today = new Date().toISOString().split('T')[0]
+      // Sarah-Regel 2026-05-28: Beendete Kurse bleiben IMMER für 8 Tage in der
+      // "Beendete Kurse"-Sektion sichtbar — unabhängig davon, ob noch ein freier
+      // Credit existiert. (Vorher wurden sie ausgeblendet, sobald kein Credit mehr
+      // frei war.) So sieht der Yogi sein Nachhol-Fenster zuverlässig bis zum Ende.
       const eightDaysAgoIso = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-      // Map course_id → freie Credits aus diesem Kurs
-      const courseFreeMap: Record<string, number> = {}
-      for (const c of (crds || [])) {
-        if (c.course_id && c.total > c.used && c.model === 'course') {
-          courseFreeMap[c.course_id] = (courseFreeMap[c.course_id] || 0) + (c.total - c.used)
-        }
-      }
       // Sarah-Regel 2026-05-28: Kurs gilt als "aktiv" solange die letzte Stunde
       // noch nicht begonnen hat (date_end + course.time_start), nicht erst am
       // Tagesende.
       const activeEnrols = (enrols || []).filter((e: any) =>
         !e.course?.date_end || !isCourseEnded(e.course)
       )
-      // "Beendete Kurse"-Sektion: Kurs ist beendet (letzte Stunde gestartet),
-      // aber date_end liegt innerhalb der letzten 8 Tage UND es gibt noch
-      // übrige Credits. Nach 8 Tagen löscht der Cron alles → verschwindet.
+      // "Beendete Kurse"-Sektion: Kurs ist beendet (letzte Stunde gestartet) und
+      // date_end liegt innerhalb der letzten 8 Tage. Immer anzeigen (auch ohne
+      // freien Credit). Nach 8 Tagen verschwindet der Kurs aus der Sektion.
       const recentlyEnded = (enrols || []).filter((e: any) => {
         const de = e.course?.date_end
         if (!de) return false
         if (!isCourseEnded(e.course)) return false // noch aktiv
         if (de < eightDaysAgoIso) return false // älter als 8 Tage
-        return (courseFreeMap[e.course_id] || 0) > 0
+        return true
       })
       setEnrollments(activeEnrols)
       setRecentlyEndedEnrollments(recentlyEnded)
@@ -197,7 +189,7 @@ export default function MeinePage() {
       const dt = new Date(`${s.date}T${s.time_start}`)
       const dtEnd = new Date(dt.getTime() + s.duration_min * 60000)
       const fmt = (d: Date) => d.toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z'
-      return `BEGIN:VEVENT\r\nSUMMARY:${enrollment.course?.name}\r\nDTSTART:${fmt(dt)}\r\nDTEND:${fmt(dtEnd)}\r\nEND:VEVENT`
+      return `BEGIN:VEVENT\r\nSUMMARY:Yoga - ${enrollment.course?.name ?? 'Kurs'}\r\nDTSTART:${fmt(dt)}\r\nDTEND:${fmt(dtEnd)}\r\nEND:VEVENT`
     }).join('\r\n')
     const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\n${events}\r\nEND:VCALENDAR`
     const encoded = encodeURIComponent(ics)
@@ -503,7 +495,7 @@ export default function MeinePage() {
                   <div className="text-xs text-yoga-text/60">
                     Beendet am {new Date(enrol.course.date_end).toLocaleDateString('de-DE', { day:'numeric', month:'short', year:'numeric' })}
                     {' · '}
-                    {free} {free === 1 ? 'Rest-Credit' : 'Rest-Credits'} verfügbar
+                    {free > 0 ? `${free} ${free === 1 ? 'Rest-Credit' : 'Rest-Credits'} verfügbar` : 'keine Rest-Credits mehr'}
                   </div>
                 </div>
               )

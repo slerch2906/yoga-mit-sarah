@@ -253,6 +253,25 @@ export default function AdminDashboard() {
           session_date: freshSession?.date, session_time: freshSession?.time_start,
         }
       })
+      // Bug-Fix (Sarah 2026-05-28): Abmelde-Bestätigung an Yogi — fehlte beim
+      // Admin-Austrag aus Events (kostenlos + bezahlt). Die booking_cancelled-Mail
+      // differenziert event_free/event_paid (kostenlos → "Abmeldung kostenlos").
+      try {
+        if (_targetUserId) {
+          const { data: _prof } = await supabase.from('profiles').select('email, first_name').eq('id', _targetUserId).maybeSingle()
+          if ((_prof as any)?.email) {
+            await Email.bookingCancelled({
+              email: (_prof as any).email,
+              firstName: (_prof as any).first_name || 'Yogi',
+              courseName: freshSession?.name || '',
+              date: freshSession?.date || '',
+              timeStart: freshSession?.time_start || '',
+              creditReturned: false,
+              sessionType: sessType || undefined,
+            })
+          }
+        }
+      } catch (e) { console.error('bookingCancelled mail (event):', e) }
       // Bug-Fix (Sarah 2026-05-28): Auch beim Event-Austrag muss die Warteliste
       // nachrücken (vorher fehlte der Aufruf → Yogi auf Warteliste rückte nie
       // nach, obwohl ein Platz frei wurde). Zentraler Helper inkl. 90-Min-Cutoff.

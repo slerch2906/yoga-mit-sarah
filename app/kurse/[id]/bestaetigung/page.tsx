@@ -101,9 +101,10 @@ function BestaetigungInner() {
     const fmt = (d: Date) => d.toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z'
     // Welle 2.6: bei Events/Einzelstunden session.name in der Kalender-Summary statt SYS-Container.
     const icsTitle = session.session_type && session.session_type !== 'course_session'
-      ? (session.name ?? 'Yoga-Event')
-      : (session.name ?? session.course?.name ?? 'Yoga')
-    const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nSUMMARY:${icsTitle}\r\nDTSTART:${fmt(dt)}\r\nDTEND:${fmt(dtEnd)}\r\nEND:VEVENT\r\nEND:VCALENDAR`
+      ? (session.name ?? 'Event')
+      : (session.name ?? session.course?.name ?? 'Stunde')
+    // Sarah 2026-05-28: alle Kalendereinträge mit "Yoga - " prefixen.
+    const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nSUMMARY:Yoga - ${icsTitle}\r\nDTSTART:${fmt(dt)}\r\nDTEND:${fmt(dtEnd)}\r\nEND:VEVENT\r\nEND:VCALENDAR`
     // Data URI statt Blob URL - funktioniert auf Android/Google Kalender
     const encoded = encodeURIComponent(ics)
     const a = document.createElement('a')

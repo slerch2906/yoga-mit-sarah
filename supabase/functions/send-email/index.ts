@@ -72,14 +72,17 @@ async function sendEmail(to: string, subject: string, html: string): Promise<{ok
 }
 
 function base(content: string): string {
-  return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:Arial,sans-serif;background:#f5f2f0;margin:0;padding:20px"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.08)"><div style="background:#cfcbca;padding:28px 32px;text-align:center"><img src="${LOGO}" width="64" height="64" style="border-radius:50%;display:block;margin:0 auto 12px"/><h1 style="color:#3d3a39;font-size:18px;margin:0;font-weight:700">Yoga mit Sarah</h1></div><div style="padding:28px 32px;color:#3d3a39">${content}</div><div style="padding:16px 32px;text-align:center;font-size:12px;color:#999;border-top:1px solid #f0eded">Sarah Lerch &middot; Fuldaer Str. 7 &middot; 63628 Bad Soden-Salmünster<br><a href="https://www.yogamitsarah.me/agb" style="color:#999">AGB</a> &middot; <a href="https://yogamitsarah.me/privacy-policy/" style="color:#999">Datenschutz</a></div></div></body></html>`
+  // UX-Refresh 2026-05-28 (Sarah): wärmerer Hintergrund, weichere Karte, mehr
+  // Luft + Lesbarkeit. Struktur bleibt inline (E-Mail-sicher); die Absatz-
+  // Feinabstimmung per <style> ist rein additiv (Fallback = vorheriges Verhalten).
+  return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>.em-body p{margin:0 0 12px;line-height:1.6}.em-body strong{color:#2e2b2a}</style></head><body style="font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#efeae6;margin:0;padding:24px 14px"><div style="max-width:540px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 4px 24px rgba(61,58,57,0.10)"><div style="background:#cfcbca;padding:24px 32px;text-align:center"><img src="${LOGO}" width="56" height="56" style="border-radius:50%;display:block;margin:0 auto 8px" alt=""/><h1 style="color:#3d3a39;font-size:18px;margin:0;font-weight:700;letter-spacing:.3px">Yoga mit Sarah</h1></div><div class="em-body" style="padding:26px 30px;color:#3d3a39;font-size:15px;line-height:1.6">${content}</div><div style="padding:18px 32px;text-align:center;font-size:12px;color:#9b9591;border-top:1px solid #f0eded;line-height:1.6">Sarah Lerch &middot; Fuldaer Str. 7 &middot; 63628 Bad Soden-Salmünster<br><a href="https://www.yogamitsarah.me/agb" style="color:#9b9591">AGB</a> &middot; <a href="https://yogamitsarah.me/privacy-policy/" style="color:#9b9591">Datenschutz</a></div></div></body></html>`
 }
 function btn(text: string, url: string, color = '#3d3a39'): string {
   // url ist server-controlled (immer aus APP_URL + token), text ist control-string oder escaped.
-  return `<p style="text-align:center;margin:16px 0"><a href="${url}" style="display:inline-block;background:${color};color:#f5f2f0;text-decoration:none;padding:13px 26px;border-radius:100px;font-weight:700;font-size:14px">${text}</a></p>`
+  return `<p style="text-align:center;margin:20px 0"><a href="${url}" style="display:inline-block;background:${color};color:#fbf9f7;text-decoration:none;padding:14px 30px;border-radius:999px;font-weight:700;font-size:14px;letter-spacing:.2px;box-shadow:0 2px 6px rgba(61,58,57,0.18)">${text}</a></p>`
 }
 function hl(content: string, bg = '#f5f2f0'): string {
-  return `<div style="background:${bg};border-radius:10px;padding:14px 18px;margin:16px 0">${content}</div>`
+  return `<div style="background:${bg};border-radius:12px;padding:15px 18px;margin:14px 0">${content}</div>`
 }
 function fmtDate(d: string, t?: string): string {
   const date = new Date(`${d}T12:00:00Z`).toLocaleDateString('de-DE', { weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone: TZ })

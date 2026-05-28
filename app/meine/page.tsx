@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/auth'
-import { isActive, isExcluded, isCancelled, isStarted } from '@/lib/session-status'
+import { isActive, isExcluded, isCancelled, isStarted, isCourseEnded } from '@/lib/session-status'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import { getCurrentAgbVersion } from '@/lib/agb-version'
@@ -74,15 +74,19 @@ export default function MeinePage() {
           courseFreeMap[c.course_id] = (courseFreeMap[c.course_id] || 0) + (c.total - c.used)
         }
       }
+      // Sarah-Regel 2026-05-28: Kurs gilt als "aktiv" solange die letzte Stunde
+      // noch nicht begonnen hat (date_end + course.time_start), nicht erst am
+      // Tagesende.
       const activeEnrols = (enrols || []).filter((e: any) =>
-        !e.course?.date_end || e.course.date_end >= today
+        !e.course?.date_end || !isCourseEnded(e.course)
       )
-      // "Beendete Kurse"-Sektion: Kurse mit date_end < heute aber innerhalb der
-      // letzten 8 Tage UND mit übrigen Credits
+      // "Beendete Kurse"-Sektion: Kurs ist beendet (letzte Stunde gestartet),
+      // aber date_end liegt innerhalb der letzten 8 Tage UND es gibt noch
+      // übrige Credits. Nach 8 Tagen löscht der Cron alles → verschwindet.
       const recentlyEnded = (enrols || []).filter((e: any) => {
         const de = e.course?.date_end
         if (!de) return false
-        if (de >= today) return false // noch aktiv
+        if (!isCourseEnded(e.course)) return false // noch aktiv
         if (de < eightDaysAgoIso) return false // älter als 8 Tage
         return (courseFreeMap[e.course_id] || 0) > 0
       })
@@ -505,7 +509,7 @@ export default function MeinePage() {
               )
             })}
             <p className="text-xs text-yoga-text/45 mt-1 italic">
-              Kurs und Credit werden nach 8 Tagen gelöscht.
+              Kurs und Credits werden nach 8 Tagen gelöscht.
             </p>
           </div>
         )}

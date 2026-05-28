@@ -44,6 +44,16 @@ export async function selectCreditForBooking(
   const nowIso = new Date().toISOString()
   const sessionIso = new Date(sessionDt).toISOString()
 
+  // Bug-Fix (Sarah 2026-05-28): Zu welchem Kurs gehoert die gebuchte Stunde?
+  // Ein Course-Credit darf NUR fuer Stunden des EIGENEN Kurses verwendet werden.
+  // Vorher konnte z.B. eine Body&Mind-Buchung den Credit eines voellig anderen
+  // Kurses ("Credit Hinweis Ablauf") verbrauchen, wenn dessen Nachhol-Fenster
+  // zufaellig passte. Wir laden die course_id der Ziel-Session und filtern
+  // Course-Credits strikt darauf.
+  const { data: targetSession } = await supabase.from('sessions')
+    .select('course_id').eq('id', sessionId).maybeSingle()
+  const sessionCourseId = (targetSession as any)?.course_id || null
+
   // Sarah-Regel 2026-05-22: Credit muss minutengenau bis zum SESSION-Zeitpunkt
   // gültig sein, nicht nur bis jetzt. Sonst könnte ein Yogi heute eine Stunde
   // in 3 Wochen buchen mit einem Credit, der in 5 Tagen abläuft → Buchung ohne
@@ -74,6 +84,17 @@ export async function selectCreditForBooking(
       c.total > c.used && c.model !== 'guthaben'
     )
     if (expiringSoon.length > 0) {
+      // Bug-Fix (Sarah 2026-05-28): Kurs-Credits laufen exakt 8 Tage nach
+      // Kursende ab. Wenn der einzige verfuegbare Credit ein abgelaufener
+      // Kurs-Credit ist, ist die Stunde >8 Tage nach Kursende → Sarahs
+      // Wunsch-Meldung statt des generischen Ablauf-Textes.
+      const hasCourseCredit = expiringSoon.some((c: any) => c.model === 'course')
+      if (hasCourseCredit) {
+        return {
+          ok: false, reason: 'window_blocked',
+          message: 'Credits sind nur einzulösen bis 8 Tage nach Kursende. Diese Stunde liegt außerhalb dieses Zeitraums.',
+        }
+      }
       // Frühestes Ablaufdatum unter den freien Credits
       const earliest = expiringSoon
         .map((c: any) => new Date(c.expires_at).getTime())
@@ -89,9 +110,21 @@ export async function selectCreditForBooking(
     return { ok: false, reason: 'no_credit', message: 'Du hast keinen freien Credit für diese Buchung.' }
   }
 
-  // 1) Course-Credits zuerst — sortiert nach expires_at ASC (älteste zuerst)
+  // 1) Course-Credits zuerst — mit KURS-VORRANG.
+  // Bug-Fix (Sarah 2026-05-28): Gehoert die gebuchte Stunde zu Kurs X, wird
+  // ZUERST der Course-Credit von Kurs X probiert, erst danach Credits anderer
+  // Kurse (damit das Nachholen einer abgesagten Stunde in einer anderen Stunde
+  // weiterhin moeglich bleibt). Vorher wurde rein nach expires_at sortiert →
+  // eine Body&Mind-Buchung konnte faelschlich den "Credit Hinweis Ablauf"-
+  // Credit verbrauchen, obwohl ein eigener Body&Mind-Credit frei war.
+  // Innerhalb gleicher Kurs-Zugehoerigkeit weiter aelteste-Ablauf-zuerst.
   const courseCredits = candidates.filter((c: any) => c.model === 'course')
-    .sort((a: any, b: any) => new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime())
+    .sort((a: any, b: any) => {
+      const aOwn = sessionCourseId != null && a.course_id === sessionCourseId ? 0 : 1
+      const bOwn = sessionCourseId != null && b.course_id === sessionCourseId ? 0 : 1
+      if (aOwn !== bOwn) return aOwn - bOwn  // eigener Kurs zuerst
+      return new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime()
+    })
 
   let courseWindowBlockedMessage: string | null = null
 
@@ -173,6 +206,7 @@ async function tryCourseCredit(
   // Stunde darf nicht weiter als 10 Tage vor seiner abgesagten Stunde liegen.
   let nextValidDt: number | null = null
   let nextValidOriginDt: number | null = null
+  let nachholBlocked = false  // mind. eine Origin: Stunde liegt NACH Kursende+8d
   const now = Date.now()
   for (const cb of cancelledSorted) {
     if (claimedIds.has(cb.session.id)) continue
@@ -195,10 +229,21 @@ async function tryCourseCredit(
     }
     if (sessionDt > windowEnd) {
       // Zu spät — diese Origin verfällt nach Kursende+8d. Andere Origin probieren.
+      nachholBlocked = true
       continue
     }
     // Valid — diese Origin verwenden
     return { ok: true, creditId: courseCredit.id, originSessionId: cb.session.id, usedModel: 'course' }
+  }
+
+  // Bug-Fix (Sarah 2026-05-28): Wenn eine Origin existierte, aber die gebuchte
+  // Stunde NACH Kursende+8d liegt (und keine fruehere Vorhol-Grenze griff),
+  // klare Nachhol-Meldung statt stillem Durchfallen.
+  if (nachholBlocked && nextValidDt === null) {
+    return {
+      ok: false, reason: 'window_blocked',
+      message: 'Credits sind nur einzulösen bis 8 Tage nach Kursende. Diese Stunde liegt außerhalb dieses Zeitraums.',
+    }
   }
 
   // Kein verfügbarer Anspruch passt → window_blocked Message

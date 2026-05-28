@@ -6,6 +6,7 @@ import { Email } from '@/lib/email'
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import { selectCreditForBooking } from '@/lib/credit-selector'
 import { escapeForOrFilter } from '@/lib/search-sanitize'
+import { isCourseEnded } from '@/lib/session-status'
 import { createClient } from '@/lib/supabase/client'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
@@ -1175,7 +1176,9 @@ export default function AdminKursePage() {
     const today = new Date().toISOString().split('T')[0]
     if (!course.is_active) return 'beendet'
     if (course.date_start > today) return 'geplant'
-    if (course.date_end < today) return 'beendet'
+    // Sarah-Regel 2026-05-28: beendet ab Start der letzten Stunde (date_end +
+    // course.time_start), nicht erst am Tagesende.
+    if (isCourseEnded(course)) return 'beendet'
     return 'läuft'
   }
 
@@ -1834,21 +1837,31 @@ export default function AdminKursePage() {
       // Credits vergeben
       const expiresAt = new Date(targetCourse.date_end)
       expiresAt.setDate(expiresAt.getDate() + 8)
-      await supabase.from('credits').insert({
+      // Bug-Fix (Sarah 2026-05-28): Credit-ID merken und an die Bookings haengen.
+      // Vorher wurde der Credit zwar angelegt, aber die Bookings bekamen KEIN
+      // credit_id → der Trigger trg_sync_credit_used konnte nie hochzaehlen →
+      // Anzeige blieb "0/3 genutzt" obwohl 3 Stunden gebucht waren.
+      const { data: rolloverCredit } = await supabase.from('credits').insert({
         user_id: userId, course_id: newCourse.id,
         model: 'course', total: credits, used: 0,
         expires_at: expiresAt.toISOString()
-      })
+      }).select('id').single()
+      const rolloverCreditId = rolloverCredit?.id || null
 
-      // Sessions buchen
+      // Sessions buchen — credit_id verlinken (damit credits.used korrekt zaehlt)
       for (const sessionId of sessionIds) {
         const { data: existing } = await supabase.from('bookings')
           .select('id').eq('user_id', userId).eq('session_id', sessionId).maybeSingle()
         if (!existing) {
           await supabase.from('bookings').insert({
             user_id: userId, session_id: sessionId,
-            type: 'course', status: 'active'
+            credit_id: rolloverCreditId, type: 'course', status: 'active'
           })
+        } else {
+          // Falls Buchung schon existiert (z.B. erneuter Rollover): credit_id
+          // nachziehen, sofern noch keiner gesetzt ist.
+          await supabase.from('bookings').update({ credit_id: rolloverCreditId })
+            .eq('id', existing.id).is('credit_id', null)
         }
       }
 
@@ -1904,8 +1917,9 @@ export default function AdminKursePage() {
     // Welle 6 (Sarah 2026-05-27, Item 1): "laufender Kurs" = is_active &&
     // !is_cancelled && date_end >= today. Bei diesem Zustand soll der
     // Loesch-Button NICHT direkt sichtbar sein, sondern nur ueber ein "…"-Menue.
-    const todayStr = new Date().toISOString().slice(0, 10)
-    const isRunning = c.is_active && !c.is_cancelled && (c.date_end || '') >= todayStr
+    // Sarah-Regel 2026-05-28: läuft = noch nicht beendet (letzte Stunde noch
+    // nicht begonnen) statt date_end >= heute.
+    const isRunning = c.is_active && !c.is_cancelled && !isCourseEnded(c)
     return (
       <div key={c.id} className="card mb-3 relative" data-course-card={isEnded ? 'ended' : 'active'}>
         {/* Welle 6: "…" Mehr-Menue oben rechts auf laufenden Kursen — enthaelt
@@ -2092,18 +2106,16 @@ export default function AdminKursePage() {
                 Aktive + Beendete teilen die GLEICHE Render-Logik via inline Helper. */}
             <p className="section-label">Aktive Kurse</p>
             {(() => {
-              const today = new Date().toISOString().split('T')[0]
-              const activeCourses = courses.filter(c => c.is_active && c.date_end >= today && !c.is_cancelled)
+              // Sarah-Regel 2026-05-28: aktiv = noch nicht beendet (letzte Stunde
+              // noch nicht begonnen).
+              const activeCourses = courses.filter(c => c.is_active && !isCourseEnded(c) && !c.is_cancelled)
               if (activeCourses.length === 0) {
                 return <p className="text-sm text-yoga-text/40 text-center py-4">Keine aktiven Kurse</p>
               }
               return null
             })()}
             {courses
-              .filter(c => {
-                const today = new Date().toISOString().split('T')[0]
-                return c.is_active && c.date_end >= today && !c.is_cancelled
-              })
+              .filter(c => c.is_active && !isCourseEnded(c) && !c.is_cancelled)
               .map(c => renderCourseCard(c, false))}
 
             {/* Welle 2 (Sarah 2026-05-26): zweite Sektion — Sessions aus den
@@ -2382,8 +2394,9 @@ export default function AdminKursePage() {
             {/* Welle 2.5 (Sarah 2026-05-26): Beendete Kurse — eigene Sektion
                 unten, gleiche Card-Logik wie aktive. */}
             {(() => {
-              const today = new Date().toISOString().split('T')[0]
-              const ended = courses.filter(c => c.is_active && (c.date_end < today || c.is_cancelled))
+              // Sarah-Regel 2026-05-28: beendet = letzte Stunde hat begonnen
+              // (date_end + course.time_start) ODER abgebrochen.
+              const ended = courses.filter(c => c.is_active && (isCourseEnded(c) || c.is_cancelled))
               if (ended.length === 0) return null
               return <>
                 <p className="section-label mt-6">Beendete Kurse</p>

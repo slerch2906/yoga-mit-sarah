@@ -70,6 +70,28 @@ export function countActiveFutureUnits(sessions: SessionLike[] | null | undefine
   return (sessions || []).filter(s => isActive(s) && s.date && new Date(s.date) >= today).length
 }
 
+export type CourseLike = {
+  date_end?: string | null   // YYYY-MM-DD letzte (geplante) Kursstunde
+  time_start?: string | null // HH:MM[:SS] wöchentlicher Slot
+}
+
+/**
+ * Kurs gilt als BEENDET in der Minute, in der die LETZTE Stunde BEGONNEN hat.
+ *
+ * Sarah-Regel 2026-05-28: NICHT erst am Tagesende von date_end, sondern exakt
+ * ab date_end + course.time_start. course.time_start ist der wöchentliche
+ * Slot — die letzte Stunde liegt auf date_end zu genau dieser Uhrzeit.
+ * Fehlt time_start, fällt der Cutoff auf Tagesende (23:59:59) zurück.
+ *
+ * @param refNow optional injizierbare „Jetzt"-Zeit für Tests
+ */
+export function isCourseEnded(course: CourseLike | null | undefined, refNow?: Date): boolean {
+  if (!course?.date_end) return false
+  const t = course.time_start || '23:59:59'
+  const endDt = new Date(`${course.date_end}T${t}`)
+  return endDt < (refNow || new Date())
+}
+
 /** Status-Label für die UI. */
 export function sessionStatusLabel(s: SessionLike | null | undefined):
   | 'Aktiv' | 'Vergangen' | 'Ausgeschlossen' | 'Abgesagt' {

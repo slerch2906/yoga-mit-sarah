@@ -30,9 +30,10 @@ export async function promoteWaitlistOrOfferLate(
 ): Promise<{ mode: 'auto-promoted' | 'late-offer-sent' | 'noop'; details?: any }> {
   // 1) Session-Daten holen
   const { data: session } = await supabase.from('sessions')
-    .select('id, date, time_start, is_cancelled, course:courses(name, is_free)')
+    .select('id, course_id, date, time_start, is_cancelled, course:courses(name, is_free)')
     .eq('id', sessionId).maybeSingle()
   if (!session || (session as any).is_cancelled) return { mode: 'noop' }
+  const sessionCourseId = (session as any).course_id || null
 
   const sessionStart = new Date(`${(session as any).date}T${(session as any).time_start}`).getTime()
   const now = Date.now()
@@ -62,7 +63,7 @@ export async function promoteWaitlistOrOfferLate(
     for (const wl of waitlist) {
       const promoted = isFreeCourse
         ? await tryAutoPromoteOneFree(supabase, wl, sessionId, { courseName, dateStr, timeStr })
-        : await tryAutoPromoteOne(supabase, wl, sessionId, { courseName, dateStr, timeStr })
+        : await tryAutoPromoteOne(supabase, wl, sessionId, sessionCourseId, { courseName, dateStr, timeStr })
       if (promoted) return { mode: 'auto-promoted', details: { user_id: wl.user_id } }
     }
     return { mode: 'noop' }
@@ -145,17 +146,25 @@ async function tryAutoPromoteOneFree(
 /** Hilfs-Funktion: einen Yogi aus Waitlist auto-promoten (Course/Tenpack-Credit). */
 async function tryAutoPromoteOne(
   supabase: SupabaseClient, wl: any, sessionId: string,
+  sessionCourseId: string | null,
   meta: { courseName: string; dateStr: string; timeStr: string },
 ): Promise<boolean> {
   // Hat der Yogi einen freien Credit?
   const nowIso = new Date().toISOString()
   const { data: credits } = await supabase.from('credits')
-    .select('id, total, used, model').eq('user_id', wl.user_id)
+    .select('id, total, used, model, course_id').eq('user_id', wl.user_id)
     .gt('expires_at', nowIso)
   const free = (credits || []).filter((c: any) => c.total > c.used && c.model !== 'guthaben')
   if (free.length === 0) return false
-  // Einfach den ersten freien Credit nehmen
-  const credit = free[0]
+  // Bug-Fix (Sarah 2026-05-28): Credit-Wahl mit Kurs-Vorrang.
+  // 1) Course-Credit des EIGENEN Kurses (credit.course_id === session.course_id)
+  // 2) sonst irgendein freier Credit (alte Logik: free[0]).
+  // Vorher wurde blind free[0] genommen → konnte faelschlich ein fremder
+  // Kurs-Credit sein, obwohl ein eigener Kurs-Credit frei war.
+  const matchingCourseCredit = free.find((c: any) =>
+    c.model === 'course' && sessionCourseId != null && c.course_id === sessionCourseId
+  )
+  const credit = matchingCourseCredit || free[0]
   await supabase.from('bookings').upsert({
     user_id: wl.user_id, session_id: sessionId, credit_id: credit.id,
     type: 'single', status: 'active', cancelled_at: null, cancel_late: false,

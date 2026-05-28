@@ -804,10 +804,12 @@ export default function AdminKursePage() {
         .in('origin_session_id', futureSessionIds)
         .eq('status', 'active')
       const toCancel = ((dependentBookings || []) as any[]).filter(b => b.session?.date && b.session.date >= today)
+      const freedVorholSessionIds: string[] = []
       for (const b of toCancel) {
         await supabase.from('bookings').update({
           status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false
         }).eq('id', b.id)
+        if (b.session?.id) freedVorholSessionIds.push(b.session.id)
         // Yogi informieren — die Vorhol-Stunde fällt weg weil Origin storniert wurde
         if (b.profile?.email) {
           try {
@@ -831,6 +833,12 @@ export default function AdminKursePage() {
             cancelled_booking_count: toCancel.length,
           }
         })
+      }
+      // Sarah-Wunsch 2026-05-28: durch die Cascade frei gewordene (Vorhol-)Stunden
+      // — oft in ANDEREN Kursen — auch nachrücken lassen.
+      const uniqueFreed = Array.from(new Set(freedVorholSessionIds))
+      for (const sid of uniqueFreed) {
+        try { await promoteWaitlistOrOfferLate(supabase, sid) } catch (e) { console.error('promote (cascade):', e) }
       }
     }
 

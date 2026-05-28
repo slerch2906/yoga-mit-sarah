@@ -237,3 +237,123 @@ test.describe('[E2E] Warteliste Auto-Nachrücken — alle Typen', () => {
     })
   }
 })
+
+// ── Sarah-Regel 2026-05-28: 60-Min-Gnadenfrist nach automatischem Nachrücken ──
+// Wer AUTOMATISCH von der Warteliste nachrückt, darf sich 60 Min lang kostenlos
+// wieder abmelden (Credit zurück), auch wenn die normale 3h-Frist schon läuft.
+// Voraussetzung: beim Auto-Nachrücken wird bookings.promoted_at gesetzt, und
+// handleCancel wertet dieses Fenster aus (late=false in der Gnadenfrist).
+test.describe('[E2E] Nachrück-Gnadenfrist (promoted_at) — Live', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  test.beforeAll(async () => {
+    yogi1Id = (await getUserIdByEmail(process.env.TEST_YOGI1_EMAIL!))!
+    yogi2Id = (await getUserIdByEmail(process.env.TEST_YOGI2_EMAIL!))!
+  })
+  test.afterAll(async () => {
+    await resetYogi(yogi1Id)
+    await resetYogi(yogi2Id)
+  })
+
+  const SINGLE: Scenario = { type: 'single', label: 'Einzelstunde', needsCredit: true }
+  const COURSE: Scenario = { type: 'course_session', label: 'Kursstunde', needsCredit: true }
+
+  test('TS-Helper-Pfad setzt promoted_at beim Auto-Nachrücken (Einzelstunde)', async () => {
+    const sessionId = await setupScenario(SINGLE, 3 * 24 * 60)
+    await deleteYogi1Booking(sessionId)
+
+    const res = await promoteWaitlistOrOfferLate(svc(), sessionId)
+    expect(res.mode, JSON.stringify(res)).toBe('auto-promoted')
+
+    const { data: bk } = await svc().from('bookings')
+      .select('promoted_at, status').eq('user_id', yogi2Id).eq('session_id', sessionId)
+      .eq('status', 'active').maybeSingle()
+    expect(bk, 'aktive Buchung von yogi2 muss existieren').not.toBeNull()
+    expect(bk!.promoted_at, 'promoted_at muss beim Nachrücken gesetzt sein').not.toBeNull()
+    // Frisch gesetzt (innerhalb der letzten 5 Min)
+    const ageMs = Date.now() - new Date(bk!.promoted_at).getTime()
+    expect(ageMs, 'promoted_at ist aktuell').toBeLessThan(5 * 60 * 1000)
+  })
+
+  test('RPC-Pfad setzt promoted_at beim Auto-Nachrücken (Kursstunde, Yogi sagt selbst ab)', async () => {
+    const sessionId = await setupScenario(COURSE, 3 * 24 * 60)
+
+    const yogi1Client = await makeAuthedClient(process.env.TEST_YOGI1_EMAIL!, process.env.TEST_YOGI1_PASSWORD!)
+    await yogi1Client.from('bookings')
+      .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+      .eq('user_id', yogi1Id).eq('session_id', sessionId)
+    const { data, error } = await yogi1Client.rpc('process_cancellation_with_waitlist', { p_session_id: sessionId })
+    expect(error, `RPC-Fehler: ${error?.message}`).toBeNull()
+    expect((data as any)?.promoted, 'RPC muss jemanden nachrücken').not.toBeNull()
+
+    const { data: bk } = await svc().from('bookings')
+      .select('promoted_at, status').eq('user_id', yogi2Id).eq('session_id', sessionId)
+      .eq('status', 'active').maybeSingle()
+    expect(bk, 'aktive Buchung von yogi2 muss existieren').not.toBeNull()
+    expect(bk!.promoted_at, 'RPC muss promoted_at setzen').not.toBeNull()
+    const ageMs = Date.now() - new Date(bk!.promoted_at).getTime()
+    expect(ageMs, 'promoted_at ist aktuell').toBeLessThan(5 * 60 * 1000)
+  })
+
+  test('Reguläre Selbst-Buchung setzt promoted_at NICHT (keine Gnadenfrist)', async () => {
+    // Drop-in-Buchung ohne Warteliste-Nachrücken darf kein promoted_at tragen.
+    const db = svc()
+    await resetYogi(yogi2Id)
+    const course = await createTestCourse({
+      name: `${E2E_PREFIX} WL-grace-direct`, sessionCount: 1, startDaysFromNow: 30, maxSpots: 2,
+    })
+    const { date, time } = inMinutes(3 * 24 * 60)
+    const { data: sess } = await db.from('sessions').insert({
+      course_id: course.courseId, date, time_start: time, duration_min: 75,
+      is_cancelled: false, session_type: 'single', name: `${E2E_PREFIX} Direktbuchung`, max_spots: 2,
+    }).select('id').single()
+    await giveYogiSingleCredit(yogi2Id, 1)
+    await db.from('bookings').insert({
+      user_id: yogi2Id, session_id: sess!.id, credit_id: null, type: 'single', status: 'active',
+    })
+    const { data: bk } = await db.from('bookings')
+      .select('promoted_at').eq('user_id', yogi2Id).eq('session_id', sess!.id).maybeSingle()
+    expect(bk!.promoted_at, 'Direktbuchung darf KEIN promoted_at haben').toBeNull()
+  })
+})
+
+// ── Source-Checks: Gnadenfrist-Logik in App + Mail ─────────────────────────
+test.describe('[E2E] Gnadenfrist — Source-Coverage', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+  const fs = require('fs') as typeof import('fs')
+  const path = require('path') as typeof import('path')
+  const read = (f: string) => fs.readFileSync(path.join(process.cwd(), f), 'utf8')
+
+  test('handleCancel: late wird durch 60-Min-Gnadenfrist (promoted_at) entschärft', () => {
+    const src = read('app/kurse/[id]/page.tsx')
+    // promoted_at + 60-Min-Fenster fließen in die late-Entscheidung ein
+    expect(src).toMatch(/promoted_at/)
+    expect(src).toMatch(/inPromoteGrace/)
+    expect(src).toMatch(/60 \* 60 \* 1000/)
+    // late darf bei aktiver Gnadenfrist NICHT true sein
+    expect(src).toMatch(/serverNow > deadline3h && !inPromoteGrace/)
+  })
+
+  test('handleBook: reguläre (Re-)Buchung setzt promoted_at zurück', () => {
+    const src = read('app/kurse/[id]/page.tsx')
+    expect(src).toMatch(/promoted_at:\s*null/)
+  })
+
+  test('UI: Grace-Button "Versehentlich von Warteliste nachgerückt" für 60 Min', () => {
+    const src = read('app/kurse/[id]/page.tsx')
+    expect(src).toMatch(/Versehentlich von Warteliste nachgerückt/)
+  })
+
+  test('waitlist-promote.ts: beide Auto-Promote-Helfer setzen promoted_at', () => {
+    const src = read('lib/waitlist-promote.ts')
+    const matches = src.match(/promoted_at:\s*new Date\(\)\.toISOString\(\)/g) || []
+    expect(matches.length, 'promoted_at in tryAutoPromoteOne + tryAutoPromoteOneFree').toBeGreaterThanOrEqual(2)
+  })
+
+  test('Edge Function: waitlist_promoted-Mail hat "Wieder absagen"-Button', () => {
+    const src = read('supabase/functions/send-email/index.ts')
+    expect(src).toMatch(/Versehentlich nachgerückt\? Wieder absagen/)
+    // Button nur bei Kurs/Einzelstunde (nicht bei Events)
+    expect(src).toMatch(/!isPaidEvent && !isFreeEvent && data\.sessionId/)
+  })
+})

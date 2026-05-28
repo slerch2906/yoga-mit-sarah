@@ -213,6 +213,11 @@ export default function AdminDashboard() {
     // jederzeit austragen. event_paid + <7d: nur Hinweis auf externe Erstattung.
     const { data: freshSession } = await supabase.from('sessions')
       .select('date, time_start, session_type, price_eur, name').eq('id', sessionId).single()
+    // Bug-Fix (Sarah 2026-05-28): Yogi-ID der Buchung holen — muss als
+    // target_user_id ins Audit, sonst erscheint die Admin-Austragung NICHT im
+    // Yogi-Protokoll (das nach user_id/target_user_id filtert).
+    const { data: _bk } = await supabase.from('bookings').select('user_id').eq('id', bookingId).maybeSingle()
+    const _targetUserId = (_bk as any)?.user_id || null
     const sessType = freshSession?.session_type
     const isEvent = sessType === 'event_free' || sessType === 'event_paid'
     const isPaidEvent = sessType === 'event_paid'
@@ -239,6 +244,7 @@ export default function AdminDashboard() {
       await supabase.from('audit_log').insert({
         action: 'booking_cancelled_by_admin',
         details: {
+          target_user_id: _targetUserId,
           booking_id: bookingId, session_id: sessionId,
           session_type: sessType, credit_returned: false, within_3h: false,
           within_7d: _within7d,
@@ -281,12 +287,15 @@ export default function AdminDashboard() {
     // korrekten Audit-Snapshot (selectedSession kann stale sein).
     const { data: _sessAudit } = await supabase.from('sessions')
       .select('name, date, time_start').eq('id', sessionId).maybeSingle()
+    // Bug-Fix (Sarah 2026-05-28): target_user_id fuers Yogi-Protokoll mitschreiben.
+    const { data: _bkUser } = await supabase.from('bookings').select('user_id').eq('id', bookingId).maybeSingle()
     // Welle S2/H14 (Sarah 2026-05-27): Audit-Insert abgesichert — Booking-
     // Cancel ist schon committed; Audit-Fehler darf Workflow nicht stoppen.
     try {
       const { error: auditErr } = await supabase.from('audit_log').insert({
         action: 'booking_cancelled_by_admin',
-        details: { booking_id: bookingId, session_id: sessionId, credit_returned: creditReturned,
+        details: { target_user_id: (_bkUser as any)?.user_id || null,
+                   booking_id: bookingId, session_id: sessionId, credit_returned: creditReturned,
                    within_3h: within3h,
                    // Welle 6A: session_type + name für klares Protokoll
                    session_type: sessionType || null,
@@ -415,11 +424,22 @@ export default function AdminDashboard() {
     const evType: string = selectedSession.session_type || 'course_session'
     const isDummy = !!yogi.is_dummy
     if (evType === 'event_free' || evType === 'event_paid' || isDummy) {
-      await supabase.from('bookings').insert({
+      // Bug-Fix (Sarah 2026-05-28): vorher .insert() OHNE Fehler-Check. Bei einer
+      // bereits existierenden (abgesagten) Buchung schlug der Insert am Unique-
+      // Constraint (user_id, session_id) fehl, das Audit wurde aber trotzdem
+      // geschrieben → doppelte Protokoll-Eintraege OHNE echte Buchung (Charity-
+      // Bug). Jetzt upsert (reaktiviert eine abgesagte Buchung) + Fehler-Check
+      // VOR dem Audit. Identisch zum Pfad in app/admin/sessions/[id]/page.tsx.
+      const { error: bErr } = await supabase.from('bookings').upsert({
         user_id: yogi.id, session_id: selectedSession.id,
         credit_id: null, type: 'single', status: 'active',
-        origin_session_id: null,
-      })
+        cancelled_at: null, cancel_late: false, origin_session_id: null,
+      }, { onConflict: 'user_id,session_id' })
+      if (bErr) {
+        setDashAddingYogi(false)
+        alert('Buchung konnte nicht angelegt werden: ' + bErr.message)
+        return
+      }
       await supabase.from('audit_log').insert({
         action: isDummy && evType === 'course_session' ? 'admin_added_yogi_to_session' : 'admin_added_yogi_to_event',
         details: {
@@ -428,9 +448,32 @@ export default function AdminDashboard() {
           is_dummy: isDummy || undefined,
           // Welle 6A (Sarah 2026-05-27): Session-Name fuer Yogi-Protokoll
           name: selectedSession.name || null,
+          session_date: selectedSession.date, session_time: selectedSession.time_start,
           source: 'dashboard',
         }
       })
+      // Bug-Fix (Sarah 2026-05-28): Bestätigungsmail wie bei Selbstanmeldung —
+      // inkl. Stornoregeln (sessionType steuert die Texte in der Edge Function).
+      // Nicht fuer Dummys. event_paid: Preis-Hinweis im courseName-Marker.
+      if (yogi.email && !isDummy) {
+        try {
+          const eventLabel = evType === 'event_free'
+            ? `${selectedSession.name} (kostenlos)`
+            : evType === 'event_paid'
+            ? `${selectedSession.name} (${selectedSession.price_eur} € — bitte bar mitbringen oder vorab überweisen)`
+            : (selectedSession.name || (selectedSession as any).course_name || '')
+          await Email.bookingConfirmed({
+            email: yogi.email,
+            firstName: yogi.first_name || 'Yogi',
+            courseName: eventLabel,
+            date: selectedSession.date,
+            timeStart: selectedSession.time_start,
+            durationMin: selectedSession.duration_min || 75,
+            isSingle: true,
+            sessionType: evType,
+          })
+        } catch (e) { /* nicht-blockierend */ }
+      }
       setDashAddingYogi(false)
       setShowDashAddYogi(false)
       setDashYogiSearch('')
@@ -1040,7 +1083,7 @@ export default function AdminDashboard() {
                 <div key={b.id} className="card mb-2 flex items-center justify-between gap-2">
                   {/* Sarah-Wunsch: Name klickbar → Yogi-Profil (Modal vorher schließen) */}
                   <button
-                    onClick={() => { setSelectedSession(null); setSessionBookings([]); router.push(`/admin/yogis/${b.user_id}`) }}
+                    onClick={() => { if (!b.user_id) return; router.push(`/admin/yogis/${b.user_id}`); setSelectedSession(null); setSessionBookings([]) }}
                     className="flex-1 text-left bg-transparent border-0 p-0 cursor-pointer hover:opacity-70 transition-opacity min-w-0">
                     <div className="text-sm font-semibold">{b.profile?.first_name} {b.profile?.last_name}</div>
                     <div className="text-xs text-yoga-text/50 truncate">{b.profile?.email}</div>
@@ -1058,7 +1101,7 @@ export default function AdminDashboard() {
                   <p className="section-label mt-3">Ausgetragen ({sessionBookings.filter(b => b._type === 'booking' && b.status === 'cancelled').length})</p>
                   {sessionBookings.filter(b => b._type === 'booking' && b.status === 'cancelled').map(b => (
                     <button key={b.id}
-                      onClick={() => { setSelectedSession(null); setSessionBookings([]); router.push(`/admin/yogis/${b.user_id}`) }}
+                      onClick={() => { if (!b.user_id) return; router.push(`/admin/yogis/${b.user_id}`); setSelectedSession(null); setSessionBookings([]) }}
                       className="card mb-2 opacity-60 w-full text-left flex items-center justify-between bg-transparent border border-yoga-border cursor-pointer hover:opacity-80 transition-opacity">
                       <div className="text-sm">{b.profile?.first_name} {b.profile?.last_name}</div>
                       <span className="badge badge-left">Ausgetragen</span>
@@ -1082,7 +1125,7 @@ export default function AdminDashboard() {
                         {onWaitlist.map(w => (
                           <div key={w.id} className="card mb-2 flex items-center justify-between gap-2">
                             <button
-                              onClick={() => { setSelectedSession(null); setSessionBookings([]); router.push(`/admin/yogis/${w.user_id}`) }}
+                              onClick={() => { if (!w.user_id) return; router.push(`/admin/yogis/${w.user_id}`); setSelectedSession(null); setSessionBookings([]) }}
                               className="flex-1 text-left bg-transparent border-0 p-0 cursor-pointer hover:opacity-70 transition-opacity min-w-0">
                               <div className="text-sm font-semibold flex items-center gap-2">
                                 <span className="text-xs text-yoga-text/50 font-normal">#{w.position}</span>
@@ -1106,7 +1149,7 @@ export default function AdminDashboard() {
                         <p className="section-label mt-3">Benachrichtigung aktiviert ({onNotify.length})</p>
                         {onNotify.map(w => (
                           <button key={w.id}
-                            onClick={() => { setSelectedSession(null); setSessionBookings([]); router.push(`/admin/yogis/${w.user_id}`) }}
+                            onClick={() => { if (!w.user_id) return; router.push(`/admin/yogis/${w.user_id}`); setSelectedSession(null); setSessionBookings([]) }}
                             className="card mb-2 w-full text-left flex items-center justify-between bg-transparent border border-yoga-border cursor-pointer hover:opacity-80 transition-opacity">
                             <div className="text-sm">
                               {w.profile?.first_name} {w.profile?.last_name}

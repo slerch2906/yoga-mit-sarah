@@ -89,6 +89,14 @@ export default function WartelistePage() {
                 <>
                   <p className="section-label">Du stehst auf der Warteliste</p>
                   {waitlist.map(renderCard)}
+                  {/* Sarah-Wunsch 2026-05-28: Hinweis DIREKT unter die Warteliste —
+                      gilt nur fürs automatische Nachrücken, NICHT für die
+                      Benachrichtigung. Daher zwischen den beiden Sektionen. */}
+                  <div className="mt-4 bg-yoga-gray border border-yoga-border rounded-yoga p-3">
+                    <p className="text-sm text-yoga-text/65 leading-relaxed">
+                      Wenn ein Platz frei wird, rückst Du automatisch nach und hast auch innerhalb der 3 Stunden Frist noch eine Stunde Zeit dich kostenlos wieder abzumelden.
+                    </p>
+                  </div>
                 </>
               )}
               {notifies.length > 0 && (
@@ -97,11 +105,6 @@ export default function WartelistePage() {
                   {notifies.map(renderCard)}
                 </>
               )}
-              <div className="mt-4 bg-yoga-gray border border-yoga-border rounded-yoga p-3">
-                <p className="text-sm text-yoga-text/65 leading-relaxed">
-                  Wenn ein Platz frei wird, rückst Du automatisch nach und hast auch innerhalb der 3 Stunden Frist noch eine Stunde Zeit dich kostenlos wieder abzumelden.
-                </p>
-              </div>
             </>
           )
         })()}

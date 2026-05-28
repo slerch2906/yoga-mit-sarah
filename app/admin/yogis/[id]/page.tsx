@@ -110,7 +110,11 @@ export default function AdminYogiDetailPage() {
     }
     const [{ data: sLookup }, { data: cLookup }] = await Promise.all([
       sessionIds.size > 0
-        ? supabase.from('sessions').select('id, date, time_start, course:courses(name)').in('id', Array.from(sessionIds))
+        // Bug-Fix (Sarah 2026-05-28): name mitladen — sonst fehlt bei Einzel-
+        // stunden/Events der echte Titel im Protokoll (course.name ist nur der
+        // SYS-Container-Name und wird gefiltert). formatAuditEntry nutzt sess.name
+        // mit hoechster Prioritaet.
+        ? supabase.from('sessions').select('id, date, time_start, name, course:courses(name)').in('id', Array.from(sessionIds))
         : Promise.resolve({ data: [] as any[] }),
       courseIds.size > 0
         ? supabase.from('courses').select('id, name').in('id', Array.from(courseIds))

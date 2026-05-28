@@ -286,6 +286,8 @@ export default function AdminSessionPage() {
             timeStart: session.time_start,
             durationMin: session.duration_min || 75,
             isSingle: true,
+            // Bug-Fix (Sarah 2026-05-28): sessionType steuert Stornoregeln-Text.
+            sessionType: sessionType,
           })
         } catch (e) { /* nicht-blockierend */ }
       }

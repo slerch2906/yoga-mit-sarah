@@ -1983,7 +1983,9 @@ export default function AdminKursePage() {
               )}
             </div>
           </div>
-          <div className="flex flex-col items-end gap-1">
+          {/* Sarah-Wunsch 2026-05-28: Pillen nach links ruecken wenn das absolute
+              "…"-Menue (nur bei isRunning) oben rechts sitzt — sonst Overlap. */}
+          <div className={`flex flex-col items-end gap-1 ${isRunning ? 'mr-7' : ''}`}>
             <span className={`badge ${c.is_single ? 'badge-wait' : 'badge-free'}`}>
               {c.is_single ? 'Einzelstunde' : 'Kurs'}
             </span>

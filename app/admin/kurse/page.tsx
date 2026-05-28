@@ -1352,12 +1352,18 @@ export default function AdminKursePage() {
     const guthabenUsable = Math.min(totalGuthaben, sessionCount)
     const newCreditsNeeded = sessionCount - guthabenUsable
 
-    // Course-Credit nur für nicht durch Guthaben gedeckte Stunden anlegen
+    // Sarah-Regel 2026-05-28: Beim Einbuchen mit Guthaben wird das Guthaben in
+    // KURS-CREDITS des NEUEN Kurses UMGEWANDELT. Es wird genau EIN Course-Credit
+    // über ALLE Stunden (sessionCount) angelegt; alle Bookings referenzieren ihn.
+    // Das verbrauchte Guthaben wird dauerhaft abgezogen (used += verbraucht).
+    // Vorher hingen die guthaben-gedeckten Bookings direkt am Guthaben-Credit →
+    // (a) es erschien KEIN Kurs-Credit unter "Meine" und (b) beim Abmelden einer
+    // Stunde wurde das Guthaben fälschlich zurückgebucht statt ein Kurs-Credit frei.
     let newCourseCreditId: string | null = null
-    if (newCreditsNeeded > 0) {
+    if (sessionCount > 0) {
       const { data: cc } = await supabase.from('credits').insert({
         user_id: yogi.id, course_id: course.id, model: 'course',
-        total: newCreditsNeeded, used: 0, expires_at: expiresAt.toISOString(),
+        total: sessionCount, used: 0, expires_at: expiresAt.toISOString(),
       }).select().single()
       newCourseCreditId = cc?.id || null
       // Welle 4.7 (Sarah 2026-05-26): Audit-Spur fuer Course-Credit-Anlage.
@@ -1366,7 +1372,8 @@ export default function AdminKursePage() {
           action: 'credit_assigned',
           details: {
             target_user_id: yogi.id, credit_id: newCourseCreditId,
-            amount: newCreditsNeeded, model: 'course',
+            amount: sessionCount, model: 'course',
+            guthaben_converted: guthabenUsable, newly_paid: newCreditsNeeded,
             course_id: course.id, expires_at: expiresAt.toISOString(),
             source: 'admin_added_yogi_to_course',
           }
@@ -1374,16 +1381,22 @@ export default function AdminKursePage() {
       }
     }
 
-    // Pro Session den richtigen Credit zuordnen (Guthaben zuerst)
-    const creditPerSession: (string | null)[] = []
-    const guthabenRemaining = availableGuthaben.map((g: any) => ({ id: g.id, free: g.total - g.used }))
-    for (let i = 0; i < sessionList.length; i++) {
-      let assigned: string | null = null
-      for (const g of guthabenRemaining) {
-        if (g.free > 0) { assigned = g.id; g.free -= 1; break }
+    // Verbrauchtes Guthaben dauerhaft abziehen (Umwandlung in Kurs-Credits).
+    // Bookings referenzieren NICHT das Guthaben, daher fasst der
+    // recalc_credit_used-Trigger das Guthaben nicht an — used bleibt stabil.
+    let _remainingToConsume = guthabenUsable
+    for (const g of (availableGuthaben as any[])) {
+      if (_remainingToConsume <= 0) break
+      const free = g.total - g.used
+      const take = Math.min(free, _remainingToConsume)
+      if (take > 0) {
+        await supabase.from('credits').update({ used: g.used + take }).eq('id', g.id)
+        _remainingToConsume -= take
       }
-      creditPerSession.push(assigned || newCourseCreditId)
     }
+
+    // Alle Bookings referenzieren den NEUEN Kurs-Credit (kein Guthaben mehr).
+    const creditPerSession: (string | null)[] = sessionList.map(() => newCourseCreditId)
 
     // Welle S3/M14 (Sarah 2026-05-27): N+1-Loop entfernt.
     // Vorher 1-2 sequentielle Round-Trips pro Session. Jetzt:

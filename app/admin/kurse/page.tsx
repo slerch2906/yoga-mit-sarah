@@ -2428,38 +2428,56 @@ export default function AdminKursePage() {
               </>
             })()}
 
-            {courses.filter(c => !c.is_active).length > 0 && (
-              <>
-                <p className="section-label mt-6">Archivierte Kurse</p>
-                {courses.filter(c => !c.is_active).map(c => (
-                  <div key={c.id} className="card mb-2 opacity-70 relative">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-bold">{c.name}</div>
-                        <div className="text-xs text-yoga-text/50">{c.weekday} · {c.time_start?.slice(0,5)} Uhr</div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={async () => {
-                          // Kurs reaktivieren + zukünftige Sessions reaktivieren
-                          await supabase.from('courses').update({ is_active: true, is_cancelled: false }).eq('id', c.id)
-                          const today = new Date().toISOString().split('T')[0]
-                          await supabase.from('sessions').update({ is_cancelled: false })
-                            .eq('course_id', c.id).gte('date', today)
-                          loadData()
-                        }}
-                          className="text-xs bg-yoga-bg text-yoga-text border border-yoga-border2 rounded-full px-3 py-1.5 font-semibold cursor-pointer hover:opacity-80">
-                          <i className="ti ti-refresh mr-1" />Reaktivieren
-                        </button>
-                        <button onClick={() => deleteCourse(c.id, c.name)}
-                          className="text-xs bg-yoga-red-bg text-yoga-red-text rounded-full px-3 py-1.5 font-semibold border-0 cursor-pointer hover:opacity-80">
-                          <i className="ti ti-trash mr-1" />Löschen
-                        </button>
-                      </div>
+            {/* Sarah 2026-05-28: Inaktive Kurse splitten — vom Admin ABGEBROCHENE
+                Kurse (is_cancelled) bekommen eine eigene Sektion "Abgebrochene
+                Kurse", regulär ARCHIVIERTE (is_active=false, nicht abgebrochen)
+                bleiben unter "Archivierte Kurse". Gleiche Card-Logik. */}
+            {(() => {
+              const inactive = courses.filter(c => !c.is_active)
+              const abgebrochen = inactive.filter(c => c.is_cancelled)
+              const archiviert = inactive.filter(c => !c.is_cancelled)
+              const renderInactiveCard = (c: any) => (
+                <div key={c.id} className="card mb-2 opacity-70 relative">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-bold">{c.name}</div>
+                      <div className="text-xs text-yoga-text/50">{c.weekday} · {c.time_start?.slice(0,5)} Uhr</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={async () => {
+                        // Kurs reaktivieren + zukünftige Sessions reaktivieren
+                        await supabase.from('courses').update({ is_active: true, is_cancelled: false }).eq('id', c.id)
+                        const today = new Date().toISOString().split('T')[0]
+                        await supabase.from('sessions').update({ is_cancelled: false })
+                          .eq('course_id', c.id).gte('date', today)
+                        loadData()
+                      }}
+                        className="text-xs bg-yoga-bg text-yoga-text border border-yoga-border2 rounded-full px-3 py-1.5 font-semibold cursor-pointer hover:opacity-80">
+                        <i className="ti ti-refresh mr-1" />Reaktivieren
+                      </button>
+                      <button onClick={() => deleteCourse(c.id, c.name)}
+                        className="text-xs bg-yoga-red-bg text-yoga-red-text rounded-full px-3 py-1.5 font-semibold border-0 cursor-pointer hover:opacity-80">
+                        <i className="ti ti-trash mr-1" />Löschen
+                      </button>
                     </div>
                   </div>
-                ))}
+                </div>
+              )
+              return <>
+                {abgebrochen.length > 0 && (
+                  <>
+                    <p className="section-label mt-6">Abgebrochene Kurse</p>
+                    {abgebrochen.map(renderInactiveCard)}
+                  </>
+                )}
+                {archiviert.length > 0 && (
+                  <>
+                    <p className="section-label mt-6">Archivierte Kurse</p>
+                    {archiviert.map(renderInactiveCard)}
+                  </>
+                )}
               </>
-            )}
+            })()}
           </>
         ) : showSingleForm ? (
           <>

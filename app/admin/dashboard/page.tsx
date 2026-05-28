@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Email } from '@/lib/email'
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
@@ -1085,13 +1086,14 @@ export default function AdminDashboard() {
               <p className="section-label">Angemeldet ({sessionBookings.filter(b => b._type === 'booking' && b.status === 'active').length})</p>
               {sessionBookings.filter(b => b._type === 'booking' && b.status === 'active').map(b => (
                 <div key={b.id} className="card mb-2 flex items-center justify-between gap-2">
-                  {/* Sarah-Wunsch: Name klickbar → Yogi-Profil (Modal vorher schließen) */}
-                  <button
-                    onClick={() => { if (!b.user_id) return; router.push(`/admin/yogis/${b.user_id}`); setSelectedSession(null); setSessionBookings([]) }}
-                    className="flex-1 text-left bg-transparent border-0 p-0 cursor-pointer hover:opacity-70 transition-opacity min-w-0">
+                  {/* Sarah-Fix 2026-05-28: echter Link statt button+router.push —
+                      navigiert zuverlässig zum Yogi-Profil. */}
+                  <Link
+                    href={`/admin/yogis/${b.user_id}`}
+                    className="flex-1 text-left no-underline text-yoga-text cursor-pointer hover:opacity-70 transition-opacity min-w-0">
                     <div className="text-sm font-semibold">{b.profile?.first_name} {b.profile?.last_name}</div>
                     <div className="text-xs text-yoga-text/50 truncate">{b.profile?.email}</div>
-                  </button>
+                  </Link>
                   <button onClick={(e) => { e.stopPropagation(); cancelBookingForYogi(b.id, b.credit_id, selectedSession.id) }}
                     className="text-xs bg-yoga-red-bg text-yoga-red-text border-0 rounded-full px-2.5 py-1 cursor-pointer font-semibold flex-shrink-0">
                     Austragen
@@ -1104,12 +1106,12 @@ export default function AdminDashboard() {
                 <>
                   <p className="section-label mt-3">Ausgetragen ({sessionBookings.filter(b => b._type === 'booking' && b.status === 'cancelled').length})</p>
                   {sessionBookings.filter(b => b._type === 'booking' && b.status === 'cancelled').map(b => (
-                    <button key={b.id}
-                      onClick={() => { if (!b.user_id) return; router.push(`/admin/yogis/${b.user_id}`); setSelectedSession(null); setSessionBookings([]) }}
-                      className="card mb-2 opacity-60 w-full text-left flex items-center justify-between bg-transparent border border-yoga-border cursor-pointer hover:opacity-80 transition-opacity">
+                    <Link key={b.id}
+                      href={`/admin/yogis/${b.user_id}`}
+                      className="card mb-2 opacity-60 w-full text-left flex items-center justify-between no-underline text-yoga-text cursor-pointer hover:opacity-80 transition-opacity">
                       <div className="text-sm">{b.profile?.first_name} {b.profile?.last_name}</div>
                       <span className="badge badge-left">Ausgetragen</span>
-                    </button>
+                    </Link>
                   ))}
                 </>
               )}
@@ -1128,9 +1130,9 @@ export default function AdminDashboard() {
                         <p className="section-label mt-3">Auf der Warteliste ({onWaitlist.length})</p>
                         {onWaitlist.map(w => (
                           <div key={w.id} className="card mb-2 flex items-center justify-between gap-2">
-                            <button
-                              onClick={() => { if (!w.user_id) return; router.push(`/admin/yogis/${w.user_id}`); setSelectedSession(null); setSessionBookings([]) }}
-                              className="flex-1 text-left bg-transparent border-0 p-0 cursor-pointer hover:opacity-70 transition-opacity min-w-0">
+                            <Link
+                              href={`/admin/yogis/${w.user_id}`}
+                              className="flex-1 text-left no-underline text-yoga-text cursor-pointer hover:opacity-70 transition-opacity min-w-0">
                               <div className="text-sm font-semibold flex items-center gap-2">
                                 <span className="text-xs text-yoga-text/50 font-normal">#{w.position}</span>
                                 <span>{w.profile?.first_name} {w.profile?.last_name}</span>
@@ -1139,7 +1141,7 @@ export default function AdminDashboard() {
                                 )}
                               </div>
                               <div className="text-xs text-yoga-text/50 truncate">{w.profile?.email}</div>
-                            </button>
+                            </Link>
                             <button onClick={() => promoteWaitlistFromDashboard(w)}
                               className="text-xs bg-yoga-text text-yoga-bg rounded-full px-2.5 py-1 cursor-pointer font-semibold flex-shrink-0 border-0 hover:opacity-80">
                               Nachrücken
@@ -1152,9 +1154,9 @@ export default function AdminDashboard() {
                       <>
                         <p className="section-label mt-3">Benachrichtigung aktiviert ({onNotify.length})</p>
                         {onNotify.map(w => (
-                          <button key={w.id}
-                            onClick={() => { if (!w.user_id) return; router.push(`/admin/yogis/${w.user_id}`); setSelectedSession(null); setSessionBookings([]) }}
-                            className="card mb-2 w-full text-left flex items-center justify-between bg-transparent border border-yoga-border cursor-pointer hover:opacity-80 transition-opacity">
+                          <Link key={w.id}
+                            href={`/admin/yogis/${w.user_id}`}
+                            className="card mb-2 w-full text-left flex items-center justify-between no-underline text-yoga-text cursor-pointer hover:opacity-80 transition-opacity">
                             <div className="text-sm">
                               {w.profile?.first_name} {w.profile?.last_name}
                               {w.profile?.is_dummy && (
@@ -1162,7 +1164,7 @@ export default function AdminDashboard() {
                               )}
                             </div>
                             <span className="badge badge-wait">Benachrichtigung</span>
-                          </button>
+                          </Link>
                         ))}
                       </>
                     )}

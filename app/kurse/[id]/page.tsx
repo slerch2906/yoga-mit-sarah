@@ -431,6 +431,8 @@ export default function SessionDetailPage() {
           courseName: result.promoted.course_name || '',
           date: result.promoted.date || '',
           timeStart: result.promoted.time_start || '',
+          // Sarah-Fix 2026-05-28: sessionType → korrekte Event-Texte/Stornoregeln.
+          sessionType: result.promoted.session_type,
         })
       }
 

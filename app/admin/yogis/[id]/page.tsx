@@ -114,7 +114,7 @@ export default function AdminYogiDetailPage() {
         // stunden/Events der echte Titel im Protokoll (course.name ist nur der
         // SYS-Container-Name und wird gefiltert). formatAuditEntry nutzt sess.name
         // mit hoechster Prioritaet.
-        ? supabase.from('sessions').select('id, date, time_start, name, course:courses(name)').in('id', Array.from(sessionIds))
+        ? supabase.from('sessions').select('id, date, time_start, name, session_type, course:courses(name)').in('id', Array.from(sessionIds))
         : Promise.resolve({ data: [] as any[] }),
       courseIds.size > 0
         ? supabase.from('courses').select('id, name').in('id', Array.from(courseIds))
@@ -855,22 +855,30 @@ export default function AdminYogiDetailPage() {
         return { text: `Yogi hat gebucht${typeLbl}`, subject: termin }
       }
       case 'booking_cancelled': {
-        const lateStr = d.late ? ' — Spät-Abmeldung, Credit verfallen' : ' — Credit zurück'
+        // Sarah-Regel 2026-05-28: Events (kostenlos + bezahlt) ziehen KEINE
+        // Credits → kein Credit-Hinweis. session_type aus details ODER Lookup.
+        const effType = d.session_type || sess?.session_type
+        const isAnyEvent = effType === 'event_free' || effType === 'event_paid' || effType === 'event_credit'
+        const lateStr = isAnyEvent
+          ? ''
+          : (d.late ? ' — Spät-Abmeldung, Credit verfallen' : ' — Credit zurück')
         return { text: `Yogi hat sich abgemeldet${lateStr}`, subject: termin }
       }
       case 'booking_cancelled_by_admin': {
         // Welle 6A (Sarah 2026-05-27): differenzierte Frist-Hinweise nach session_type.
         // event_paid → 7-Tage-Frist; Kursstunde/Einzelstunde → 3-Stunden-Frist; Events → keine Frist.
-        const sessType = d.session_type
+        const sessType = d.session_type || sess?.session_type
         const isEventPaid = sessType === 'event_paid'
-        const isEventFree = sessType === 'event_free' || sessType === 'event_credit'
+        // Sarah-Regel 2026-05-28: ALLE Events (kostenlos + bezahlt + credit)
+        // ziehen keine Credits → kein "Credit zurück/verfallen"-Hinweis.
+        const isAnyEvent = sessType === 'event_free' || sessType === 'event_paid' || sessType === 'event_credit'
         let fristStr = ''
         if (isEventPaid) {
           fristStr = d.within_7d ? ' (innerhalb 7-Tage-Frist)' : ' (außerhalb 7-Tage-Frist)'
-        } else if (!isEventFree) {
+        } else if (!isAnyEvent) {
           fristStr = d.within_3h ? ' (innerhalb 3-Stunden-Frist)' : ''
         }
-        const cStr = isEventFree
+        const cStr = isAnyEvent
           ? '' // kein Credit involviert
           : (d.credit_returned === false ? ' — Credit verfallen' : ' — Credit zurück')
         return { text: `Admin hat Yogi abgemeldet${fristStr}${cStr}`, subject: termin }

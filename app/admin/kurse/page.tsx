@@ -1135,7 +1135,27 @@ export default function AdminKursePage() {
     const { data: course } = await supabase.from('courses')
       .select('date_end').eq('id', courseId).single()
 
-    if (course?.date_end) {
+    // Sarah-Fix 2026-05-28: Ein Kurs OHNE Teilnehmer kann der Admin IMMER
+    // sofort löschen — die 9-Tage-Sperre (Credit-Schutz) greift nur, wenn es
+    // ueberhaupt etwas zu schuetzen gibt. "Keine Teilnehmer" = keine aktiven
+    // Enrollments, keine aktiven Buchungen, keine (verbleibenden) Credits.
+    const { data: cSessions } = await supabase.from('sessions').select('id').eq('course_id', courseId)
+    const cSessionIds = (cSessions || []).map((s: any) => s.id)
+    let activeBookingsCount = 0
+    if (cSessionIds.length > 0) {
+      const { count } = await supabase.from('bookings')
+        .select('id', { count: 'exact', head: true })
+        .in('session_id', cSessionIds).eq('status', 'active')
+      activeBookingsCount = count || 0
+    }
+    const { count: enrollCount } = await supabase.from('enrollments')
+      .select('id', { count: 'exact', head: true }).eq('course_id', courseId)
+    const { data: courseCredits } = await supabase.from('credits')
+      .select('total, used').eq('course_id', courseId)
+    const usableCreditsCount = (courseCredits || []).filter((c: any) => (c.total - c.used) > 0).length
+    const hasParticipants = activeBookingsCount > 0 || (enrollCount || 0) > 0 || usableCreditsCount > 0
+
+    if (hasParticipants && course?.date_end) {
       const dateEnd = new Date(course.date_end)
       const earliestDelete = new Date(dateEnd.getTime() + 9 * 24 * 60 * 60 * 1000)
       const now = new Date()

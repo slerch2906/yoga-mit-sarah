@@ -543,28 +543,37 @@ export default function AdminYogiDetailPage() {
       const activeSessions = (allSessions || []).filter((s: any) =>
         !s.is_cancelled && s.cancel_reason !== 'excluded'
       )
-      // Yogi-Bookings in diesen Sessions (nur die zaehlen — nicht alle Kurs-Sessions)
+      // Yogi-Bookings in diesen Sessions
       const sIds = activeSessions.map((s: any) => s.id)
-      let bookedSessions: any[] = []
+      let bookedIds = new Set<string>()
       if (sIds.length > 0) {
         const { data: bks } = await supabase.from('bookings')
           .select('session_id').eq('user_id', id).in('session_id', sIds).eq('status', 'active')
-        const bookedIds = new Set((bks || []).map((b: any) => b.session_id))
-        bookedSessions = activeSessions.filter((s: any) => bookedIds.has(s.id))
+        bookedIds = new Set((bks || []).map((b: any) => b.session_id))
       }
-      // 2) Offene Vorhol-/Nachhol-Buchungen des Yogis ab Attest-Datum
-      //    (origin_session_id NOT NULL = Vorhol/Nachhol, status='active', Datum >= Attest)
+      // Sarah-Fix 2026-05-28: Credits DIESES Kurses ermitteln. Stunden, die der
+      // Yogi abgemeldet und mit diesen Credits in Vorhol-/Nachholstunden
+      // verschoben hat, zählen ZUR Gutschrift dazu (die Ersatzstunden werden ja
+      // mitgelöscht). Sonst wäre die Gutschrift zu niedrig (5 statt 7).
+      const { data: courseCreds } = await supabase.from('credits')
+        .select('id').eq('user_id', id).eq('course_id', cancelIllnessFor.courseId)
+      const courseCreditIds = new Set((courseCreds || []).map((c: any) => c.id))
+      // Zukünftige Vorhol-/Nachholstunden, die mit den Credits DIESES Kurses gebucht wurden
       const { data: allBookings } = await supabase.from('bookings')
-        .select('id, origin_session_id, session:sessions!bookings_session_id_fkey(date)')
+        .select('id, credit_id, origin_session_id, session:sessions!bookings_session_id_fkey(date)')
         .eq('user_id', id).eq('status', 'active').not('origin_session_id', 'is', null)
-      const vorholCount = (allBookings || []).filter((b: any) =>
-        b.session?.date && b.session.date >= attestDate
-      ).length
+      const courseMakeups = (allBookings || []).filter((b: any) =>
+        b.session?.date && b.session.date >= attestDate && courseCreditIds.has(b.credit_id)
+      )
+      // Anspruchs-Stunden = aktiv gebuchte Kursstunden + Ursprungsstunden der verschobenen
+      const entitledIds = new Set<string>(bookedIds)
+      for (const m of courseMakeups) if (m.origin_session_id) entitledIds.add(m.origin_session_id)
+      const entitledSessions = activeSessions.filter((s: any) => entitledIds.has(s.id))
       if (cancelled) return
       setIllnessPreview({
-        hoursCredited: bookedSessions.length,
-        sessions: bookedSessions.map((s: any) => ({ date: s.date, time_start: s.time_start })),
-        vorholCount,
+        hoursCredited: bookedIds.size + courseMakeups.length,
+        sessions: entitledSessions.map((s: any) => ({ date: s.date, time_start: s.time_start })),
+        vorholCount: courseMakeups.length,
       })
     })()
     return () => { cancelled = true }
@@ -618,11 +627,18 @@ export default function AdminYogiDetailPage() {
       // 2) Storniere offene Vorhol/Nachhol-Buchungen des Yogis ab Attest-Datum
       //    (origin_session_id NOT NULL = Vorhol/Nachhol). Ersatzlos: cancel_late=true,
       //    damit kein Credit zurueckgebucht wird (Sarah-Spec).
+      //    Sarah-Fix 2026-05-28: NUR Vorhol-/Nachholstunden, die mit den Credits
+      //    DIESES Kurses gebucht wurden, werden geloescht — und zaehlen daher zur
+      //    Gutschrift dazu (siehe hoursCredited unten). Andere Ersatzstunden
+      //    (z.B. aus einem anderen Kurs) bleiben unberuehrt.
+      const { data: courseCreds } = await supabase.from('credits')
+        .select('id').eq('user_id', id).eq('course_id', courseId)
+      const courseCreditIds = new Set((courseCreds || []).map((c: any) => c.id))
       const { data: vorholBks } = await supabase.from('bookings')
-        .select('id, session_id, session:sessions!bookings_session_id_fkey(date)')
+        .select('id, session_id, credit_id, session:sessions!bookings_session_id_fkey(date)')
         .eq('user_id', id).eq('status', 'active').not('origin_session_id', 'is', null)
       const vorholToCancel = (vorholBks || []).filter((b: any) =>
-        b.session?.date && b.session.date >= attestDateStr
+        b.session?.date && b.session.date >= attestDateStr && courseCreditIds.has(b.credit_id)
       )
       const vorholCancelled = vorholToCancel.length
       const vorholSessionIds: string[] = []
@@ -647,7 +663,10 @@ export default function AdminYogiDetailPage() {
         .eq('user_id', id).eq('course_id', courseId)
 
       // 5) Neues Guthaben anlegen (10 Monate gueltig, source='illness')
-      const hoursCredited = cancelledCourseBookings
+      //    Sarah-Fix 2026-05-28: aktive Kursstunden + die geloeschten Vorhol-/
+      //    Nachholstunden dieses Kurses (5 + 2 = 7), denn fuer die abgemeldeten
+      //    Stunden wurden Ersatzstunden gebucht, die hier ebenfalls entfallen.
+      const hoursCredited = cancelledCourseBookings + vorholCancelled
       const expiresAt = new Date(attestDateStr)
       expiresAt.setMonth(expiresAt.getMonth() + 10) // 10 Monate (Welle G Sarah-Spec)
       let newCreditId: string | null = null

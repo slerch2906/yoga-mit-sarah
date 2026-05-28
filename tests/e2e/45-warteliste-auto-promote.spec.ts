@@ -317,6 +317,77 @@ test.describe('[E2E] Nachrück-Gnadenfrist (promoted_at) — Live', () => {
   })
 })
 
+// ── RLS-Regression: Spät-Angebot muss mit AUTHENTIFIZIERTEM Client klappen ──
+// Bug (Sarah 2026-05-28): waitlist_offers hatte RLS aktiv, aber 0 Policies →
+// jeder Browser-Zugriff (Admin-Austrag + Yogi-Self-Cancel ≤90min) wurde still
+// blockiert, Spät-Angebote wurden nie erstellt → Warteliste rückte nicht nach.
+// WICHTIG: Dieser Test nutzt einen AUTHENTIFIZIERTEN Client (nicht den Service-
+// Client), denn nur so greift RLS — die übrigen Tests nutzen svc() und hätten
+// die Lücke nie gesehen.
+test.describe('[E2E] waitlist_offers RLS — Spät-Angebot via authentifiziertem Client', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  test.beforeAll(async () => {
+    yogi1Id = (await getUserIdByEmail(process.env.TEST_YOGI1_EMAIL!))!
+    yogi2Id = (await getUserIdByEmail(process.env.TEST_YOGI2_EMAIL!))!
+  })
+  test.afterAll(async () => {
+    await resetYogi(yogi1Id)
+    await resetYogi(yogi2Id)
+  })
+
+  test('Admin kann ≤90min ein Spät-Angebot anlegen (RLS erlaubt INSERT)', async () => {
+    const sc: Scenario = { type: 'single', label: 'Einzelstunde', needsCredit: true }
+    const sessionId = await setupScenario(sc, 45) // 45 Min → ≤90min-Pfad
+    await deleteYogi1Booking(sessionId)
+
+    // Promote als ADMIN-Client (RLS aktiv!) — nicht als Service-Client.
+    const adminClient = await makeAuthedClient(process.env.TEST_ADMIN_EMAIL!, process.env.TEST_ADMIN_PASSWORD!)
+    const res = await promoteWaitlistOrOfferLate(adminClient, sessionId)
+    expect(res.mode, JSON.stringify(res)).toBe('late-offer-sent')
+
+    // Der Offer-Eintrag MUSS trotz RLS angelegt worden sein.
+    const { data: offer } = await svc().from('waitlist_offers')
+      .select('id, token').eq('session_id', sessionId).eq('user_id', yogi2Id).maybeSingle()
+    expect(offer, 'Spät-Angebot muss trotz RLS erstellt werden (Admin-Policy)').not.toBeNull()
+    expect(offer!.token, 'Offer braucht einen Token für den Magic-Link').toBeTruthy()
+  })
+})
+
+// ── yogi_notifications: Grant+RLS — Admin legt an, Yogi liest (Event-Absage) ─
+// Bug (Sarah 2026-05-28): yogi_notifications hatte RLS aktiv, aber KEINE GRANTs
+// an authenticated → Admin konnte keine Benachrichtigung INSERTen und der Yogi
+// konnte sie nicht SELECTen ("Kein Hinweis wird angezeigt" bei Event-Absage).
+// Dieser Test nutzt echte authentifizierte Clients (nicht svc()), damit
+// Grant+RLS wie in Produktion greifen.
+test.describe('[E2E] yogi_notifications: Admin legt an → Yogi liest', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  test('Admin kann Benachrichtigung anlegen, Yogi kann sie lesen', async () => {
+    const yogiId = (await getUserIdByEmail(process.env.TEST_YOGI1_EMAIL!))!
+    // Aufräumen vorab
+    await svc().from('yogi_notifications').delete().eq('user_id', yogiId).eq('type', 'event_cancelled')
+
+    // Admin (authenticated, RLS aktiv) legt eine Benachrichtigung für den Yogi an
+    const adminClient = await makeAuthedClient(process.env.TEST_ADMIN_EMAIL!, process.env.TEST_ADMIN_PASSWORD!)
+    const { error: insErr } = await adminClient.from('yogi_notifications').insert({
+      user_id: yogiId, type: 'event_cancelled',
+      payload: { title: `${E2E_PREFIX} Test-Event`, reason: 'Testabsage' },
+    })
+    expect(insErr, `Admin muss yogi_notifications anlegen können: ${insErr?.message}`).toBeNull()
+
+    // Yogi (authenticated) liest seine eigene Benachrichtigung
+    const yogiClient = await makeAuthedClient(process.env.TEST_YOGI1_EMAIL!, process.env.TEST_YOGI1_PASSWORD!)
+    const { data: notes, error: selErr } = await yogiClient.from('yogi_notifications')
+      .select('id, type, payload').eq('type', 'event_cancelled')
+    expect(selErr, `Yogi muss eigene Benachrichtigung lesen können: ${selErr?.message}`).toBeNull()
+    expect((notes || []).length, 'Yogi sieht seine Event-Absage-Benachrichtigung').toBeGreaterThanOrEqual(1)
+
+    // Aufräumen
+    await svc().from('yogi_notifications').delete().eq('user_id', yogiId).eq('type', 'event_cancelled')
+  })
+})
+
 // ── Source-Checks: Gnadenfrist-Logik in App + Mail ─────────────────────────
 test.describe('[E2E] Gnadenfrist — Source-Coverage', () => {
   test.use({ storageState: { cookies: [], origins: [] } })

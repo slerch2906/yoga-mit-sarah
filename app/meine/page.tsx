@@ -342,6 +342,12 @@ export default function MeinePage() {
               const expiryFormatted = new Date(c.expires_at).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })
               // Restzeit in Tagen — immer anzeigen (Welle G Sarah-Wunsch)
               const daysLeft = Math.max(0, Math.ceil((new Date(c.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+              // Sarah-Wunsch 2026-05-28: bei Kursabbruch-Guthaben Herkunft anzeigen
+              // — Kurstitel + Abbruch-Datum (= Anlage-Datum des Guthabens).
+              const cancelCourseName = !isIllness ? (c.course?.name?.trim() || null) : null
+              const cancelDateStr = (!isIllness && c.created_at)
+                ? new Date(c.created_at).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })
+                : null
               return (
                 <div key={c.id} className="card mb-2">
                   <div className="flex items-center justify-between">
@@ -353,8 +359,14 @@ export default function MeinePage() {
                         </span>
                       </div>
                       <div className="text-xs text-yoga-amber-text mt-1">
-                        {isIllness ? 'Aus Krankheits-Austragung — gültig bis ' + expiryFormatted : 'Kurs-Guthaben — gültig bis ' + expiryFormatted}
+                        {isIllness ? 'Aus Krankheits-Austragung — gültig bis ' + expiryFormatted : 'Kursguthaben aus Kursabbruch — gültig bis ' + expiryFormatted}
                       </div>
+                      {!isIllness && (cancelCourseName || cancelDateStr) && (
+                        <div className="text-xs text-yoga-text/55 mt-0.5">
+                          {cancelCourseName ? `Kurs: ${cancelCourseName}` : 'Kurs unbekannt'}
+                          {cancelDateStr ? ` · abgebrochen am ${cancelDateStr}` : ''}
+                        </div>
+                      )}
                       <div className="text-xs text-yoga-text/50 mt-0.5">Nicht für Einzelstunden, nur verrechenbar mit neuem Kurs</div>
                       <div className="text-xs text-yoga-text/40 mt-1">Noch {daysLeft} {daysLeft === 1 ? 'Tag' : 'Tage'} gültig</div>
                     </div>

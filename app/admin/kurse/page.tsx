@@ -871,7 +871,6 @@ export default function AdminKursePage() {
       //  - newCreditsCount: wieviel der Yogi NEU für diesen Kurs bezahlt hat
       // Dieser Snapshot ist die Wahrheit für die spätere Choice-Logik.
       const guthabenCounts = new Map<string, number>()
-      let newCreditsCount = 0
       if (futureSessionIds.length > 0) {
         const { data: futureBookings } = await supabase.from('bookings')
           .select('credit_id, credit:credits(id, model)')
@@ -879,17 +878,22 @@ export default function AdminKursePage() {
           .in('session_id', futureSessionIds)
           .eq('status', 'active')
         for (const b of (futureBookings || []) as any[]) {
-          const model = b.credit?.model
-          if (model === 'guthaben' && b.credit_id) {
+          if (b.credit?.model === 'guthaben' && b.credit_id) {
             guthabenCounts.set(b.credit_id, (guthabenCounts.get(b.credit_id) ?? 0) + 1)
-          } else {
-            // course, single, tenpack oder kein credit_id → Yogi hat neu bezahlt
-            newCreditsCount += 1
           }
         }
       }
       const guthabenBreakdown = Array.from(guthabenCounts.entries())
         .map(([credit_id, count]) => ({ credit_id, count }))
+      // Sarah-Regel 2026-05-28: Die Gutschrift/Auszahlung ist IMMER die Anzahl
+      // der ZUKÜNFTIGEN Kursstunden (remainingCount) — unabhängig davon, ob der
+      // Yogi einzelne Credits dieses Kurses zwischenzeitlich in Drop-In-/Vorhol-
+      // Stunden "geparkt" hatte (die werden unten ausgetragen). Vorher zählte die
+      // Logik nur die noch aktiv gebuchten Future-Kursstunden → zu wenig
+      // (Screenshot mail@: 4 statt 6). Der mit ALTEM Guthaben gedeckte Anteil geht
+      // zurück aufs alte Guthaben (guthabenBreakdown), der Rest ist neu.
+      const totalGuthabenReused = Array.from(guthabenCounts.values()).reduce((a, b) => a + b, 0)
+      const newCreditsCount = Math.max(0, remainingCount - totalGuthabenReused)
 
       // Bookings stornieren (Trigger feuert → setzt credit.used neu)
       if (futureSessionIds.length > 0) {
@@ -902,6 +906,25 @@ export default function AdminKursePage() {
         .select('id').eq('user_id', prof.id).eq('course_id', cancellingCourse.id)
       if (yogiCredits && yogiCredits.length > 0) {
         const cIds = yogiCredits.map((cc: any) => cc.id)
+        // Sarah-Regel 2026-05-28: Alle Stunden, die der Yogi mit FREIEN Credits
+        // dieses Kurses gebucht hat (Drop-In/Vorhol in ANDEREN Stunden), werden
+        // beim Kursabbruch ausgetragen — ihr Anspruch steckt ja bereits in der
+        // vollen remainingCount-Gutschrift oben. Nur ZUKÜNFTIGE austragen
+        // (vergangene Stunden wurden bereits besucht). Freie Plätze → Warteliste.
+        const todayIso = new Date().toISOString().split('T')[0]
+        const { data: creditBookings } = await supabase.from('bookings')
+          .select('id, session:sessions!bookings_session_id_fkey(id, date)')
+          .eq('user_id', prof.id).eq('status', 'active').in('credit_id', cIds)
+        const futureDropIns = (creditBookings || []).filter((b: any) => b.session?.date && b.session.date >= todayIso)
+        if (futureDropIns.length > 0) {
+          await supabase.from('bookings')
+            .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), credit_id: null })
+            .in('id', futureDropIns.map((b: any) => b.id))
+          for (const sid of Array.from(new Set(futureDropIns.map((b: any) => b.session.id)))) {
+            try { await promoteWaitlistOrOfferLate(supabase, sid as string) } catch (e) { console.error('promote (dropin-cascade):', e) }
+          }
+        }
+        // Übrige (vergangene) Bookings entkoppeln, dann Course-Credits löschen.
         await supabase.from('bookings').update({ credit_id: null })
           .eq('user_id', prof.id).in('credit_id', cIds)
         await supabase.from('credits').delete()

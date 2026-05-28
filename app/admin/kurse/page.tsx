@@ -695,6 +695,24 @@ export default function AdminKursePage() {
             })
           } catch (e) { /* nicht-blockierend */ }
         }
+        // Sarah-Wunsch 2026-05-28: zusätzlich zur Mail eine In-App-Benachrichtigung
+        // im Yogi-Kalender (weißer, wegklickbarer Banner) — nur für Events.
+        // event_paid → "Gebühr wird zurückerstattet!"; event_free → kein Bezahl-Hinweis.
+        if ((sessType === 'event_free' || sessType === 'event_paid') && b.user_id) {
+          try {
+            await supabase.from('yogi_notifications').insert({
+              user_id: b.user_id,
+              type: 'event_cancelled',
+              payload: {
+                title: sess.name || '',
+                reason: cancelSessionReason || null,
+                date: sess.date || null,
+                time_start: sess.time_start || null,
+                session_type: sessType,
+              },
+            })
+          } catch (e) { /* nicht-blockierend */ }
+        }
       }
       // Warteliste leeren
       await supabase.from('waitlist').delete().eq('session_id', sess.id)

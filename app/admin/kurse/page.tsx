@@ -828,19 +828,11 @@ export default function AdminKursePage() {
           status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false
         }).eq('id', b.id)
         if (b.session?.id) freedVorholSessionIds.push(b.session.id)
-        // Yogi informieren — die Vorhol-Stunde fällt weg weil Origin storniert wurde
-        if (b.profile?.email) {
-          try {
-            await Email.sessionCancelled({
-              email: b.profile.email,
-              firstName: b.profile.first_name || 'Yogi',
-              courseName: b.session?.course?.name || '',
-              date: b.session?.date || '',
-              timeStart: b.session?.time_start || '',
-              reason: `Diese Stunde war ein Ersatz für eine abgesagte Stunde im Kurs „${cancellingCourse.name}", der jetzt komplett abgebrochen wurde.`,
-            })
-          } catch (e) {}
-        }
+        // Sarah-Regel 2026-05-28: KEINE separate Absage-Mail pro Vorhol-/Nachhol-
+        // stunde beim Kursabbruch. Diese Stunden basieren auf Credits des
+        // abgebrochenen Kurses und werden ersatzlos gelöscht — der Yogi bekommt
+        // dafür die Erstattung/das Guthaben (siehe course_cancelled-Mail). Die alte
+        // Mail behauptete fälschlich "Dein Credit wird gutgeschrieben" → entfernt.
       }
       if (toCancel.length > 0) {
         await supabase.from('audit_log').insert({

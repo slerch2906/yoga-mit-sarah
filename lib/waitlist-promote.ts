@@ -62,24 +62,35 @@ export async function promoteWaitlistOrOfferLate(
     .order('created_at', { ascending: true })
   const waitlist = (waitlistRows || []) as any[]
 
-  // 3) Notify-Subscribers IMMER informieren — auch wenn Waitlist gefüllt wird
-  await notifyAllSubscribers(supabase, sessionId, { courseName, dateStr, timeStr })
+  // Sarah-Regel 2026-05-28: ZUERST die Warteliste nachrücken. Die "Benachrichtigung
+  // aktiviert"-Yogis (type='notify') werden NUR informiert, wenn DANACH noch ein
+  // Platz frei ist — also wenn niemand von der Warteliste den Platz bekommen hat.
+  // (Vorher gingen die Benachrichtigungen IMMER raus, auch wenn die Warteliste
+  // den Platz füllte — das hat die notify-Yogis fälschlich angelockt.)
 
-  if (waitlist.length === 0) return { mode: 'noop' }
-
-  // 4) Über 90 Min: alte Auto-Promote Logic — ersten Yogi mit gültigem Credit nehmen
-  // Bei Charity (is_free): IMMER den ersten Yogi nehmen, kein Credit nötig.
+  // 3) Über 90 Min: Auto-Promote des ersten passenden Warteliste-Yogis.
   if (sessionStart - now > NINETY_MIN_MS) {
     for (const wl of waitlist) {
       const promoted = promoteWithoutCredit
         ? await tryAutoPromoteOneFree(supabase, wl, sessionId, { courseName, dateStr, timeStr, sessType })
         : await tryAutoPromoteOne(supabase, wl, sessionId, sessionCourseId, { courseName, dateStr, timeStr })
+      // Platz gefüllt → KEINE Benachrichtigungen mehr (Platz ist weg).
       if (promoted) return { mode: 'auto-promoted', details: { user_id: wl.user_id } }
     }
+    // Niemand konnte nachrücken (leere Warteliste ODER kein gültiger Credit)
+    // → Platz bleibt frei → jetzt die Benachrichtigungs-Yogis informieren.
+    await notifyAllSubscribers(supabase, sessionId, { courseName, dateStr, timeStr })
     return { mode: 'noop' }
   }
 
-  // 5) ≤ 90 Min: Late-Offer an alle Waitlist-Yogis schicken
+  // 4) ≤ 90 Min: Keine Warteliste → Platz frei → Benachrichtigungen rausschicken.
+  if (waitlist.length === 0) {
+    await notifyAllSubscribers(supabase, sessionId, { courseName, dateStr, timeStr })
+    return { mode: 'noop' }
+  }
+
+  // 5) ≤ 90 Min mit Warteliste: Late-Offer an ALLE Warteliste-Yogis (wer zuerst
+  // klickt gewinnt). Platz wird umkämpft → KEINE Benachrichtigungen.
   for (const wl of waitlist) {
     if (!wl.profile?.email) continue
     // Welle S3/M2 (Sarah 2026-05-27): Wenn fuer diese Session bereits ein

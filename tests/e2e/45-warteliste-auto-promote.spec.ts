@@ -141,6 +141,20 @@ test.describe('[E2E] Alle Admin-Austrag-Pfade rufen Promote auf', () => {
     // Der Teilnehmer-Austrag-Handler ruft promote mit session.id auf
     expect(src).toMatch(/promoteWaitlistOrOfferLate\(supabase,\s*session\.id\)/)
   })
+
+  // Sarah-Regel 2026-05-28: ERST Warteliste nachrücken, DANN (nur wenn Platz
+  // noch frei) Benachrichtigungen. Die notify-Aufrufe dürfen NICHT vor dem
+  // Promote-Versuch stehen.
+  test('Benachrichtigungen erst NACH erfolglosem Promote (TS-Helper)', () => {
+    const src = fs.readFileSync(path.join(process.cwd(), 'lib/waitlist-promote.ts'), 'utf8')
+    const idxPromotedReturn = src.indexOf("if (promoted) return { mode: 'auto-promoted'")
+    const idxFirstNotify = src.indexOf('notifyAllSubscribers(supabase, sessionId')
+    expect(idxPromotedReturn, 'Promote-Return muss existieren').toBeGreaterThan(-1)
+    expect(idxFirstNotify, 'notifyAllSubscribers muss existieren').toBeGreaterThan(-1)
+    // Der erste notify-Aufruf steht im Source NACH dem Auto-Promote-Return,
+    // d.h. er wird nur erreicht wenn niemand nachgerückt ist.
+    expect(idxFirstNotify, 'notify darf nicht VOR dem Promote stehen').toBeGreaterThan(idxPromotedReturn)
+  })
 })
 
 test.describe.configure({ mode: 'serial' })

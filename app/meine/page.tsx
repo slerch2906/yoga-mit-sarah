@@ -485,33 +485,6 @@ export default function MeinePage() {
           </>
         })()}
 
-        {/* Welle 6 (Sarah 2026-05-27): Beendete Kurse mit Credit-Resten.
-            Zeige Kurs klein + gedimmt für 8 Tage nach date_end falls noch
-            freie Course-Credits da sind. Hinweis: Cron-Job räumt nach 8d
-            auf (siehe Migration-Skizze im Report). */}
-        {recentlyEndedEnrollments.length > 0 && (
-          <div className="mb-6 opacity-70">
-            <p className="section-label">Beendete Kurse</p>
-            {recentlyEndedEnrollments.map((enrol: any) => {
-              const free = credits.filter((c: any) => c.course_id === enrol.course_id && c.model === 'course' && c.total > c.used)
-                .reduce((sum: number, c: any) => sum + (c.total - c.used), 0)
-              return (
-                <div key={enrol.id} className="card mb-2 bg-yoga-gray/40 border-dashed">
-                  <div className="text-sm font-bold mb-1">{enrol.course?.name}</div>
-                  <div className="text-xs text-yoga-text/60">
-                    Beendet am {new Date(enrol.course.date_end).toLocaleDateString('de-DE', { day:'numeric', month:'short', year:'numeric' })}
-                    {' · '}
-                    {free > 0 ? `${free} ${free === 1 ? 'Rest-Credit' : 'Rest-Credits'} verfügbar` : 'keine Rest-Credits mehr'}
-                  </div>
-                </div>
-              )
-            })}
-            <p className="text-xs text-yoga-text/45 mt-1 italic">
-              Kurs und Credits werden nach 8 Tagen gelöscht.
-            </p>
-          </div>
-        )}
-
         {/* Einzelstunden — alle Buchungen die NICHT in einem aktiv-enrolled Kurs sind.
             Regel (Sarah 2026-05-22): egal welcher booking.type oder Credit-Modell.
             Drop-In, Vorhol/Nachhol, Tenpack-Stunde, etc. — alles was außerhalb der
@@ -581,6 +554,32 @@ export default function MeinePage() {
           </div>
           )
         })()}
+
+        {/* Welle 6 (Sarah 2026-05-27): Beendete Kurse mit Credit-Resten.
+            Sarah 2026-05-28: ganz unten anzeigen — unter "Einzelstunden & Events".
+            Bleiben 8 Tage nach date_end sichtbar (auch ohne freie Credits). */}
+        {recentlyEndedEnrollments.length > 0 && (
+          <div className="mb-6 opacity-70">
+            <p className="section-label">Beendete Kurse</p>
+            {recentlyEndedEnrollments.map((enrol: any) => {
+              const free = credits.filter((c: any) => c.course_id === enrol.course_id && c.model === 'course' && c.total > c.used)
+                .reduce((sum: number, c: any) => sum + (c.total - c.used), 0)
+              return (
+                <div key={enrol.id} className="card mb-2 bg-yoga-gray/40 border-dashed">
+                  <div className="text-sm font-bold mb-1">{enrol.course?.name}</div>
+                  <div className="text-xs text-yoga-text/60">
+                    Beendet am {new Date(enrol.course.date_end).toLocaleDateString('de-DE', { day:'numeric', month:'short', year:'numeric' })}
+                    {' · '}
+                    {free > 0 ? `${free} ${free === 1 ? 'Rest-Credit' : 'Rest-Credits'} verfügbar` : 'keine Rest-Credits mehr'}
+                  </div>
+                </div>
+              )
+            })}
+            <p className="text-xs text-yoga-text/45 mt-1 italic">
+              Kurs und Credits werden nach 8 Tagen gelöscht.
+            </p>
+          </div>
+        )}
 
         {enrollments.length === 0 && singleBookings.length === 0 && (
           <div className="text-center py-12 text-yoga-text/40">

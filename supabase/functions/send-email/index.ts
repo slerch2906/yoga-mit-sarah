@@ -222,7 +222,7 @@ serve(async (req) => {
       case 'waitlist_offer_late': {
         subject = `Letzte Chance: ${data.courseName} in Kürze`
         const acceptUrl = `${APP_URL}/warteliste/angebot/${encodeURIComponent(data.offerToken || '')}`
-        html = base(`<p style="font-size:15px">Hallo ${fn},</p><p style="font-size:15px">ein Platz wurde gerade frei — aber es ist weniger als 90 Minuten vor Stundenbeginn.</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">${KL}: ${cn}</p>`,'#fff3d6')}<p style="font-size:15px"><strong>Alle Wartelisten-Yogis bekommen diese Mail — wer zuerst klickt, bekommt den Platz.</strong></p>${btn('Ja, ich nehme den Platz',acceptUrl,'#3a5a30')}<p style="font-size:13px;color:#666">Wenn du nicht reagierst, passiert nichts — dein Wartelisten-Platz bleibt aber auch nicht erhalten für diese Stunde.</p>${LG}`)
+        html = base(`<p style="font-size:15px">Hallo ${fn},</p><p style="font-size:15px">ein Platz wurde gerade frei — aber es ist weniger als 90 Minuten vor Stundenbeginn.</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">${KL}: ${cn}</p>`,'#fff3d6')}<p style="font-size:15px"><strong>Alle Wartelisten-Yogis bekommen diese Mail — wer zuerst klickt, bekommt den Platz.</strong></p>${btn('Ja, ich nehme den Platz',acceptUrl,'#3a5a30')}<p style="font-size:13px;color:#666">Wenn du nicht reagierst, passiert nichts — du bleibst auf der Warteliste und bekommst erneut eine Nachricht, falls wieder ein Platz frei wird.</p>${LG}`)
         break
       }
       case 'waitlist_removed_credit_used_elsewhere':

@@ -21,10 +21,23 @@ export async function POST(
   )
 
   // 1) Offer holen
+  // Sarah-Fix 2026-05-28: session.name + session_type + course.is_free mitladen —
+  // für korrekten Titel (Event/Einzelstunde statt SYS-Container) und um bei
+  // Events/Charity OHNE Credit zu buchen.
   const { data: offer } = await supabase.from('waitlist_offers')
-    .select('*, session:sessions(id, date, time_start, is_cancelled, course:courses(name))')
+    .select('*, session:sessions(id, name, session_type, date, time_start, is_cancelled, course:courses(name, is_free))')
     .eq('token', token).maybeSingle()
   if (!offer) return NextResponse.json({ error: 'invalid_token' }, { status: 404 })
+
+  // Titel + Credit-Bedarf bestimmen.
+  const _sess = (offer as any).session
+  const _sessType = _sess?.session_type || 'course_session'
+  const _isEvent = _sessType === 'event_free' || _sessType === 'event_paid'
+  const _isStandalone = _isEvent || _sessType === 'single'
+  // Echter Titel: bei Events/Einzelstunden session.name, sonst Kursname.
+  const _title = (_isStandalone && _sess?.name) ? _sess.name : (_sess?.course?.name || '')
+  // OHNE Credit nachrücken: Events (Bezahlung extern) + Charity-Kurse (is_free).
+  const _promoteWithoutCredit = _isEvent || !!_sess?.course?.is_free
 
   // Welle S3/M6 (Sarah 2026-05-27): Expiry-Check via waitlist_offers.expires_at
   // — bisher haben wir nur den Session-Start geprueft. expires_at ist
@@ -84,23 +97,28 @@ export async function POST(
     } catch (e) { console.error('audit waitlist_offer_rollback:', e) }
   }
 
-  // 5) Yogi-Credit picken (single oder course)
-  const nowIso = new Date().toISOString()
-  const { data: credits } = await supabase.from('credits')
-    .select('id, total, used, model').eq('user_id', (offer as any).user_id)
-    .gt('expires_at', nowIso)
-  const free = (credits || []).filter((c: any) => c.total > c.used && c.model !== 'guthaben')
-  if (free.length === 0) {
-    // Yogi hat keine Credits mehr — Angebot zurückrollen damit nächster Yogi noch klicken kann
-    await rollbackOffer('no_credit')
-    return NextResponse.json({ error: 'no_credit' }, { status: 402 })
+  // 5) Credit picken — NUR bei credit-pflichtigen Stunden (Kurs/Einzelstunde).
+  // Events (free + paid) + Charity (is_free) rücken OHNE Credit nach (Bezahlung
+  // extern bzw. kostenlos) — exakt wie der Auto-Promote-Pfad (tryAutoPromoteOneFree).
+  let creditId: string | null = null
+  if (!_promoteWithoutCredit) {
+    const nowIso = new Date().toISOString()
+    const { data: credits } = await supabase.from('credits')
+      .select('id, total, used, model').eq('user_id', (offer as any).user_id)
+      .gt('expires_at', nowIso)
+    const free = (credits || []).filter((c: any) => c.total > c.used && c.model !== 'guthaben')
+    if (free.length === 0) {
+      // Yogi hat keine Credits mehr — Angebot zurückrollen damit nächster Yogi noch klicken kann
+      await rollbackOffer('no_credit')
+      return NextResponse.json({ error: 'no_credit' }, { status: 402 })
+    }
+    creditId = free[0].id
   }
-  const credit = free[0]
 
   // 6) Booking anlegen
   const { error: bookingErr } = await supabase.from('bookings').upsert({
     user_id: (offer as any).user_id, session_id: (offer as any).session_id,
-    credit_id: credit.id, type: 'single', status: 'active',
+    credit_id: creditId, type: 'single', status: 'active',
     cancelled_at: null, cancel_late: false,
   }, { onConflict: 'user_id,session_id' })
   if (bookingErr) {
@@ -128,7 +146,8 @@ export async function POST(
 
   return NextResponse.json({
     ok: true,
-    courseName: (offer as any).session?.course?.name,
+    // Sarah-Fix 2026-05-28: echter Titel (Event/Einzelstunde) statt SYS-Container.
+    courseName: _title,
     date: (offer as any).session?.date,
     timeStart: (offer as any).session?.time_start,
   })

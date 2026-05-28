@@ -90,22 +90,28 @@ test.describe('Guthaben: Verrechnung bei Kursanmeldung (Admin)', () => {
     page.on('dialog', d => d.accept())
     await page.waitForTimeout(2_500)
 
-    // Neue Logik (Commit 8f8a58c): Guthaben wird VERRECHNET (used erhöht), nicht gelöscht.
-    // Bei 3 Guthaben + 4-Stunden-Kurs: Guthaben.used=3, neuer Course-Credit für 1 Stunde.
+    // Sarah-Regel 2026-05-28 (Commit-Reihe Guthaben→Kurs-Credit-Umwandlung):
+    // Guthaben wird in EINEN Kurs-Credit des NEUEN Kurses UMGEWANDELT, der ALLE
+    // Stunden abdeckt (total = sessionCount). Das verbrauchte Guthaben wird
+    // dauerhaft abgezogen (used += verbraucht), bleibt aber als Eintrag erhalten.
+    // Bei 3 Guthaben + 4-Stunden-Kurs: Guthaben.used=3 (0 frei),
+    // neuer Course-Credit total=4/used=4 (alle 4 Stunden gebucht).
+    // Sinn: Der Kurs-Credit erscheint unter "Meine"; beim Abmelden einer Stunde
+    // wird ein KURS-Credit frei (used 4→3), nicht das Guthaben zurückgebucht.
     const { getAdminClient: getDb } = await import('../../utils/db')
     const db = await getDb()
     const { data: guthabenCreds } = await db.from('credits')
       .select('total, used').eq('user_id', yogi1Id).eq('model', 'guthaben')
     expect(guthabenCreds, 'Guthaben-Credit muss noch existieren (nicht gelöscht)').toBeTruthy()
     expect(guthabenCreds!.length, 'Guthaben-Eintrag bleibt erhalten').toBe(1)
-    expect(guthabenCreds![0].used, '3 Guthaben verrechnet (used=3)').toBe(3)
+    expect(guthabenCreds![0].used, '3 Guthaben verbraucht/umgewandelt (used=3)').toBe(3)
 
-    // Course-Credit nur noch für den ungedeckten Rest (4-3=1)
+    // Course-Credit deckt ALLE Stunden ab (Umwandlung, nicht nur Rest)
     const courseCredit = await getCourseCredit(yogi1Id, courseId)
     expect(courseCredit, 'Kurs-Credit muss angelegt sein').toBeTruthy()
     expect(courseCredit!.model).toBe('course')
-    expect(courseCredit!.total, 'total = nur nicht durch Guthaben gedeckte Stunden (1)').toBe(1)
-    expect(courseCredit!.used, 'used = 1 (1 Stunde mit neuem Credit gebucht)').toBe(1)
+    expect(courseCredit!.total, 'total = alle Kursstunden (4)').toBe(4)
+    expect(courseCredit!.used, 'used = 4 (alle 4 Stunden gebucht)').toBe(4)
     // Welle 5: Enrollment ist angelegt
     const { data: enrollment } = await db.from('enrollments')
       .select('*').eq('user_id', yogi1Id).eq('course_id', courseId).maybeSingle()

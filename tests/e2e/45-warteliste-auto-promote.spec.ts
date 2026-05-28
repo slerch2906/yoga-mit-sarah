@@ -354,6 +354,68 @@ test.describe('[E2E] waitlist_offers RLS — Spät-Angebot via authentifiziertem
   })
 })
 
+// ── Spät-Angebot Claim (Magic-Link /api/waitlist-offer/[token]) ────────────
+// Sarah-Fix 2026-05-28: (1) Claim-Fenster zeigt echten Titel (Event/Einzelstunde),
+// nicht den SYS-Container. (2) Events rücken OHNE Credit nach (Bezahlung extern).
+test.describe('[E2E] Spät-Angebot Claim — Titel + Events ohne Credit', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  test.beforeAll(async () => {
+    yogi1Id = (await getUserIdByEmail(process.env.TEST_YOGI1_EMAIL!))!
+    yogi2Id = (await getUserIdByEmail(process.env.TEST_YOGI2_EMAIL!))!
+  })
+  test.afterAll(async () => {
+    await resetYogi(yogi1Id)
+    await resetYogi(yogi2Id)
+  })
+
+  // Hilfsfunktion: Szenario aufsetzen, Spät-Angebot erzeugen, Token holen.
+  async function setupOffer(sc: Scenario): Promise<string> {
+    const sessionId = await setupScenario(sc, 45) // ≤90min → Spät-Angebot
+    await deleteYogi1Booking(sessionId)
+    const res = await promoteWaitlistOrOfferLate(svc(), sessionId)
+    expect(res.mode, JSON.stringify(res)).toBe('late-offer-sent')
+    const { data: offer } = await svc().from('waitlist_offers')
+      .select('token').eq('session_id', sessionId).eq('user_id', yogi2Id).maybeSingle()
+    expect(offer?.token, 'Offer-Token muss existieren').toBeTruthy()
+    return offer!.token
+  }
+
+  test('Event kostenlos: Claim bucht OHNE Credit + Titel = Event-Name', async ({ request }) => {
+    const token = await setupOffer({ type: 'event_free', label: 'Event kostenlos', needsCredit: false })
+    const resp = await request.post(`/api/waitlist-offer/${token}`)
+    expect(resp.ok(), `Claim-Status: ${resp.status()}`).toBeTruthy()
+    const json = await resp.json()
+    expect(json.courseName, 'Titel = Event-Name, nicht SYS-Container').toContain('Event kostenlos')
+    expect(json.courseName).not.toContain('SYS')
+    // Buchung OHNE Credit
+    const { data: bk } = await svc().from('bookings')
+      .select('credit_id, status').eq('user_id', yogi2Id).eq('session_id',
+        (await svc().from('sessions').select('id').eq('name', `${E2E_PREFIX} Event kostenlos`).order('created_at', { ascending: false }).limit(1).single()).data!.id)
+      .eq('status', 'active').maybeSingle()
+    expect(bk, 'aktive Buchung muss existieren').not.toBeNull()
+    expect(bk!.credit_id, 'Event → kein Credit verbraucht').toBeNull()
+  })
+
+  test('Event bezahlt: Claim bucht OHNE Credit', async ({ request }) => {
+    const token = await setupOffer({ type: 'event_paid', label: 'Event bezahlt', needsCredit: false })
+    const resp = await request.post(`/api/waitlist-offer/${token}`)
+    expect(resp.ok(), `Claim-Status: ${resp.status()}`).toBeTruthy()
+    const json = await resp.json()
+    expect(json.courseName).toContain('Event bezahlt')
+    expect(json.courseName).not.toContain('SYS')
+  })
+
+  test('Einzelstunde: Claim-Titel = Stundenname (nicht SYS-Container)', async ({ request }) => {
+    const token = await setupOffer({ type: 'single', label: 'Einzelstunde', needsCredit: true })
+    const resp = await request.post(`/api/waitlist-offer/${token}`)
+    expect(resp.ok(), `Claim-Status: ${resp.status()}`).toBeTruthy()
+    const json = await resp.json()
+    expect(json.courseName, 'Titel = Stundenname, nicht SYS-Container').toContain('Einzelstunde')
+    expect(json.courseName).not.toContain('SYS')
+  })
+})
+
 // ── yogi_notifications: Grant+RLS — Admin legt an, Yogi liest (Event-Absage) ─
 // Bug (Sarah 2026-05-28): yogi_notifications hatte RLS aktiv, aber KEINE GRANTs
 // an authenticated → Admin konnte keine Benachrichtigung INSERTen und der Yogi
@@ -426,5 +488,17 @@ test.describe('[E2E] Gnadenfrist — Source-Coverage', () => {
     expect(src).toMatch(/Versehentlich nachgerückt\? Wieder absagen/)
     // Button nur bei Kurs/Einzelstunde (nicht bei Events)
     expect(src).toMatch(/!isPaidEvent && !isFreeEvent && data\.sessionId/)
+  })
+
+  test('Claim-Route: echter Titel + Events ohne Credit', () => {
+    const src = read('app/api/waitlist-offer/[token]/route.ts')
+    // session.name + session_type werden geladen (für Titel + Credit-Entscheidung)
+    expect(src).toMatch(/session:sessions\([^)]*name[^)]*session_type/)
+    // Titel nutzt session.name bei Events/Einzelstunden (_isStandalone)
+    expect(src).toMatch(/_isStandalone.*_sess\.name|_sess\.name.*_isStandalone/s)
+    expect(src).toMatch(/courseName: _title/)
+    // Events/Charity rücken OHNE Credit nach
+    expect(src).toMatch(/_promoteWithoutCredit/)
+    expect(src).toMatch(/if \(!_promoteWithoutCredit\)/)
   })
 })

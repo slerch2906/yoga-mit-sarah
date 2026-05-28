@@ -25,7 +25,6 @@ export function sessionDisplayName(s: SessionLike): string {
   if (s.session_type === 'single') return `Einzelstunde · ${own ?? 'Unbenannt'}`
   if (
     s.session_type === 'event_free' ||
-    s.session_type === 'event_credit' ||
     s.session_type === 'event_paid'
   ) {
     return `Event · ${own ?? 'Unbenannt'}`

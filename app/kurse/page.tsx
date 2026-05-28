@@ -224,11 +224,11 @@ export default function KursePage() {
 
   // Welle 2.5 (Sarah 2026-05-26): Events-Sektion oben (mehr Vermarktungs-Wirkung),
   // dann reguläre Kursstunden. Sarah-Wunsch 2026-05-26 Welle 2.8:
-  // NUR Events (event_free/credit/paid) in "Events diese Woche" — einzelstunden
+  // NUR Events (event_free/paid) in "Events diese Woche" — einzelstunden
   // (session_type='single') gehoeren zu den normalen Stunden ("Stunden diese
   // Woche") weil sie wie Drop-Ins wirken.
   const isEvent = (s: any) =>
-    s.session_type === 'event_free' || s.session_type === 'event_credit' || s.session_type === 'event_paid'
+    s.session_type === 'event_free' || s.session_type === 'event_paid'
   const eventSessions = sessions.filter(isEvent)
   const courseSessions = sessions.filter((s: any) => !isEvent(s))
 
@@ -248,7 +248,7 @@ export default function KursePage() {
   }
 
   // Welle 2.5: Typ-Badge für Events-Sektion (Preis bei paid, "Kostenlos" bei free,
-  // "Einzelstunde" bei single + legacy credit).
+  // "Einzelstunde" bei single).
   function getEventBadge(s: any) {
     if (s.session_type === 'event_paid') return (
       <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-yoga-amber-bg text-yoga-amber-text text-[10px] font-semibold">
@@ -260,7 +260,7 @@ export default function KursePage() {
         Kostenlos
       </span>
     )
-    // single + event_credit (legacy)
+    // single
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-yoga-gray text-yoga-text/60 text-[10px] font-semibold">
         Einzelstunde

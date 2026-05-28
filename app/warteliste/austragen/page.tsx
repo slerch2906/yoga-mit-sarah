@@ -55,7 +55,7 @@ function AustragenInner() {
       let displayName = rawCourse
       if (rawCourse.startsWith('SYS · ') || !rawCourse) {
         if (sessionType === 'single') displayName = sessionName ? `Einzelstunde · ${sessionName}` : 'Einzelstunde'
-        else if (sessionType === 'event_free' || sessionType === 'event_paid' || sessionType === 'event_credit') displayName = sessionName ? `Event · ${sessionName}` : 'Event'
+        else if (sessionType === 'event_free' || sessionType === 'event_paid') displayName = sessionName ? `Event · ${sessionName}` : 'Event'
         else if (sessionName) displayName = sessionName
       }
       setInfo({

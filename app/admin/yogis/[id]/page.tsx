@@ -858,7 +858,7 @@ export default function AdminYogiDetailPage() {
         // Sarah-Regel 2026-05-28: Events (kostenlos + bezahlt) ziehen KEINE
         // Credits → kein Credit-Hinweis. session_type aus details ODER Lookup.
         const effType = d.session_type || sess?.session_type
-        const isAnyEvent = effType === 'event_free' || effType === 'event_paid' || effType === 'event_credit'
+        const isAnyEvent = effType === 'event_free' || effType === 'event_paid'
         const lateStr = isAnyEvent
           ? ''
           : (d.late ? ' — Spät-Abmeldung, Credit verfallen' : ' — Credit zurück')
@@ -871,7 +871,7 @@ export default function AdminYogiDetailPage() {
         const isEventPaid = sessType === 'event_paid'
         // Sarah-Regel 2026-05-28: ALLE Events (kostenlos + bezahlt + credit)
         // ziehen keine Credits → kein "Credit zurück/verfallen"-Hinweis.
-        const isAnyEvent = sessType === 'event_free' || sessType === 'event_paid' || sessType === 'event_credit'
+        const isAnyEvent = sessType === 'event_free' || sessType === 'event_paid'
         let fristStr = ''
         if (isEventPaid) {
           fristStr = d.within_7d ? ' (innerhalb 7-Tage-Frist)' : ' (außerhalb 7-Tage-Frist)'
@@ -961,10 +961,10 @@ export default function AdminYogiDetailPage() {
         // welcher Art Termin abgesagt wurde + ob Credit zurück.
         const sessType = d.session_type
         const kind = sessType === 'single' ? 'Einzelstunde'
-          : sessType === 'event_free' || sessType === 'event_credit' ? 'Event'
+          : sessType === 'event_free' ? 'Event'
           : sessType === 'event_paid' ? 'Event'
           : 'Kursstunde'
-        const creditNote = (sessType === 'event_free' || sessType === 'event_paid' || sessType === 'event_credit')
+        const creditNote = (sessType === 'event_free' || sessType === 'event_paid')
           ? '' // kein Credit involviert bei Events
           : ' — Credit zurückgebucht'
         return { text: `Admin hat ${kind} abgesagt${creditNote}${reason}`, subject: termin }

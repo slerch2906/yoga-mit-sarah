@@ -148,7 +148,7 @@ export default function AdminSessionPage() {
       return
     }
 
-    // Standard-Pfad (course_session / single / event_credit): 3h-Frist-Modal
+    // Standard-Pfad (course_session / single): 3h-Frist-Modal
     let within3h = false
     if (freshSession) {
       // Welle S3/Pattern 3: defensive Date-Parsing.
@@ -231,7 +231,6 @@ export default function AdminSessionPage() {
     // - event_paid  → KEIN Credit-Abzug. credit_id=null. Yogi bekommt Mail
     //                  mit Preis + Bezahlungs-Hinweis (extern: bar/Überweisung).
     // - single      → Credit-Logik wie bisher (selectCreditForBooking).
-    // - event_credit→ Credit-Logik wie bei single (semantisch identisch).
     // - course_session → bestehende Logik (Course-Credit vor Single/etc.).
     //
     // Begründung: bei event_free/event_paid darf NICHTS aus der credits-
@@ -312,7 +311,7 @@ export default function AdminSessionPage() {
     }
 
     // Sarah-Regel 2026-05-22: Course-Credit vor Single/Tenpack/Quartal, minutengenauer 10d/8d-Check.
-    // (Pfad NUR für course_session, single, event_credit — alles wo Credits
+    // (Pfad NUR für course_session, single — alles wo Credits
     // verbraucht werden müssen.)
     const pick = await selectCreditForBooking(supabase, yogi.id, id as string, session.date, session.time_start)
     if (!pick.ok) {

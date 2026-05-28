@@ -26,7 +26,7 @@ function mailCourseName(s: any): string {
 }
 function isSingleForEmail(s: any): boolean {
   const st = s?.session_type
-  if (st === 'single' || st === 'event_free' || st === 'event_paid' || st === 'event_credit') return true
+  if (st === 'single' || st === 'event_free' || st === 'event_paid') return true
   return !!s?.course?.is_single
 }
 
@@ -520,7 +520,6 @@ export default function SessionDetailPage() {
   //   single          → Einzelstunde (Credit-Verbrauch wie heute).
   //   event_free      → Kostenloses Event (kein Credit, keine Stornofrist-Logik).
   //   event_paid      → Bezahltes Event (extern, Stornofrist 7 Tage, kein Credit).
-  //   event_credit    → Legacy Event-mit-Credit (= wie single).
   const sessionType: string = (session as any).session_type || 'course_session'
   const isCourseSession = sessionType === 'course_session'
   const isEventPaid = sessionType === 'event_paid'
@@ -560,7 +559,7 @@ export default function SessionDetailPage() {
   const displayMaxSpots = (session as any).max_spots ?? (isContainerSession ? null : course?.max_spots)
   // Bei Events: andere Überschrift für die Description.
   const descriptionHeader = isEvent ? 'Über dieses Event'
-    : sessionType === 'single' || sessionType === 'event_credit' ? 'Über die Stunde'
+    : sessionType === 'single' ? 'Über die Stunde'
     : 'Über diesen Kurs'
 
   return (

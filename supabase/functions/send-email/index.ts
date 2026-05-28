@@ -37,7 +37,7 @@ function kursLabel(data: any): string {
 }
 function isContainerSession(data: any): boolean {
   const st = data?.sessionType
-  return st === 'event_free' || st === 'event_paid' || st === 'single' || st === 'event_credit'
+  return st === 'event_free' || st === 'event_paid' || st === 'single'
 }
 function isEventSession(data: any): boolean {
   const st = data?.sessionType

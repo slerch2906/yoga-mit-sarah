@@ -1435,7 +1435,7 @@ export default function AdminDashboard() {
           // Highlight nur für heute UND nicht vorbei UND nicht abgesagt
           const highlight = isToday && !isPast && !s.is_cancelled
           // Welle 4.7 (Sarah 2026-05-26): Event-Akzentstreifen links, dezent dunkelbraun.
-          const isEventCard = s.session_type === 'event_free' || s.session_type === 'event_paid' || s.session_type === 'event_credit'
+          const isEventCard = s.session_type === 'event_free' || s.session_type === 'event_paid'
           return (
             <button key={s.id} onClick={() => loadSessionDetail(s)}
               className={`w-full bg-white border rounded-yoga px-3 py-2.5 mb-2 text-left hover:border-yoga-border2 ${s.is_cancelled || isPast ? 'opacity-40' : ''} ${highlight ? 'border-2 border-yoga-text' : 'border-yoga-border'} ${isEventCard ? 'border-l-4 border-l-yoga-text' : ''}`}>

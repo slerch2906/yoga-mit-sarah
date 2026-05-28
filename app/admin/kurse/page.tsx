@@ -99,7 +99,7 @@ export default function AdminKursePage() {
   const [form, setForm] = useState(emptyForm)
   // Welle 2 (Sarah 2026-05-26): zweite Sektion "Geplante Stunden & Events" mit
   // Sessions der vier SYS-Container. session_type unterscheidet single /
-  // event_free / event_credit / event_paid.
+  // event_free / event_paid.
   const [containerSessions, setContainerSessions] = useState<any[]>([])
   const [containerIds, setContainerIds] = useState<{ single: string; eventFree: string; eventCredit: string; eventPaid: string } | null>(null)
   const [showSingleForm, setShowSingleForm] = useState(false)
@@ -1455,7 +1455,7 @@ export default function AdminKursePage() {
       })
       setShowSingleForm(true)
     } else {
-      // event_free | event_paid | event_credit
+      // event_free | event_paid
       const payment_type: 'free' | 'paid' = s.session_type === 'event_paid' ? 'paid' : 'free'
       setEventForm({
         name: s.name || '',
@@ -1557,7 +1557,7 @@ export default function AdminKursePage() {
                    session_date: session.date, session_time: session.time_start }
       })
     } else {
-      // Einzelstunde / course_session / event_credit → Credit-Logik
+      // Einzelstunde / course_session → Credit-Logik
       const pick = await selectCreditForBooking(supabase, yogi.id, session.id, session.date, session.time_start)
       if (!pick.ok) {
         alert(`${pick.message}\n\nBitte vergib zuerst Credits ueber die Yogi-Detail-Seite.`)
@@ -2162,11 +2162,10 @@ export default function AdminKursePage() {
                 // Welle 4.5 (Sarah 2026-05-26): Externe Teilnehmer nur bei Events,
                 // NICHT bei Einzelstunden ('single'). Bei Einzelstunden gibt es
                 // logisch keine "externen" — entweder Yogi ist gebucht oder nicht.
-                const isEventType = s.session_type === 'event_free' || s.session_type === 'event_paid' || s.session_type === 'event_credit'
+                const isEventType = s.session_type === 'event_free' || s.session_type === 'event_paid'
                 // Type-Badge wie der "Kurs/Einzelstunde"-Badge bei Kursen.
                 const typeBadge = s.session_type === 'single' ? { label: 'Einzelstunde', cls: 'badge-wait' }
                   : s.session_type === 'event_free' ? { label: 'Kostenlos', cls: 'badge-free' }
-                  : s.session_type === 'event_credit' ? { label: 'Credit', cls: 'badge-wait' }
                   : s.session_type === 'event_paid' ? { label: `${s.price_eur} €`, cls: 'badge-wait' }
                   : { label: s.session_type, cls: 'badge-wait' }
                 const isOpen = s.is_open !== false
@@ -2314,7 +2313,6 @@ export default function AdminKursePage() {
                   const totalCount = activeBookings + ext
                   const typeBadge = s.session_type === 'single' ? { label: 'Einzelstunde', cls: 'badge-wait' }
                     : s.session_type === 'event_free' ? { label: 'Kostenlos', cls: 'badge-free' }
-                    : s.session_type === 'event_credit' ? { label: 'Credit', cls: 'badge-wait' }
                     : s.session_type === 'event_paid' ? { label: `${s.price_eur} €`, cls: 'badge-wait' }
                     : { label: s.session_type, cls: 'badge-wait' }
                   return (
@@ -2372,7 +2370,6 @@ export default function AdminKursePage() {
                   const activeBookings = (s.bookings || []).filter((b: any) => b.status === 'active').length
                   const typeBadge = s.session_type === 'single' ? { label: 'Einzelstunde', cls: 'badge-wait' }
                     : s.session_type === 'event_free' ? { label: 'Kostenlos', cls: 'badge-free' }
-                    : s.session_type === 'event_credit' ? { label: 'Credit', cls: 'badge-wait' }
                     : s.session_type === 'event_paid' ? { label: `${s.price_eur} €`, cls: 'badge-wait' }
                     : { label: s.session_type, cls: 'badge-wait' }
                   return (
@@ -3216,7 +3213,7 @@ export default function AdminKursePage() {
         const cap = participantsSession.max_spots
         // Welle 4.6 (Sarah 2026-05-26): Externe Counter NUR bei Events sichtbar.
         const sessType = participantsSession.session_type
-        const isEventType = sessType === 'event_free' || sessType === 'event_paid' || sessType === 'event_credit'
+        const isEventType = sessType === 'event_free' || sessType === 'event_paid'
         return (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay" onClick={() => { setParticipantsSession(null); setSessionBookings([]); setSessionWaitlist([]); setShowSessionAddYogi(false) }}>
           <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>

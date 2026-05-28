@@ -50,7 +50,7 @@ export async function promoteWaitlistOrOfferLate(
     : ((session as any).course?.name || '')
   const isFreeCourse = !!(session as any).course?.is_free
   // Events (free + paid) werden OHNE Credit nachgerueckt (Bezahlung extern),
-  // genau wie Charity-Kurse. event_credit + Kursstunden brauchen einen Credit.
+  // genau wie Charity-Kurse. Kursstunden + Einzelstunden brauchen einen Credit.
   const promoteWithoutCredit = isFreeCourse || isEvent
   const dateStr = (session as any).date
   const timeStr = (session as any).time_start

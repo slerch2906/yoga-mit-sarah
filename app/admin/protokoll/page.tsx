@@ -70,7 +70,6 @@ const SESSION_TYPE_LABEL: Record<string, string> = {
   single:         'Einzelstunde',
   event_free:     'Event (kostenlos)',
   event_paid:     'Event (bezahlt)',
-  event_credit:   'Event (Credit)',
 }
 
 function formatDetails(action: string, details: any): string[] {

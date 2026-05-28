@@ -216,14 +216,14 @@ test.describe('[E2E] Welle 3/4 Source — /kurse/[id] (Yogi-Detail)', () => {
     const src = read('app/kurse/[id]/page.tsx')
     expect(src).toMatch(/function mailCourseName\(s: any\)/)
     expect(src).toMatch(/function isSingleForEmail\(s: any\)/)
-    // isSingleForEmail deckt single, event_free, event_paid, event_credit ab
-    expect(src).toMatch(/st === 'single' \|\| st === 'event_free' \|\| st === 'event_paid' \|\| st === 'event_credit'/)
+    // isSingleForEmail deckt single, event_free, event_paid ab
+    expect(src).toMatch(/st === 'single' \|\| st === 'event_free' \|\| st === 'event_paid'/)
   })
 
   test('descriptionHeader differenziert Event/Stunde/Kurs', () => {
     const src = read('app/kurse/[id]/page.tsx')
     expect(src).toMatch(/descriptionHeader = isEvent \? 'Über dieses Event'/)
-    expect(src).toMatch(/sessionType === 'single' \|\| sessionType === 'event_credit' \? 'Über die Stunde'/)
+    expect(src).toMatch(/sessionType === 'single' \? 'Über die Stunde'/)
   })
 
   test('"Verbindlich anmelden" nur bei event_paid (verbindlich)', () => {

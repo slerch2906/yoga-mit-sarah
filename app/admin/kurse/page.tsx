@@ -1689,12 +1689,17 @@ export default function AdminKursePage() {
     await supabase.from('audit_log').insert({
       action: 'booking_cancelled_by_admin',
       details: { booking_id: bookingId, session_id: session.id, user_id: userId,
+                 target_user_id: userId,
                  session_type: sessionType, credit_returned: !isEvent, within_3h: false,
                  within_7d: within7d,
                  // Welle 6A: echter Titel für SYS-Container-Sessions
                  name: session.name || null,
                  session_date: session.date, session_time: session.time_start }
     })
+    // Bug-Fix (Sarah 2026-05-28): Auch dieser Austrag-Pfad (Teilnehmer-Modal auf
+    // der Kurse-Seite) muss die Warteliste nachrücken lassen — fehlte bisher, so
+    // dass bei Events/Stunden niemand nachrückte obwohl ein Platz frei wurde.
+    try { await promoteWaitlistOrOfferLate(supabase, session.id) } catch (e) { console.error('promote (kurse-participant):', e) }
     loadSessionParticipants(session)
     loadData()
   }

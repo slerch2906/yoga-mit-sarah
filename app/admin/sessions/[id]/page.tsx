@@ -141,6 +141,9 @@ export default function AdminSessionPage() {
         }
       })
       // Keine credit-Aktion noetig (credit_id war null bei Events)
+      // Bug-Fix (Sarah 2026-05-28): Warteliste nachrücken lassen — fehlte auch
+      // hier (wie im Dashboard). Sonst rückt bei Events niemand nach.
+      try { await promoteWaitlistOrOfferLate(supabase, sessionId) } catch (e) { console.error('promote (sessions event):', e) }
       loadData()
       return
     }

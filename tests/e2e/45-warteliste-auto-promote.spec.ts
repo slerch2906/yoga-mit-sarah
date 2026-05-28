@@ -112,6 +112,37 @@ async function deleteYogi1Booking(sessionId: string) {
   await svc().from('bookings').delete().eq('user_id', yogi1Id).eq('session_id', sessionId)
 }
 
+// ── Source-Checks: ALLE Admin-Event-Austrag-Pfade rufen Promote auf ────────
+// Regressionsschutz: bei Events gibt es einen separaten isEvent-Zweig in jedem
+// Austrag-Handler — jeder muss promoteWaitlistOrOfferLate aufrufen, sonst rückt
+// die Warteliste nicht nach (genau der Bug den Sarah mehrfach gemeldet hat).
+test.describe('[E2E] Alle Admin-Austrag-Pfade rufen Promote auf', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+  const fs = require('fs') as typeof import('fs')
+  const path = require('path') as typeof import('path')
+
+  function eventBranchCallsPromote(file: string): boolean {
+    const src = fs.readFileSync(path.join(process.cwd(), file), 'utf8')
+    const idx = src.indexOf('if (isEvent) {')
+    if (idx === -1) return false
+    // Block bis zum 'return' nach dem isEvent-Zweig grob abgreifen
+    const block = src.slice(idx, idx + 2500)
+    return /promoteWaitlistOrOfferLate\(supabase,\s*sessionId\)/.test(block)
+  }
+
+  test('Dashboard: isEvent-Zweig promotet', () => {
+    expect(eventBranchCallsPromote('app/admin/dashboard/page.tsx')).toBe(true)
+  })
+  test('Stundenseite (sessions/[id]): isEvent-Zweig promotet', () => {
+    expect(eventBranchCallsPromote('app/admin/sessions/[id]/page.tsx')).toBe(true)
+  })
+  test('Kurse-Seite Teilnehmer-Modal: Austrag promotet', () => {
+    const src = fs.readFileSync(path.join(process.cwd(), 'app/admin/kurse/page.tsx'), 'utf8')
+    // Der Teilnehmer-Austrag-Handler ruft promote mit session.id auf
+    expect(src).toMatch(/promoteWaitlistOrOfferLate\(supabase,\s*session\.id\)/)
+  })
+})
+
 test.describe.configure({ mode: 'serial' })
 
 test.describe('[E2E] Warteliste Auto-Nachrücken — alle Typen', () => {

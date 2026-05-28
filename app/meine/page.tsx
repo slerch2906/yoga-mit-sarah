@@ -51,7 +51,7 @@ export default function MeinePage() {
           .eq('user_id', user.id)
           .eq('status', 'active')
           .order('created_at', { ascending: false }),
-        supabase.from('credits').select('*, course:courses(name)').eq('user_id', user.id)
+        supabase.from('credits').select('*, course:courses(name, date_end, time_start)').eq('user_id', user.id)
           .gt('expires_at', new Date().toISOString()),
       ])
 
@@ -271,8 +271,14 @@ export default function MeinePage() {
                         const qStart = c.valid_from ? new Date(c.valid_from) : new Date(qYear, (qNumber - 1) * 3, 1)
                         const fmtDay = (d: Date) => d.toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })
                         const fmtShort = (d: Date) => d.toLocaleDateString('de-DE', { day:'numeric', month:'long' })
+                        // Sarah 2026-05-28: Bei beendetem Kurs (letzte Stunde gestartet)
+                        // Wortlaut "aus beendetem Kurs: …" — die Rest-Credits tauchen ja
+                        // noch 8 Tage in der Übersicht auf.
+                        const courseEnded = c.model === 'course' && c.course?.date_end && isCourseEnded(c.course)
                         const labelText = c.model === 'course'
-                          ? (c.course?.name ? `aus Kurs: ${c.course?.name}` : 'aus Kurs-Credits')
+                          ? (c.course?.name
+                              ? `aus ${courseEnded ? 'beendetem Kurs' : 'Kurs'}: ${c.course?.name}`
+                              : (courseEnded ? 'aus beendetem Kurs' : 'aus Kurs-Credits'))
                           : isQuarterly
                             ? `Quartals-Credits · Q${qNumber} ${qYear}`
                             : `Einzelstunden-${c.total === 1 ? 'Credit' : 'Credits'}`

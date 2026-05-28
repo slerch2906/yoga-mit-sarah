@@ -937,8 +937,16 @@ export default function AdminKursePage() {
         // Übrige (vergangene) Bookings entkoppeln, dann Course-Credits löschen.
         await supabase.from('bookings').update({ credit_id: null })
           .eq('user_id', prof.id).in('credit_id', cIds)
-        await supabase.from('credits').delete()
+        // Sarah-Fix 2026-05-28: Auch enrollments.credit_id entkoppeln, BEVOR die
+        // Course-Credits geloescht werden. Sonst blockiert der FK
+        // enrollments_credit_id_fkey den DELETE still (kein Error-Check) → der
+        // alte Course-Credit bleibt mit used=0 (Trigger) erhalten und der Yogi
+        // hat den Kurs-Credit DOPPELT (alt + neues Guthaben aus Abbruch).
+        await supabase.from('enrollments').update({ credit_id: null })
+          .eq('user_id', prof.id).in('credit_id', cIds)
+        const { error: credDelErr } = await supabase.from('credits').delete()
           .eq('user_id', prof.id).eq('course_id', cancellingCourse.id)
+        if (credDelErr) console.error('cancelCourse: Course-Credit-Loeschung fehlgeschlagen:', credDelErr)
       }
 
       // Enrollment löschen → verschwindet aus "Meine"

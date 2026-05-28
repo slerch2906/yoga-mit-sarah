@@ -7,6 +7,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { isActive, isExcluded, isCancelled, isStarted, isCourseEnded } from '@/lib/session-status'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
+import YogiCancelNotifications from '@/components/YogiCancelNotifications'
 import { getCurrentAgbVersion } from '@/lib/agb-version'
 import { sessionDisplayName } from '@/lib/session-display'
 // Welle S3/Pattern 3 (Sarah 2026-05-27): defensive Date-Parsing.
@@ -245,6 +246,9 @@ export default function MeinePage() {
   return (
     <div className="max-w-md mx-auto min-h-screen">
       <AppHeader title="Meine" isAdmin={profile?.is_admin} />
+      {/* Sarah 2026-05-28: Abgesagte-Event/Stunde-Banner auch auf "Meine" zeigen
+          (nicht nur im Kalender) — der Yogi schaut hier nach seinen Buchungen. */}
+      {!profile?.is_admin && <YogiCancelNotifications />}
       <div className="px-4 py-4">
         {/* Sarah-Wunsch 2026-05-25: Guthaben in eigener Sektion unterhalb der freien Credits */}
         {/* Credits Detail-Anzeige – "Freie Credits" = Credits aus Abmeldungen.

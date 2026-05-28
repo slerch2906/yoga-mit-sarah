@@ -209,7 +209,14 @@ serve(async (req) => {
         } else {
           regelBlock = `<p style="font-size:15px">Du hast <strong>1 Stunde Zeit</strong>, dich kostenlos abzumelden.</p>`
         }
-        html = base(`<p style="font-size:15px">Hallo ${fn},</p><p style="font-size:15px">🎉 Ein Platz ist frei – du bist automatisch eingebucht!</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">${KL}: ${cn}</p>`)}${regelBlock}${btn('Meine Buchungen',APP_URL+'/meine')}${LG}`)
+        // Sarah-Regel 2026-05-28: Bei Kurs-/Einzelstunden zusätzlich einen direkten
+        // "Wieder absagen"-Button — fuer den Fall, dass man versehentlich
+        // nachgerueckt ist. Fuehrt auf die Stunden-Seite, wo die 60-Min-Gnadenfrist
+        // greift (kostenlose Abmeldung, Credit zurueck).
+        const undoBtn = (!isPaidEvent && !isFreeEvent && data.sessionId)
+          ? btn('Versehentlich nachgerückt? Wieder absagen', APP_URL+'/kurse/'+encodeURIComponent(data.sessionId), '#6b2a2a')
+          : ''
+        html = base(`<p style="font-size:15px">Hallo ${fn},</p><p style="font-size:15px">🎉 Ein Platz ist frei – du bist automatisch eingebucht!</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">${KL}: ${cn}</p>`)}${regelBlock}${btn('Meine Buchungen',APP_URL+'/meine')}${undoBtn}${LG}`)
         break
       }
       case 'waitlist_offer_late': {

@@ -256,7 +256,10 @@ export default function SessionDetailPage() {
       const { error: updateError } = await supabase.from('bookings').update({
         status: 'active', credit_id: chosenCreditId, type: bookingType,
         origin_session_id: originSessionId,
-        cancelled_at: null, cancel_late: false
+        cancelled_at: null, cancel_late: false,
+        // Reguläre Selbst-Buchung ist KEIN Warteliste-Nachrücken → evtl. alten
+        // Nachrück-Zeitstempel löschen, damit keine 60-Min-Gnadenfrist greift.
+        promoted_at: null,
       }).eq('id', existingBooking.id)
       error = updateError
     } else {
@@ -367,7 +370,13 @@ export default function SessionDetailPage() {
 
     // 3h-Check NUR bei nicht-Event Sessions
     const deadline3h = new Date(sessionStart.getTime() - 3 * 60 * 60 * 1000)
-    const late = !isEvent && serverNow > deadline3h
+    // Sarah-Regel 2026-05-28: Wer AUTOMATISCH von der Warteliste nachrückt (hat
+    // promoted_at gesetzt), darf sich 60 Min lang KOSTENLOS wieder abmelden —
+    // auch wenn die normale 3h-Frist schon überschritten ist (Credit kommt
+    // zurück). Außerhalb der 3h-Frist ist Abmelden ohnehin kostenlos.
+    const promotedAtMs = myBooking?.promoted_at ? new Date(myBooking.promoted_at).getTime() : null
+    const inPromoteGrace = promotedAtMs != null && serverNow.getTime() < promotedAtMs + 60 * 60 * 1000
+    const late = !isEvent && serverNow > deadline3h && !inPromoteGrace
 
     // Sarah-Wunsch 2026-05-23: Yogi muss bewusst bestätigen wenn er innerhalb
     // der 3h-Frist abmeldet — dann verfällt der Credit ersatzlos.
@@ -454,6 +463,7 @@ export default function SessionDetailPage() {
           timeStart: result.promoted.time_start || '',
           // Sarah-Fix 2026-05-28: sessionType → korrekte Event-Texte/Stornoregeln.
           sessionType: result.promoted.session_type,
+          sessionId: id as string,
         })
       }
 
@@ -535,6 +545,14 @@ export default function SessionDetailPage() {
   const past = isPast()
   const within3h = isWithin3Hours()
   const deadline = cancelDeadline()
+  // Sarah-Regel 2026-05-28: 60-Min-Gnadenfrist nach automatischem Warteliste-
+  // Nachrücken. In diesem Fenster ist Abmelden kostenlos (Credit zurück), auch
+  // wenn die 3h-Frist schon läuft. Anzeige client-seitig; verbindliche Prüfung
+  // mit Server-Zeit in handleCancel.
+  const promotedAtMs = myBooking?.promoted_at ? new Date(myBooking.promoted_at).getTime() : null
+  const inPromoteGrace = promotedAtMs != null && Date.now() < promotedAtMs + 60 * 60 * 1000
+  // Innerhalb der Gnadenfrist zählt die Abmeldung NICHT als "zu spät".
+  const lateForDisplay = within3h && !inPromoteGrace
 
   // Welle 2.5 (Sarah 2026-05-26): session_type bestimmt das Verhalten der Seite.
   //   course_session  → Reguläre Kursstunde (wie bisher).
@@ -773,9 +791,17 @@ export default function SessionDetailPage() {
                   ? 'Du bist angemeldet. Abmeldung jederzeit möglich.'
                   : isEventPaid
                   ? 'Du bist angemeldet. Diese Buchung ist verbindlich. Stornofrist: 7 Tage vor dem Event.'
+                  : inPromoteGrace
+                  ? <>Du bist gerade von der Warteliste nachgerückt. Du hast <strong>noch etwa 1 Stunde</strong> Zeit, dich kostenlos wieder abzumelden – dein Credit kommt dann zurück.</>
                   : <>Du bist angemeldet. Abmeldung kostenlos bis <strong>{deadline}</strong> – danach gilt die Stunde als wahrgenommen.</>}
               </p>
             </div>
+            {/* Sarah-Regel 2026-05-28: 60-Min-Gnadenfrist-Button nach Nachrücken. */}
+            {inPromoteGrace && !course?.is_free && !isEvent && (
+              <button onClick={() => setShowCancel(true)} className="btn-secondary mb-2 border-yoga-red-text/40">
+                <i className="ti ti-alert-triangle mr-1" /> Versehentlich von Warteliste nachgerückt? Schnell noch absagen
+              </button>
+            )}
             <button onClick={addToCalendar} className="btn-secondary mb-2">
               <i className="ti ti-calendar-plus mr-1" /> Zum Kalender hinzufügen
             </button>
@@ -818,12 +844,16 @@ export default function SessionDetailPage() {
                 </p>
               </div>
             ) : (
-              <div className={`rounded-yoga p-3 mb-4 ${within3h ? 'bg-yoga-red-bg text-yoga-red-text' : 'bg-yoga-green-bg text-yoga-green-text'}`}>
+              <div className={`rounded-yoga p-3 mb-4 ${lateForDisplay ? 'bg-yoga-red-bg text-yoga-red-text' : 'bg-yoga-green-bg text-yoga-green-text'}`}>
                 <p className="text-sm font-semibold mb-1">
-                  {within3h ? ' Zu spät für kostenlose Abmeldung' : 'Rechtzeitige Abmeldung'}
+                  {lateForDisplay ? ' Zu spät für kostenlose Abmeldung' : 'Rechtzeitige Abmeldung'}
                 </p>
                 <p className="text-sm leading-relaxed opacity-90">
-                  {within3h ? 'Credit wird nicht zurückgebucht.' : 'Dein Credit wird zurückgebucht.'}
+                  {lateForDisplay
+                    ? 'Credit wird nicht zurückgebucht.'
+                    : inPromoteGrace
+                    ? 'Du bist gerade nachgerückt – die Abmeldung ist innerhalb der ersten Stunde kostenlos. Dein Credit wird zurückgebucht.'
+                    : 'Dein Credit wird zurückgebucht.'}
                 </p>
               </div>
             )}

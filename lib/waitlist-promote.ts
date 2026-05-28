@@ -152,6 +152,9 @@ async function tryAutoPromoteOneFree(
   await supabase.from('bookings').upsert({
     user_id: wl.user_id, session_id: sessionId, credit_id: null,
     type: 'single', status: 'active', cancelled_at: null, cancel_late: false,
+    // Sarah-Regel 2026-05-28: Nachrueck-Zeitstempel → 60-Min-Gnadenfrist fuers
+    // kostenlose Abmelden (siehe handleCancel in app/kurse/[id]/page.tsx).
+    promoted_at: new Date().toISOString(),
   }, { onConflict: 'user_id,session_id' })
   await supabase.from('waitlist').delete().eq('id', wl.id)
   if (wl.profile?.email) {
@@ -163,6 +166,7 @@ async function tryAutoPromoteOneFree(
         // Bug-Fix (Sarah 2026-05-28): sessionType → Event-spezifische Texte/
         // Stornoregeln in der Edge Function.
         sessionType: meta.sessType,
+        sessionId,
       })
     } catch (e) { console.error('waitlistPromoted (free) email:', e) }
   }
@@ -194,6 +198,9 @@ async function tryAutoPromoteOne(
   await supabase.from('bookings').upsert({
     user_id: wl.user_id, session_id: sessionId, credit_id: credit.id,
     type: 'single', status: 'active', cancelled_at: null, cancel_late: false,
+    // Sarah-Regel 2026-05-28: Nachrueck-Zeitstempel → 60-Min-Gnadenfrist fuers
+    // kostenlose Abmelden trotz <3h-Frist (siehe handleCancel).
+    promoted_at: new Date().toISOString(),
   }, { onConflict: 'user_id,session_id' })
   // Waitlist-Eintrag entfernen
   await supabase.from('waitlist').delete().eq('id', wl.id)
@@ -206,6 +213,7 @@ async function tryAutoPromoteOne(
         courseName: meta.courseName, date: meta.dateStr, timeStart: meta.timeStr,
         // Einzelstunden-Label/Stornoregeln in der Edge Function (sessionType='single').
         sessionType: meta.sessType,
+        sessionId,
       })
     } catch (e) { console.error('waitlistPromoted email:', e) }
   }

@@ -99,7 +99,7 @@ export const Email = {
   waitlistJoined: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; position: number; unsubscribeToken?: string; isSingle?: boolean; sessionType?: string }) =>
     sendEmail('waitlist_joined', data),
 
-  waitlistPromoted: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; isSingle?: boolean; sessionType?: string }) =>
+  waitlistPromoted: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; isSingle?: boolean; sessionType?: string; sessionId?: string }) =>
     sendEmail('waitlist_promoted', data),
 
   waitlistOfferLate: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; offerToken: string; isSingle?: boolean; sessionType?: string }) =>

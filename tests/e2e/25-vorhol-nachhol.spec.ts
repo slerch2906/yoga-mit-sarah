@@ -109,16 +109,17 @@ test.describe('Vorhol-/Nachhol-Logik', () => {
   })
 
   test('[E2E] Yogi sagt Stunde in 14 Tagen ab, will Stunde morgen buchen → blockiert', async () => {
-    // Setup: Kurs mit 2 Sessions: heute+1 und heute+14
-    const db = await getAdminClient()
+    // Setup: Kurs mit Origin-Session in 14 Tagen; Yogi NUR dort gebucht.
+    // Die Morgen-Stunde (gleicher Kurs) ist NICHT gebucht — der Yogi will sie mit
+    // dem durch die 14-Tage-Absage freigewordenen Credit VORHOLEN. Wichtig: die
+    // Morgen-Stunde darf NICHT abgesagt sein, sonst wäre es eine Reaktivierung
+    // (immer erlaubt) statt eines Vorhol-Versuchs (10d-Fenster greift).
     const course = await createTestCourse({ name: `${E2E_PREFIX} Vorhol-14d`, sessionCount: 1, startDaysFromNow: 14 })
     const tomorrowSessionId = await insertSession(course.courseId, dateStr(1), '18:30:00')
     const origin14d = course.sessionIds[0]
-    await enrollYogiWithBookings(yogi1Id, course.courseId, [tomorrowSessionId, origin14d])
-    // Yogi sagt die 14-Tage-Stunde ab (= origin)
+    await enrollYogiWithBookings(yogi1Id, course.courseId, [origin14d])
+    // Yogi sagt die 14-Tage-Stunde ab (= origin, 1 freier Credit-Anspruch)
     await cancelBooking(yogi1Id, origin14d)
-    // Und die Morgen-Stunde auch, sonst kann er sie nicht „neu" buchen
-    await cancelBooking(yogi1Id, tomorrowSessionId)
 
     const supa = makeServiceClient()
     const pick = await selectCreditForBooking(supa, yogi1Id, tomorrowSessionId, dateStr(1), '18:30:00')
@@ -132,12 +133,12 @@ test.describe('Vorhol-/Nachhol-Logik', () => {
   })
 
   test('[E2E] Yogi sagt Stunde in 8 Tagen ab, will Stunde morgen buchen → erlaubt mit Origin', async () => {
+    // Morgen-Stunde NICHT gebucht/abgesagt → echtes Vorholen (kein Reaktivieren).
     const course = await createTestCourse({ name: `${E2E_PREFIX} Vorhol-8d`, sessionCount: 1, startDaysFromNow: 8 })
     const tomorrowSessionId = await insertSession(course.courseId, dateStr(1), '18:30:00')
     const origin8d = course.sessionIds[0]
-    await enrollYogiWithBookings(yogi1Id, course.courseId, [tomorrowSessionId, origin8d])
+    await enrollYogiWithBookings(yogi1Id, course.courseId, [origin8d])
     await cancelBooking(yogi1Id, origin8d)
-    await cancelBooking(yogi1Id, tomorrowSessionId)
 
     const supa = makeServiceClient()
     const pick = await selectCreditForBooking(supa, yogi1Id, tomorrowSessionId, dateStr(1), '18:30:00')
@@ -146,6 +147,30 @@ test.describe('Vorhol-/Nachhol-Logik', () => {
     if (pick.ok) {
       expect(pick.originSessionId).toBe(origin8d)
       expect(pick.usedModel).toBe('course')
+    }
+  })
+
+  test('[E2E] Wiederanmeldung zur SELBST abgesagten Kursstunde → erlaubt (Reaktivierung, Bug 2026-05-28)', async () => {
+    // Bug (Screenshot Sarah 2026-05-28): Yogi meldet sich von einer Kursstunde ab
+    // (Credit wird frei, "1 verfügbar") und will sich direkt wieder anmelden →
+    // fälschlich "Du hast keinen freien Credit für diese Buchung". Ursache: der
+    // einzige Origin-Anspruch dieses Course-Credits war die Stunde selbst, die der
+    // Picker mit `cb.session.id === sessionId → continue` übersprang. Fix:
+    // Wiederanmeldung zur exakt abgesagten Stunde = Reaktivierung, immer erlaubt.
+    const course = await createTestCourse({ name: `${E2E_PREFIX} Reaktivierung`, sessionCount: 1, startDaysFromNow: 7 })
+    const sessionId = await insertSession(course.courseId, dateStr(7), '18:30:00')
+    await enrollYogiWithBookings(yogi1Id, course.courseId, [sessionId])
+    // Yogi sagt genau diese Stunde ab → 1 freier Course-Credit
+    await cancelBooking(yogi1Id, sessionId)
+
+    const supa = makeServiceClient()
+    const pick = await selectCreditForBooking(supa, yogi1Id, sessionId, dateStr(7), '18:30:00')
+
+    expect(pick.ok).toBe(true)
+    if (pick.ok) {
+      expect(pick.usedModel).toBe('course')
+      // Reaktivierung der eigenen Stunde → kein Vorhol-/Nachhol-Origin
+      expect(pick.originSessionId).toBeNull()
     }
   })
 

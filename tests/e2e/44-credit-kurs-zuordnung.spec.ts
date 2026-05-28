@@ -81,13 +81,14 @@ test.describe('[E2E] Credit-Kurs-Zuordnung — Vorrang eigener Kurs', () => {
   test.afterAll(async () => { await resetYogi(yogiId) })
 
   test('Stunde aus Kurs A nimmt Credit von Kurs A — nicht den (früher ablaufenden) Kurs-B-Credit', async () => {
-    // Kurs A: Origin-Stunde in 12 Tagen + Ziel-Stunde in 3 Tagen
+    // Kurs A: Origin-Stunde in 12 Tagen (gebucht + abgesagt = 1 freier A-Credit-
+    // Anspruch). Ziel-Stunde in 3 Tagen ist NICHT gebucht → echtes Vorholen
+    // (keine Reaktivierung), damit hier wirklich die Origin-/Kurs-Auswahl greift.
     const courseA = await createTestCourse({ name: `${E2E_PREFIX} KursA-Vorrang`, sessionCount: 1, startDaysFromNow: 12 })
     const sA_origin = courseA.sessionIds[0]
     const sA_target = await insertSession(courseA.courseId, dateStr(3))
-    const creditA = await enrollWithCredit(yogiId, courseA.courseId, [sA_origin, sA_target]) // expires +180
+    const creditA = await enrollWithCredit(yogiId, courseA.courseId, [sA_origin]) // expires +180
     await cancelBooking(yogiId, sA_origin)
-    await cancelBooking(yogiId, sA_target)
 
     // Kurs B: eigener Course-Credit mit Origin, aber FRÜHER ablaufend (+30).
     // Ohne Fix würde B (kleineres expires_at) zuerst sortiert und faelschlich genommen.

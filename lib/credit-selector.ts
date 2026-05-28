@@ -187,6 +187,18 @@ async function tryCourseCredit(
     return { ok: false, reason: 'no_origin', message: 'Kein freier Anspruch' }
   }
 
+  // Bug-Fix (Sarah 2026-05-28): Wiederanmeldung zur EXAKT abgesagten Stunde ist
+  // eine simple Reaktivierung — KEIN Vorholen/Nachholen. Der freigewordene
+  // Course-Credit gehört genau zu dieser Stunde, also ist die Buchung immer
+  // erlaubt: kein Origin-Anspruch, keine 10d/8d-Fensterprüfung nötig.
+  // Vorher wurde diese Stunde in der Schleife übersprungen ("continue") → war sie
+  // der einzige Anspruch dieses Credits, fiel der Picker fälschlich auf
+  // "Du hast keinen freien Credit", obwohl der Yogi sichtbar 1 freien Credit hatte
+  // (genau den, den er sich durch die Abmeldung gerade selbst freigemacht hat).
+  if (cancelledSorted.some((cb: any) => cb.session?.id === sessionId)) {
+    return { ok: true, creditId: courseCredit.id, originSessionId: null, usedModel: 'course' }
+  }
+
   // Bereits verbrauchte Origins (durch existierende active Vorholbuchungen)
   const { data: claimedRows } = await supabase.from('bookings')
     .select('origin_session_id')
@@ -210,7 +222,7 @@ async function tryCourseCredit(
   const now = Date.now()
   for (const cb of cancelledSorted) {
     if (claimedIds.has(cb.session.id)) continue
-    if (cb.session.id === sessionId) continue // gleiche Session — wäre Reaktivierung, nicht Vorholen
+    // (Reaktivierung der gleichen Stunde ist oben bereits abgehandelt.)
 
     const originDt = new Date(`${cb.session.date}T${cb.session.time_start}`).getTime()
     const windowStart = originDt - TEN_DAYS_MS

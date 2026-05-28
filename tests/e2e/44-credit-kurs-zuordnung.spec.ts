@@ -225,7 +225,7 @@ test.describe('[E2E] Auto-Nachrücken funktioniert auch für Events', () => {
     // Im isEvent-Zweig von cancelBookingForYogi muss vor dem return promotet werden
     const idxEvent = src.indexOf('if (isEvent) {')
     expect(idxEvent, 'isEvent-Zweig existiert').toBeGreaterThan(-1)
-    const eventBlock = src.slice(idxEvent, idxEvent + 2000)
+    const eventBlock = src.slice(idxEvent, idxEvent + 3000)
     expect(eventBlock).toMatch(/promoteWaitlistOrOfferLate\(supabase,\s*sessionId\)/)
   })
 

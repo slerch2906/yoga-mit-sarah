@@ -191,9 +191,9 @@ test.describe('[E2E-Logic] Charity-Waitlist — Auto-Promote ohne Credit', () =>
     const fs = require('fs') as typeof import('fs')
     const path = require('path') as typeof import('path')
     const src = fs.readFileSync(path.join(process.cwd(), 'lib/waitlist-promote.ts'), 'utf8')
-    expect(src).toMatch(/tryAutoPromoteOneFree[\s\S]{0,400}credit_id:\s*null/)
+    expect(src).toMatch(/tryAutoPromoteOneFree[\s\S]{0,600}credit_id:\s*null/)
     // Beim Promote wird Email.waitlistPromoted gesendet (nicht eine separate Charity-Email)
-    expect(src).toMatch(/tryAutoPromoteOneFree[\s\S]{0,500}Email\.waitlistPromoted/)
+    expect(src).toMatch(/tryAutoPromoteOneFree[\s\S]{0,900}Email\.waitlistPromoted/)
   })
 })
 

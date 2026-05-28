@@ -967,18 +967,27 @@ export default function AdminKursePage() {
         provisionalCreditId = provCred?.id || null
       }
 
-      // Token anlegen + Snapshot speichern
-      const token = crypto.randomUUID().replace(/-/g, '')
-      await supabase.from('course_cancellation_responses').insert({
-        course_id: cancellingCourse.id,
-        user_id: prof.id,
-        token,
-        expires_at: expiresAt.toISOString(),
-        remaining_sessions: remainingCount,
-        guthaben_breakdown: guthabenBreakdown,
-        new_credits_count: newCreditsCount,
-        provisional_credit_id: provisionalCreditId,
-      })
+      // Token + Antwort-Snapshot NUR bei 'yogi_choice' (Option 2) anlegen.
+      // Bug-Fix (Sarah 2026-05-28): Bei 'all_refund' (Option 1, "alle bekommen
+      // Geld zurück") gibt es KEINE Yogi-Entscheidung → es darf keine offene
+      // Aufgabe in course_cancellation_responses (choice=null) entstehen, sonst
+      // taucht der Abbruch fälschlich im Admin-Dashboard / unter /admin/kursabbruch
+      // als "Offen" auf. Den Refund-Überblick bekommt Sarah über die Admin-
+      // Zusammenfassungs-Mail (adminCourseCancelledSummary, unten).
+      let token: string | null = null
+      if (cancelRefundMode === 'yogi_choice') {
+        token = crypto.randomUUID().replace(/-/g, '')
+        await supabase.from('course_cancellation_responses').insert({
+          course_id: cancellingCourse.id,
+          user_id: prof.id,
+          token,
+          expires_at: expiresAt.toISOString(),
+          remaining_sessions: remainingCount,
+          guthaben_breakdown: guthabenBreakdown,
+          new_credits_count: newCreditsCount,
+          provisional_credit_id: provisionalCreditId,
+        })
+      }
 
       // Email senden (via lib/email.ts mit korrektem x-function-secret Header)
       if (prof.email) {
@@ -989,7 +998,7 @@ export default function AdminKursePage() {
           reason: cancelReason,
           remainingSessions: remainingCount,
           refundMode: cancelRefundMode!,
-          guthabenUrl: cancelRefundMode === 'yogi_choice' ? `${appUrl}/kursabbruch/${token}` : null,
+          guthabenUrl: cancelRefundMode === 'yogi_choice' && token ? `${appUrl}/kursabbruch/${token}` : null,
         })
       }
     }

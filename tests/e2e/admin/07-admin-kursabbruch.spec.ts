@@ -70,14 +70,12 @@ test.describe('Kurs abbrechen – Option 1: Geld zurück (all_refund)', () => {
       expect(activeBookings?.length ?? 0, 'Aktive Buchungen sollten storniert sein').toBe(0)
     }
 
-    // Token angelegt (wird für alle Modi erstellt)
+    // Sarah-Regel 2026-05-28: Bei Option 1 (all_refund) gibt es KEINE Yogi-
+    // Entscheidung → es wird KEIN course_cancellation_responses-Eintrag (Token)
+    // angelegt. Sonst erschiene der Abbruch fälschlich als "offene Aufgabe" im
+    // Admin-Dashboard / unter /admin/kursabbruch. (Token nur bei yogi_choice.)
     const response = await getCancellationResponse(yogi1Id, courseId)
-    expect(response, 'Abbruch-Token sollte in der Datenbank vorhanden sein').toBeTruthy()
-    expect(response?.token).toBeTruthy()
-    // Welle 5: bei all_refund ist choice='erstattung' direkt gesetzt (oder verbleibt null je nach Mode)
-    // expires_at muss gesetzt sein für Token-Gültigkeit
-    expect(response?.expires_at, 'Token muss Ablaufdatum haben').toBeTruthy()
-    expect(response?.remaining_sessions, 'remaining_sessions muss gesetzt sein').toBeGreaterThan(0)
+    expect(response, 'Bei all_refund darf KEIN Abbruch-Token/Response-Eintrag entstehen').toBeNull()
   })
 })
 

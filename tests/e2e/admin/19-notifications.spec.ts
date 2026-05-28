@@ -572,12 +572,14 @@ test.describe('[E2E] Credit nach letzter Stunde: Sichtbarkeit + Verfall', () => 
 
 // ── 12) Warteliste vs Notify-Logik ─────────────────────────────────────────
 test.describe('[E2E] Warteliste füllt Platz → Notify-Info-Logik', () => {
-  test('Helper notifyAllSubscribers wird VOR der waitlist-Auto-Promote-Logik aufgerufen', async () => {
+  test('Helper notifyAllSubscribers wird NUR NACH erfolglosem Auto-Promote aufgerufen', async () => {
+    // Sarah-Regel 2026-05-28: zuerst Warteliste nachrücken, Notify nur wenn danach
+    // noch ein Platz frei ist → notify steht NACH der 90-min-Verzweigung.
     const src = read('lib/waitlist-promote.ts')
     const idxNotify = src.indexOf('notifyAllSubscribers(supabase, sessionId')
     const idxIf = src.indexOf('sessionStart - now > NINETY_MIN_MS')
     expect(idxNotify).toBeGreaterThan(-1)
-    expect(idxNotify).toBeLessThan(idxIf)
+    expect(idxNotify).toBeGreaterThan(idxIf)
   })
 
   test('Auto-eingebuchter Wartelisten-Yogi hat 1h Abmeldefrist (UI-Text)', async () => {

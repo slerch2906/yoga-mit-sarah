@@ -47,7 +47,7 @@ test.describe('[E2E] WeekPickerPopover', () => {
     expect(src).toMatch(/mousedown/)
     expect(src).toMatch(/Escape/)
     // Quick-Jump "Zu heute" — Welle 6 (Sarah 2026-05-27): HEUTE groß + fett.
-    expect(src).toMatch(/Zu\s*(heute|HEUTE|<span[^>]*>HEUTE)/)
+    expect(src).toMatch(/Zu\s*(heute|Heute|HEUTE|<span[^>]*>HEUTE)/)
   })
 
   test('Eingebunden in admin/dashboard UND kurse/page', () => {

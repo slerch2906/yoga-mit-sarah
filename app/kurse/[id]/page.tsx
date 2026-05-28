@@ -317,6 +317,27 @@ export default function SessionDetailPage() {
     setActionLoading(false)
   }
 
+  // Sarah-Wunsch 2026-05-28: Auch bei Events/Einzelstunden (nicht nur Kursen) soll
+  // der angemeldete Yogi den Termin in seinen Kalender exportieren können.
+  // Gleiche ICS-Logik wie auf der Bestätigungsseite, mit "Yoga - "-Prefix.
+  function addToCalendar() {
+    if (!session) return
+    const dt = new Date(`${(session as any).date}T${(session as any).time_start}`)
+    const dtEnd = new Date(dt.getTime() + ((session as any).duration_min || 60) * 60000)
+    const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+    const st = (session as any).session_type
+    const rawTitle = st && st !== 'course_session'
+      ? ((session as any).name ?? (st === 'single' ? 'Einzelstunde' : 'Event'))
+      : ((session as any).name ?? course?.name ?? 'Stunde')
+    const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nSUMMARY:Yoga - ${rawTitle}\r\nDTSTART:${fmt(dt)}\r\nDTEND:${fmt(dtEnd)}\r\nEND:VEVENT\r\nEND:VCALENDAR`
+    const a = document.createElement('a')
+    a.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics)
+    a.download = `${rawTitle || 'termin'}.ics`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
   async function handleCancel() {
     const user = await getCurrentUser()
     // Server-Zeit verwenden statt Browser-Zeit
@@ -755,6 +776,9 @@ export default function SessionDetailPage() {
                   : <>Du bist angemeldet. Abmeldung kostenlos bis <strong>{deadline}</strong> – danach gilt die Stunde als wahrgenommen.</>}
               </p>
             </div>
+            <button onClick={addToCalendar} className="btn-secondary mb-2">
+              <i className="ti ti-calendar-plus mr-1" /> Zum Kalender hinzufügen
+            </button>
             <button onClick={() => setShowCancel(true)} className="btn-danger mb-2">
               <i className="ti ti-calendar-minus mr-1" /> Von dieser Stunde abmelden
             </button>

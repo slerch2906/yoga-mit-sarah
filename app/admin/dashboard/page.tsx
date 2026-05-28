@@ -253,9 +253,15 @@ export default function AdminDashboard() {
           session_date: freshSession?.date, session_time: freshSession?.time_start,
         }
       })
-      // Bug-Fix (Sarah 2026-05-28): Abmelde-Bestätigung an Yogi — fehlte beim
-      // Admin-Austrag aus Events (kostenlos + bezahlt). Die booking_cancelled-Mail
-      // differenziert event_free/event_paid (kostenlos → "Abmeldung kostenlos").
+      // Bug-Fix (Sarah 2026-05-28): Auch beim Event-Austrag muss die Warteliste
+      // nachrücken (vorher fehlte der Aufruf → Yogi auf Warteliste rückte nie
+      // nach, obwohl ein Platz frei wurde). Zentraler Helper inkl. 90-Min-Cutoff.
+      // (Promote VOR der Abmelde-Mail, damit der freie Platz zuerst nachbesetzt wird.)
+      try { await promoteWaitlistOrOfferLate(supabase, sessionId) } catch (e) { console.error('promote (event):', e) }
+      // Bug-Fix (Sarah 2026-05-28): Abmelde-Bestätigung an den ausgetragenen Yogi —
+      // fehlte beim Admin-Austrag aus Events (kostenlos + bezahlt). Die
+      // booking_cancelled-Mail differenziert event_free/event_paid (kostenlos →
+      // "Abmeldung kostenlos").
       try {
         if (_targetUserId) {
           const { data: _prof } = await supabase.from('profiles').select('email, first_name').eq('id', _targetUserId).maybeSingle()
@@ -272,10 +278,6 @@ export default function AdminDashboard() {
           }
         }
       } catch (e) { console.error('bookingCancelled mail (event):', e) }
-      // Bug-Fix (Sarah 2026-05-28): Auch beim Event-Austrag muss die Warteliste
-      // nachrücken (vorher fehlte der Aufruf → Yogi auf Warteliste rückte nie
-      // nach, obwohl ein Platz frei wurde). Zentraler Helper inkl. 90-Min-Cutoff.
-      try { await promoteWaitlistOrOfferLate(supabase, sessionId) } catch (e) { console.error('promote (event):', e) }
       // Reload
       if (selectedSession) loadSessionDetail(selectedSession)
       loadData()

@@ -100,6 +100,9 @@ export class AdminKursePage {
 
   async openCancelModal(courseName: string) {
     const card = this.page.locator('.card', { hasText: courseName }).first()
+    // Welle 6 (Sarah 2026-05-27): "Abbrechen" liegt seit dem ⋮-Refactor im
+    // "Mehr Optionen"-Menü der Kurs-Karte, nicht mehr direkt sichtbar.
+    await card.getByRole('button', { name: /mehr optionen/i }).click()
     await card.getByRole('button', { name: /abbrechen/i }).click()
     await expect(this.page.getByText('Kurs abbrechen').first()).toBeVisible({ timeout: 5_000 })
   }

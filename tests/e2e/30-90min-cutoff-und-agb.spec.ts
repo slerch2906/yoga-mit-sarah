@@ -380,14 +380,17 @@ test.describe('[E2E] waitlist-offer API: Race + Edge Cases', () => {
 test.describe('[E2E] Notify-Subscribers immer', () => {
   test.use({ storageState: { cookies: [], origins: [] } })
 
-  test('Helper-Source: notifyAllSubscribers wird VOR der 90-min-Verzweigung aufgerufen', async () => {
+  test('Helper-Source: notifyAllSubscribers wird NUR NACH erfolglosem Promote aufgerufen', async () => {
     const helperSrc = fs.readFileSync(path.join(process.cwd(), 'lib/waitlist-promote.ts'), 'utf8')
-    // Reihenfolge: notifyAllSubscribers MUSS vor dem if (>90Min)/else (≤90Min) stehen
+    // Sarah-Regel 2026-05-28: ZUERST Warteliste nachrücken, Benachrichtigungen
+    // NUR wenn danach noch ein Platz frei ist (sonst lockt man notify-Yogis an,
+    // obwohl die Warteliste den Platz schon gefüllt hat). → notifyAllSubscribers
+    // steht NACH der 90-min-Verzweigung, nicht davor.
     const idxNotify = helperSrc.indexOf('notifyAllSubscribers(supabase, sessionId')
     const idxIf = helperSrc.indexOf('sessionStart - now > NINETY_MIN_MS')
     expect(idxNotify, 'notifyAllSubscribers muss aufgerufen werden').toBeGreaterThan(-1)
     expect(idxIf, '90-min-Branch muss existieren').toBeGreaterThan(-1)
-    expect(idxNotify, 'Notify wird VOR der 90-min-Verzweigung gemacht (=immer)').toBeLessThan(idxIf)
+    expect(idxNotify, 'Notify wird erst NACH dem Promote-Versuch gemacht').toBeGreaterThan(idxIf)
   })
 
   test('Helper notifyAllSubscribers triggert notify_place_free Email + löscht notify-Einträge', async () => {

@@ -719,12 +719,14 @@ export default function AdminKursePage() {
 
   // Welle 2.9: Loeschen einer Einzelstunde/eines Events von der Karte aus.
   // Schutz: wenn aktive Bookings existieren, erst absagen lassen.
-  async function deleteContainerSession(sessionId: string, activeBookings: number) {
-    if (activeBookings > 0) {
-      alert('Sage die Stunde zuerst ab (Yogis muessen informiert werden), dann kannst du sie loeschen.')
+  async function deleteContainerSession(sessionId: string, participantCount: number) {
+    // Sarah-Wunsch 2026-05-28: Teilnehmer-abhaengiger Hinweis.
+    // Teilnehmer (intern ODER extern) vorhanden → erst absagen. Sonst hart loeschen.
+    if (participantCount > 0) {
+      alert('Du hast noch Teilnehmer in dieser Stunde.\n\nSage sie zuerst ab (Teilnehmer müssen informiert werden), dann kannst du sie löschen.')
       return
     }
-    if (!confirm('Wirklich loeschen? Diese Aktion kann nicht rueckgaengig gemacht werden.')) return
+    if (!confirm('Du hast keine Teilnehmer. Willst du diese Stunde endgültig (hart) löschen?\n\nDiese Aktion kann nicht rückgängig gemacht werden.')) return
     await supabase.from('waitlist').delete().eq('session_id', sessionId)
     await supabase.from('bookings').delete().eq('session_id', sessionId)
     // Welle 6A (Sarah 2026-05-27, Item 12): Session-Snapshot vor delete fuer Audit
@@ -1920,37 +1922,57 @@ export default function AdminKursePage() {
     // Sarah-Regel 2026-05-28: läuft = noch nicht beendet (letzte Stunde noch
     // nicht begonnen) statt date_end >= heute.
     const isRunning = c.is_active && !c.is_cancelled && !isCourseEnded(c)
+    const courseYogiCount = c.participant_count ?? (c.enrollments?.length || 0)
     return (
       <div key={c.id} className="card mb-3 relative" data-course-card={isEnded ? 'ended' : 'active'}>
-        {/* Welle 6: "…" Mehr-Menue oben rechts auf laufenden Kursen — enthaelt
-            "Endgültig löschen", oeffnet 2-stufiges Confirm-Modal. */}
-        {isRunning && (
-          <div className="absolute top-2 right-2 z-10">
-            <button
-              onClick={() => setMoreMenuOpen(moreMenuOpen === c.id ? null : c.id)}
-              className="w-7 h-7 rounded-full flex items-center justify-center bg-transparent border-0 cursor-pointer text-yoga-text/50 hover:bg-yoga-gray"
-              title="Mehr Optionen">
-              <i className="ti ti-dots-vertical text-base" />
-            </button>
-            {moreMenuOpen === c.id && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setMoreMenuOpen(null)} />
-                <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-yoga-border rounded-yoga shadow-lg min-w-[180px] overflow-hidden">
+        {/* Sarah-Wunsch 2026-05-28: Einheitliches "…"-Menü — IMMER sichtbar,
+            Reihenfolge Abbrechen → Archivieren → Löschen. Löschen blockt bei
+            vorhandenen Teilnehmern (erst absagen). */}
+        <div className="absolute top-2 right-2 z-10">
+          <button
+            onClick={() => setMoreMenuOpen(moreMenuOpen === c.id ? null : c.id)}
+            className="w-7 h-7 rounded-full flex items-center justify-center bg-transparent border-0 cursor-pointer text-yoga-text/50 hover:bg-yoga-gray"
+            title="Mehr Optionen">
+            <i className="ti ti-dots-vertical text-base" />
+          </button>
+          {moreMenuOpen === c.id && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setMoreMenuOpen(null)} />
+              <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-yoga-border rounded-yoga shadow-lg min-w-[200px] overflow-hidden">
+                {/* 1) Abbrechen — nur wenn Teilnehmer drin und nicht schon abgebrochen */}
+                {courseYogiCount > 0 && !c.is_cancelled && (
                   <button
-                    onClick={() => {
-                      setMoreMenuOpen(null)
-                      const yogiCount = c.participant_count ?? (c.enrollments?.length || 0)
-                      setDeleteCourseModal({ course: c, step: 1, nameInput: '', yogiCount })
-                    }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-yoga-gray cursor-pointer border-0 bg-transparent flex items-center gap-2 text-yoga-red-text">
-                    <i className="ti ti-trash" />
-                    Endgültig löschen
+                    onClick={() => { setMoreMenuOpen(null); setCancellingCourse(c); setCancelReason(''); setCancelRefundMode(null) }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-yoga-gray cursor-pointer border-0 bg-transparent flex items-center gap-2 text-yoga-text/80">
+                    <i className="ti ti-ban" />
+                    Abbrechen
                   </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
+                )}
+                {/* 2) Archivieren */}
+                <button
+                  onClick={() => { setMoreMenuOpen(null); archiveCourse(c) }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-yoga-gray cursor-pointer border-0 bg-transparent flex items-center gap-2 text-yoga-text/80">
+                  <i className="ti ti-archive" />
+                  Archivieren
+                </button>
+                {/* 3) Löschen — mit Teilnehmer-Hinweis */}
+                <button
+                  onClick={() => {
+                    setMoreMenuOpen(null)
+                    if (courseYogiCount > 0) {
+                      alert('Du hast noch Teilnehmer in diesem Kurs.\n\nSage ihn zuerst ab (Teilnehmer müssen informiert werden), dann kannst du ihn löschen.')
+                      return
+                    }
+                    setDeleteCourseModal({ course: c, step: 1, nameInput: '', yogiCount: courseYogiCount })
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-yoga-gray cursor-pointer border-0 bg-transparent flex items-center gap-2 text-yoga-red-text">
+                  <i className="ti ti-trash" />
+                  Löschen
+                </button>
+              </div>
+            </>
+          )}
+        </div>
         <div className="flex items-start justify-between mb-2">
           <div>
             <div className="flex items-center gap-2 mb-0.5">
@@ -1983,9 +2005,9 @@ export default function AdminKursePage() {
               )}
             </div>
           </div>
-          {/* Sarah-Wunsch 2026-05-28: Pillen nach links ruecken wenn das absolute
-              "…"-Menue (nur bei isRunning) oben rechts sitzt — sonst Overlap. */}
-          <div className={`flex flex-col items-end gap-1 ${isRunning ? 'mr-7' : ''}`}>
+          {/* Sarah-Wunsch 2026-05-28: Pillen nach links ruecken — das absolute
+              "…"-Menue sitzt immer oben rechts, sonst Overlap. */}
+          <div className="flex flex-col items-end gap-1 mr-7">
             <span className={`badge ${c.is_single ? 'badge-wait' : 'badge-free'}`}>
               {c.is_single ? 'Einzelstunde' : 'Kurs'}
             </span>
@@ -2038,20 +2060,8 @@ export default function AdminKursePage() {
             <i className="ti ti-arrows-transfer-down mr-1" />Folgekurs anlegen
           </button>
         )}
-        <div className="flex gap-2 mt-2">
-          {(c.enrollments || []).length > 0 && (
-            <button onClick={() => { setCancellingCourse(c); setCancelReason(''); setCancelRefundMode(null) }}
-              className="flex-1 text-xs text-yoga-text/50 border border-yoga-border rounded-full py-1.5 font-semibold border-0 cursor-pointer hover:opacity-80"
-              style={{ background: 'var(--yoga-gray)' }}>
-              <i className="ti ti-ban mr-1" />Abbrechen
-            </button>
-          )}
-          <button onClick={() => archiveCourse(c)}
-            className="flex-1 text-xs text-yoga-text/50 rounded-full py-1.5 font-semibold hover:opacity-80 cursor-pointer border-0"
-            style={{ background: 'var(--yoga-gray)' }}>
-            <i className="ti ti-archive mr-1" />Archivieren
-          </button>
-        </div>
+        {/* Sarah-Wunsch 2026-05-28: Abbrechen + Archivieren sind jetzt im
+            "…"-Menü oben rechts (zusammen mit Löschen). */}
         {expandedCourse === c.id && courseSessions[c.id] && (
           <div className="mt-2">
             {courseSessions[c.id].map(s => (
@@ -2164,7 +2174,39 @@ export default function AdminKursePage() {
                 // - 3 Buttons: Bearbeiten / Teilnehmer / Loeschen
                 // - External-Counter +/- inline ueber Teilnehmer-Zeile
                 return (
-                  <div key={s.id} className="card mb-3">
+                  <div key={s.id} className="card mb-3 relative">
+                    {/* Sarah-Wunsch 2026-05-28: Einheitliches "…"-Menü oben rechts —
+                        Reihenfolge Absagen → Löschen (Einzelstunden/Events haben
+                        kein Archivieren). Löschen blockt bei Teilnehmern. */}
+                    <div className="absolute top-2 right-2 z-10">
+                      <button
+                        onClick={() => setMoreMenuOpen(moreMenuOpen === s.id ? null : s.id)}
+                        className="w-7 h-7 rounded-full flex items-center justify-center bg-transparent border-0 cursor-pointer text-yoga-text/50 hover:bg-yoga-gray"
+                        title="Mehr Optionen">
+                        <i className="ti ti-dots-vertical text-base" />
+                      </button>
+                      {moreMenuOpen === s.id && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setMoreMenuOpen(null)} />
+                          <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-yoga-border rounded-yoga shadow-lg min-w-[200px] overflow-hidden">
+                            {(activeBookings > 0 || ext > 0) && (
+                              <button
+                                onClick={() => { setMoreMenuOpen(null); setCancellingSession(s); setCancelSessionReason('') }}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-yoga-gray cursor-pointer border-0 bg-transparent flex items-center gap-2 text-yoga-text/80">
+                                <i className="ti ti-ban" />
+                                Absagen
+                              </button>
+                            )}
+                            <button
+                              onClick={() => { setMoreMenuOpen(null); deleteContainerSession(s.id, activeBookings + ext) }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-yoga-gray cursor-pointer border-0 bg-transparent flex items-center gap-2 text-yoga-red-text">
+                              <i className="ti ti-trash" />
+                              Löschen
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
@@ -2189,7 +2231,7 @@ export default function AdminKursePage() {
                           )}
                         </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0 mr-7">
                         {/* Typ-Pille rechts oben (gleicher 'badge'-Stil wie 'Kurs' bei Kursen) */}
                         <span className={`badge ${typeBadge.cls}`}>{typeBadge.label}</span>
                         {/* Frei/Gesperrt-Pille — toggle (gleicher Stil wie bei Kursen) */}
@@ -2249,24 +2291,8 @@ export default function AdminKursePage() {
                         )}
                       </div>
                     </div>
-                    {/* Buttons-Reihe 2: Stunde absagen + Löschen.
-                        Welle 4.6 (Sarah 2026-05-26): Absagen sichtbar wenn
-                        AKTIVE ODER EXTERNE Yogis drin (vorher nur active).
-                        Sarah-Wunsch: "absagen immer wenn yogis drin sind". */}
-                    <div className="flex gap-2 mt-2">
-                      {(activeBookings > 0 || ext > 0) && (
-                        // Welle 6 (Sarah 2026-05-27, Item 2): direkt Grund-Modal
-                        // oeffnen (kein Umweg ueber /admin/sessions/[id]).
-                        <button onClick={() => { setCancellingSession(s); setCancelSessionReason('') }}
-                          className="flex-1 text-sm rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer border-0 text-yoga-text/70 bg-yoga-gray">
-                          <i className="ti ti-ban mr-1" />Absagen
-                        </button>
-                      )}
-                      <button onClick={() => deleteContainerSession(s.id, activeBookings)}
-                        className="flex-1 text-sm rounded-full py-2 font-semibold hover:opacity-80 cursor-pointer border-0 text-yoga-red-text bg-yoga-red-bg">
-                        <i className="ti ti-trash mr-1" />Löschen
-                      </button>
-                    </div>
+                    {/* Sarah-Wunsch 2026-05-28: Absagen + Löschen sind jetzt im
+                        "…"-Menü oben rechts. */}
                   </div>
                 )
               })}

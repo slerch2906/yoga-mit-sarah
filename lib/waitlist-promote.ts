@@ -40,12 +40,14 @@ export async function promoteWaitlistOrOfferLate(
   if (sessionStart <= now) return { mode: 'noop' } // Stunde hat bereits begonnen
 
   const minutesUntilStart = (sessionStart - now) / 60000
-  // Bug-Fix (Sarah 2026-05-28): Bei Events ist der echte Titel session.name,
-  // NICHT der SYS-Container-Kursname ("SYS · Events (bezahlt)"). courseName fuer
-  // Emails/Anzeige entsprechend waehlen.
+  // Bug-Fix (Sarah 2026-05-28): Bei Events UND Einzelstunden ist der echte Titel
+  // session.name, NICHT der SYS-Container-Kursname ("SYS · Events (bezahlt)" bzw.
+  // "SYS · Einzelstunden"). Nur echte Kursstunden (course_session) nutzen den
+  // Kursnamen. courseName fuer Emails/Anzeige entsprechend waehlen.
   const sessType = (session as any).session_type || 'course_session'
   const isEvent = sessType === 'event_free' || sessType === 'event_paid'
-  const courseName = (isEvent && (session as any).name)
+  const isStandalone = isEvent || sessType === 'single'
+  const courseName = (isStandalone && (session as any).name)
     ? (session as any).name
     : ((session as any).course?.name || '')
   const isFreeCourse = !!(session as any).course?.is_free
@@ -73,7 +75,7 @@ export async function promoteWaitlistOrOfferLate(
     for (const wl of waitlist) {
       const promoted = promoteWithoutCredit
         ? await tryAutoPromoteOneFree(supabase, wl, sessionId, { courseName, dateStr, timeStr, sessType })
-        : await tryAutoPromoteOne(supabase, wl, sessionId, sessionCourseId, { courseName, dateStr, timeStr })
+        : await tryAutoPromoteOne(supabase, wl, sessionId, sessionCourseId, { courseName, dateStr, timeStr, sessType })
       // Platz gefüllt → KEINE Benachrichtigungen mehr (Platz ist weg).
       if (promoted) return { mode: 'auto-promoted', details: { user_id: wl.user_id } }
     }
@@ -171,7 +173,7 @@ async function tryAutoPromoteOneFree(
 async function tryAutoPromoteOne(
   supabase: SupabaseClient, wl: any, sessionId: string,
   sessionCourseId: string | null,
-  meta: { courseName: string; dateStr: string; timeStr: string },
+  meta: { courseName: string; dateStr: string; timeStr: string; sessType?: string },
 ): Promise<boolean> {
   // Hat der Yogi einen freien Credit?
   const nowIso = new Date().toISOString()
@@ -202,6 +204,8 @@ async function tryAutoPromoteOne(
         email: wl.profile.email,
         firstName: wl.profile.first_name || 'Yogi',
         courseName: meta.courseName, date: meta.dateStr, timeStart: meta.timeStr,
+        // Einzelstunden-Label/Stornoregeln in der Edge Function (sessionType='single').
+        sessionType: meta.sessType,
       })
     } catch (e) { console.error('waitlistPromoted email:', e) }
   }

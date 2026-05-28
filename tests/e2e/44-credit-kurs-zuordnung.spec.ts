@@ -202,3 +202,37 @@ test.describe('[E2E] Folgekurs-Rollover verlinkt credit_id', () => {
     expect(src).toMatch(/credit_id:\s*rolloverCreditId,\s*type:\s*'course'/)
   })
 })
+
+// ════════════════════════════════════════════════════════════════════════
+// Warteliste-Auto-Nachrücken bei Events (Sarah 2026-05-28)
+// ════════════════════════════════════════════════════════════════════════
+test.describe('[E2E] Auto-Nachrücken funktioniert auch für Events', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  test('waitlist-promote routet event_free/event_paid in den No-Credit-Promote', () => {
+    const src = fs.readFileSync(path.join(process.cwd(), 'lib/waitlist-promote.ts'), 'utf8')
+    // session_type wird geladen + isEvent erkannt
+    expect(src).toMatch(/session_type/)
+    expect(src).toMatch(/sessType\s*===\s*'event_free'\s*\|\|\s*sessType\s*===\s*'event_paid'/)
+    // Events werden ohne Credit nachgerückt (wie Charity)
+    expect(src).toMatch(/promoteWithoutCredit\s*=\s*isFreeCourse\s*\|\|\s*isEvent/)
+    expect(src).toMatch(/promoteWithoutCredit[\s\S]{0,120}tryAutoPromoteOneFree/)
+  })
+
+  test('Dashboard-Event-Austrag ruft promoteWaitlistOrOfferLate auf', () => {
+    const src = fs.readFileSync(path.join(process.cwd(), 'app/admin/dashboard/page.tsx'), 'utf8')
+    // Im isEvent-Zweig von cancelBookingForYogi muss vor dem return promotet werden
+    const idxEvent = src.indexOf('if (isEvent) {')
+    expect(idxEvent, 'isEvent-Zweig existiert').toBeGreaterThan(-1)
+    const eventBlock = src.slice(idxEvent, idxEvent + 2000)
+    expect(eventBlock).toMatch(/promoteWaitlistOrOfferLate\(supabase,\s*sessionId\)/)
+  })
+
+  test('leave_waitlist-Bestätigung nutzt session_name (kein SYS-Name)', () => {
+    const src = fs.readFileSync(path.join(process.cwd(), 'app/warteliste/austragen/page.tsx'), 'utf8')
+    // Client liest session_name/session_type aus der RPC und ersetzt SYS-Namen
+    expect(src).toMatch(/data\.session_name/)
+    expect(src).toMatch(/data\.session_type/)
+    expect(src).toMatch(/SYS · /)
+  })
+})

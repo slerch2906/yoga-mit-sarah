@@ -30,7 +30,7 @@ export async function promoteWaitlistOrOfferLate(
 ): Promise<{ mode: 'auto-promoted' | 'late-offer-sent' | 'noop'; details?: any }> {
   // 1) Session-Daten holen
   const { data: session } = await supabase.from('sessions')
-    .select('id, course_id, date, time_start, is_cancelled, course:courses(name, is_free)')
+    .select('id, course_id, session_type, name, date, time_start, is_cancelled, course:courses(name, is_free)')
     .eq('id', sessionId).maybeSingle()
   if (!session || (session as any).is_cancelled) return { mode: 'noop' }
   const sessionCourseId = (session as any).course_id || null
@@ -40,8 +40,18 @@ export async function promoteWaitlistOrOfferLate(
   if (sessionStart <= now) return { mode: 'noop' } // Stunde hat bereits begonnen
 
   const minutesUntilStart = (sessionStart - now) / 60000
-  const courseName = (session as any).course?.name || ''
+  // Bug-Fix (Sarah 2026-05-28): Bei Events ist der echte Titel session.name,
+  // NICHT der SYS-Container-Kursname ("SYS · Events (bezahlt)"). courseName fuer
+  // Emails/Anzeige entsprechend waehlen.
+  const sessType = (session as any).session_type || 'course_session'
+  const isEvent = sessType === 'event_free' || sessType === 'event_paid'
+  const courseName = (isEvent && (session as any).name)
+    ? (session as any).name
+    : ((session as any).course?.name || '')
   const isFreeCourse = !!(session as any).course?.is_free
+  // Events (free + paid) werden OHNE Credit nachgerueckt (Bezahlung extern),
+  // genau wie Charity-Kurse. event_credit + Kursstunden brauchen einen Credit.
+  const promoteWithoutCredit = isFreeCourse || isEvent
   const dateStr = (session as any).date
   const timeStr = (session as any).time_start
 
@@ -61,8 +71,8 @@ export async function promoteWaitlistOrOfferLate(
   // Bei Charity (is_free): IMMER den ersten Yogi nehmen, kein Credit nötig.
   if (sessionStart - now > NINETY_MIN_MS) {
     for (const wl of waitlist) {
-      const promoted = isFreeCourse
-        ? await tryAutoPromoteOneFree(supabase, wl, sessionId, { courseName, dateStr, timeStr })
+      const promoted = promoteWithoutCredit
+        ? await tryAutoPromoteOneFree(supabase, wl, sessionId, { courseName, dateStr, timeStr, sessType })
         : await tryAutoPromoteOne(supabase, wl, sessionId, sessionCourseId, { courseName, dateStr, timeStr })
       if (promoted) return { mode: 'auto-promoted', details: { user_id: wl.user_id } }
     }
@@ -124,7 +134,7 @@ export async function promoteWaitlistOrOfferLate(
  */
 async function tryAutoPromoteOneFree(
   supabase: SupabaseClient, wl: any, sessionId: string,
-  meta: { courseName: string; dateStr: string; timeStr: string },
+  meta: { courseName: string; dateStr: string; timeStr: string; sessType?: string },
 ): Promise<boolean> {
   await supabase.from('bookings').upsert({
     user_id: wl.user_id, session_id: sessionId, credit_id: null,
@@ -137,6 +147,9 @@ async function tryAutoPromoteOneFree(
         email: wl.profile.email,
         firstName: wl.profile.first_name || 'Yogi',
         courseName: meta.courseName, date: meta.dateStr, timeStart: meta.timeStr,
+        // Bug-Fix (Sarah 2026-05-28): sessionType → Event-spezifische Texte/
+        // Stornoregeln in der Edge Function.
+        sessionType: meta.sessType,
       })
     } catch (e) { console.error('waitlistPromoted (free) email:', e) }
   }

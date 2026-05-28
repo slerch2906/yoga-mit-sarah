@@ -920,8 +920,13 @@ export default function AdminKursePage() {
       // abgesagten Stunden statt nur das auto-refundete Altguthaben). Bei Choice
       // "Erstattung" wird dieser Credit wieder gelöscht; bei Choice "Guthaben"
       // bleibt er als finale Gutschrift.
+      // Bug-Fix (Sarah 2026-05-28): NUR bei 'yogi_choice' (Option 2) anlegen. Bei
+      // 'all_refund' (Option 1, "alle bekommen Geld zurück") gibt es keinen
+      // Wahl-Flow, der das provisorische Guthaben je wieder entfernt — es bliebe
+      // dauerhaft fälschlich beim Yogi hängen. Bei Option 1 bekommt der Yogi sein
+      // Geld zurück, es darf also gar kein Guthaben angelegt/angezeigt werden.
       let provisionalCreditId: string | null = null
-      if (newCreditsCount > 0) {
+      if (newCreditsCount > 0 && cancelRefundMode === 'yogi_choice') {
         const expiry2y = new Date()
         expiry2y.setFullYear(expiry2y.getFullYear() + 2)
         // Sarah-Wunsch 2026-05-26: course_id mitspeichern (Herkunftsangabe

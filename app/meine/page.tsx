@@ -31,10 +31,27 @@ export default function MeinePage() {
   const [courseSessions, setCourseSessions] = useState<Record<string, any[]>>({})
   const [credits, setCredits] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  // Sarah-Wunsch 2026-05-29: Nach einer Abmeldung (von der Stundenseite) landet der
+  // Yogi hier auf /meine?abgemeldet=1 und sieht oben einen grünen Erfolgs-Banner
+  // "Deine Abmeldung war erfolgreich" — statt nur einem stummen Stundenfenster.
+  const [cancelToast, setCancelToast] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => { loadData() }, [])
+
+  // Erfolgs-Banner nach Abmeldung: Query-Param lesen, Banner zeigen (6 Sek), URL säubern.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('abgemeldet') === '1') {
+      setCancelToast(true)
+      // URL säubern, damit ein Reload den Banner nicht erneut auslöst.
+      window.history.replaceState({}, '', '/meine')
+      const t = setTimeout(() => setCancelToast(false), 6000)
+      return () => clearTimeout(t)
+    }
+  }, [])
 
   async function loadData() {
     try {
@@ -245,6 +262,16 @@ export default function MeinePage() {
   return (
     <div className="max-w-md mx-auto min-h-screen">
       <AppHeader title="Meine" isAdmin={profile?.is_admin} />
+      {/* Sarah-Wunsch 2026-05-29: grüner Erfolgs-Banner nach erfolgreicher Abmeldung. */}
+      {cancelToast && (
+        <div className="mx-4 mt-4 rounded-yoga bg-yoga-green-bg text-yoga-green-text px-4 py-3 flex items-start gap-2 animate-fade-in">
+          <i className="ti ti-circle-check text-lg mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold">Deine Abmeldung war erfolgreich</p>
+            <p className="text-xs opacity-90 mt-0.5">Du wurdest von dieser Stunde abgemeldet.</p>
+          </div>
+        </div>
+      )}
       {/* Sarah 2026-05-29: Abgesagte-Event/Stunde-Banner NUR im Kalender (/kurse)
           anzeigen, nicht zusätzlich hier auf "Meine" — sonst erscheinen sie doppelt.
           (Vorher 2026-05-28 hier eingeblendet, jetzt auf Sarahs Wunsch wieder raus.) */}

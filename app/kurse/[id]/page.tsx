@@ -452,7 +452,8 @@ export default function SessionDetailPage() {
     const minsUntilStart = (sessStartMs - Date.now()) / 60000
     if (sessStartMs > 0 && minsUntilStart <= 90) {
       try { await promoteWaitlistOrOfferLate(supabase, id as string) } catch (e) { console.error('late-offer:', e) }
-      router.push('/meine'); return
+      // Sarah-Wunsch 2026-05-29: nach Abmeldung Erfolgs-Banner auf /meine zeigen.
+      router.push('/meine?abgemeldet=1'); return
     }
 
     // > 90 Min: Standard-Pfad via RPC + Email-Versand client-side
@@ -502,7 +503,9 @@ export default function SessionDetailPage() {
       }
     } catch(e) { console.error('Waitlist promotion error:', e) }
 
-    router.back()
+    // Sarah-Wunsch 2026-05-29: nach Abmeldung Erfolgs-Banner auf /meine zeigen
+    // (vorher router.back() → stummes Stundenfenster ohne Bestätigung).
+    router.push('/meine?abgemeldet=1')
   }
 
   async function handleWaitlist(type: 'waitlist' | 'notify') {

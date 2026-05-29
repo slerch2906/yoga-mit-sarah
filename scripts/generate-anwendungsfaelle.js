@@ -195,7 +195,7 @@ content.push(new Paragraph({
 content.push(new Paragraph({
   alignment: AlignmentType.CENTER,
   spacing: { after: 80 },
-  children: [new TextRun({ text: 'Version 2.2 — Stand der App nach Welle A bis H (UI-Refresh, Credit-Banner, 3h-Modal, Quick-Credit-Form, Krankheits-Austragung, Click-Wrap, 2J-Auto-Refund, DSGVO-Confirm-Mail)', font: FONT, size: 22 })],
+  children: [new TextRun({ text: 'Version 2.3 — Stand der App nach Welle A bis I (UI-Refresh, Credit-Banner, 3h-Modal, Quick-Credit-Form, Krankheits-Austragung, Click-Wrap, 2J-Auto-Refund, DSGVO-Confirm-Mail, Audit-Fixes 29.05.2026)', font: FONT, size: 22 })],
 }))
 content.push(pageBreak())
 
@@ -2098,6 +2098,93 @@ content.push(...ucase({
   ],
   sonder: [
     'Verifiziert durch tests/e2e/14a-account-loeschung-source.spec.ts: Source-Smoke-Tests prüfen Vorhandensein von Email.accountDeletedYogi in beiden Lösch-Pfaden und das Fehlen direkter send-email-Fetches.',
+  ],
+}))
+
+// ════════════════════════════════════════════════════════════════════════════
+// Welle I (2026-05-29): Gebündelte Audit-Fixes Fall 1–5
+// ════════════════════════════════════════════════════════════════════════════
+content.push(pageBreak())
+content.push(h1('Welle I: Audit-Fixes (29.05.2026)'))
+content.push(p('Welle I bündelt fünf abgestimmte Klarstellungen und Härtungen, die bei einem Code-Audit aufgefallen sind. Fall 1 war nur eine Bestätigung (kein Code), Fall 2–5 sind echte Korrekturen.'))
+content.push(bullet('Fall 1: Guthaben-Fristen bestätigt — Krankheits-Guthaben 10 Monate, Kursabbruch-Guthaben 2 Jahre mit Auszahl-Erinnerung (kein Code geändert).'))
+content.push(bullet('Fall 2: Kursabbruch löscht versehentlich KEIN Guthaben mehr.'))
+content.push(bullet('Fall 3: Warteliste-Vorgänge werden jetzt lückenlos im Protokoll mitgeschrieben.'))
+content.push(bullet('Fall 4: Account-Selbstlöschung räumt alle Daten explizit + meldet Auth-Fehler ehrlich.'))
+content.push(bullet('Fall 5: Absage-Fristen rechnen jetzt verlässlich in deutscher Zeit (Europe/Berlin).'))
+
+content.push(...ucase({
+  titel: 'Fall 1: Guthaben-Fristen bestätigt (Krankheit 10 Monate / Kursabbruch 2 Jahre)',
+  was: 'Bestätigung der zwei unterschiedlichen Guthaben-Fristen. Krankheits-Guthaben (source=„illness") ist 10 Monate ab Attest gültig; Kursabbruch-Guthaben (source=„cancellation_choice") ist 2 Jahre gültig und löst nach Ablauf eine Auszahl-Erinnerung an Sarah aus. Hier war nichts falsch — nur dokumentarisch verankert.',
+  wer: 'System / Dokumentation',
+  ablauf: [
+    'Krankheits-Guthaben: gültig bis Attest-Datum + 10 Monate (Welle G).',
+    'Kursabbruch-Guthaben: gültig 2 Jahre ab Vergabe (Welle H).',
+    'Nach Ablauf des 2-Jahre-Guthabens läuft täglich um 04:00 Uhr der Cron fn_check_guthaben_2y_expiry → Dashboard-Notification + E-Mail „admin_guthaben_2y_expiry" an Sarah mit der Bitte, den Betrag manuell zu erstatten.',
+  ],
+  regeln: [
+    'Beide Guthaben-Arten sind NUR mit einem neuen Kurs verrechenbar, nicht für Einzelstunden und nicht als Geld-Auszahlung (außer der manuellen 2-Jahre-Erstattung durch Sarah).',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Fall 2: Kursabbruch schützt Guthaben vor versehentlicher Löschung',
+  was: 'Beim kompletten Abbrechen eines Kurses (Admin) wurde bisher beim Aufräumen der Credits zu viel gelöscht — auch bereits vergebenes Guthaben hätte verschwinden können. Jetzt gilt dasselbe Schutzmuster wie beim Kurs-Löschen: Guthaben wird vom Kurs entkoppelt statt gelöscht.',
+  wer: 'Admin (Kursabbruch unter /admin/kurse)',
+  ablauf: [
+    'Sarah bricht einen Kurs ab.',
+    'Guthaben-Credits (model=„guthaben") werden vom Kurs gelöst (course_id wird geleert) und bleiben im Profil des Yogis erhalten.',
+    'Nur die normalen Kurs-Credits (nicht-Guthaben) dieses Kurses werden gelöscht.',
+  ],
+  regeln: [
+    'Identisches Verhalten wie beim Kurs-Löschen (deleteCourse) — die beiden Pfade sind jetzt konsistent.',
+    'Vergebenes Guthaben eines Yogis kann durch einen Kursabbruch nicht mehr verloren gehen.',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Fall 3: Warteliste-Vorgänge vollständig im Protokoll',
+  was: 'Bisher tauchten manche Warteliste-Vorgänge nur als E-Mail auf, aber nicht im Protokoll bzw. in der Yogi-Historie. Jetzt werden drei Vorgänge lückenlos protokolliert — jeweils mit Name, Stundentitel und Datum/Uhrzeit, sichtbar im zentralen Protokoll und in der Historie des einzelnen Yogis.',
+  wer: 'System (Warteliste-Automatik) + Yogi (Beitritt)',
+  ablauf: [
+    'Warteliste-Beitritt: Trägt sich ein Yogi auf eine Warteliste ein, wird das protokolliert („Auf Warteliste eingetragen").',
+    'Automatisches Nachrücken: Wird ein Yogi automatisch von der Warteliste eingebucht, wird das protokolliert („Von Warteliste nachgerückt") — in beiden Nachrück-Wegen der App.',
+    'Automatische Entfernung: Verbraucht ein Yogi durch das Nachrücken seinen letzten Credit, wird seine Entfernung von anderen Wartelisten protokolliert („Von Warteliste entfernt — letzter Credit verbraucht").',
+  ],
+  regeln: [
+    'Das Protokoll-Schreiben ist so abgesichert, dass ein Fehler beim Protokollieren das eigentliche Nachrücken nie abbricht.',
+    'Alle drei Vorgänge erscheinen sowohl im zentralen Protokoll als auch in der aufklappbaren Historie auf der Yogi-Detail-Seite.',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Fall 4: Account-Selbstlöschung voll abgesichert',
+  was: 'Beim Löschen des eigenen Accounts werden jetzt alle Yogi-Daten ausdrücklich entfernt (nicht nur über automatische Datenbank-Verknüpfungen). Schlägt die endgültige Zugangs-Löschung fehl, meldet das System das ehrlich und benachrichtigt Sarah — statt fälschlich „erfolgreich" zu melden.',
+  wer: 'Yogi (Profil → Account löschen)',
+  ablauf: [
+    'Vor der eigentlichen Zugangs-Löschung werden Buchungen, Credits, Benachrichtigungs-Protokoll und Wartelisten-Angebote des Yogis ausdrücklich gelöscht.',
+    'Erst danach wird der Auth-Zugang entfernt.',
+    'Schlägt die Auth-Löschung fehl, meldet die Route einen ehrlichen Fehler (kein „success") und legt eine Admin-Benachrichtigung „auth_delete_failed" an, damit Sarah nachfassen kann.',
+  ],
+  regeln: [
+    'Die Dashboard-Benachrichtigung „Account DSGVO-gelöscht" (mit Name + E-Mail) bleibt bewusst bestehen — sie wird für Sarahs manuelles Löschen der AGB-PDF im Google Drive gebraucht.',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Fall 5: Absage-Fristen in deutscher Zeit (Europe/Berlin)',
+  was: 'Die Stornofristen (z.B. 3 Stunden vor Stundenbeginn, 90-Minuten-Grenze) werden jetzt verlässlich in deutscher Zeitzone berechnet — unabhängig davon, welche Zeitzone das Gerät des Yogis eingestellt hat. Am Absage-Button steht ein klarer Hinweis dazu.',
+  wer: 'Yogi (Abmeldung von einer Stunde)',
+  ablauf: [
+    'Stundenbeginn und die 3-Stunden- bzw. 90-Minuten-Grenze werden anhand der deutschen Wand-Uhrzeit (Europe/Berlin) berechnet.',
+    'Am „Ja, abmelden"-Button erscheint der Hinweis „Für alle Fristen gilt die deutsche Zeitzone (Europe/Berlin)."',
+  ],
+  regeln: [
+    'Falls die Berlin-Berechnung einmal nicht möglich ist, greift als Rückfall die bisherige Geräte-Zeit — die Frist wird also nie komplett umgangen.',
+    'Bei kostenlosen (Charity-)Stunden gibt es weiterhin keine Frist und keinen Credit-Verlust; der Hinweis erscheint dort nicht.',
+  ],
+  texte: [
+    'Für alle Fristen gilt die deutsche Zeitzone (Europe/Berlin).',
   ],
 }))
 

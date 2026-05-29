@@ -192,7 +192,7 @@ serve(async (req) => {
         } else if (isPaidEvent) {
           infoBlock = `<p style="font-size:15px">Du stehst jetzt auf der Warteliste für <strong>„${cn}"</strong>.</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 ${fmtDate(data.date,data.timeStart)}</p><p style="margin:4px 0;font-size:14px">👥 Position: <strong>${esc(data.position)}</strong></p>`)}${hl(`<p style="margin:0 0 8px;font-size:14px;font-weight:bold">Wichtig — verbindliche Buchung:</p><p style="margin:4px 0;font-size:13px">Wenn ein Platz frei wird, rückst Du automatisch nach. Damit wird deine Anmeldung <strong>verbindlich gebucht</strong>.</p><p style="margin:4px 0;font-size:13px">⚠️ Beachte die Stornofrist — nur bis <strong>7 Tage</strong> vorher kostenfrei. Danach fällt die volle Gebühr an, außer du ernennst einen Ersatzteilnehmer.</p>`,'#fff3d6')}`
         } else {
-          infoBlock = `<p style="font-size:15px">du stehst auf der Warteliste.</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 ${fmtDate(data.date,data.timeStart)}</p><p style="margin:4px 0;font-size:14px">${KL}: ${cn}</p><p style="margin:4px 0;font-size:14px">👥 Position: <strong>${esc(data.position)}</strong></p>`)}<p style="font-size:15px">Du wirst automatisch eingebucht, sobald ein Platz frei wird. Du hast dann <strong>1 Stunde Zeit</strong>, dich kostenlos abzumelden.</p><p style="font-size:13px;color:#666">Wird ein Platz weniger als 90 Minuten vor Stundenbeginn frei, bekommen alle Wartelisten-Yogis eine Auswahl-Mail — wer zuerst klickt, kriegt den Platz.</p>`
+          infoBlock = `<p style="font-size:15px">du stehst auf der Warteliste.</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 ${fmtDate(data.date,data.timeStart)}</p><p style="margin:4px 0;font-size:14px">${KL}: ${cn}</p><p style="margin:4px 0;font-size:14px">👥 Position: <strong>${esc(data.position)}</strong></p>`)}<p style="font-size:15px">Du wirst automatisch eingebucht, sobald ein Platz frei wird. Du hast dann <strong>60 Minuten Zeit</strong>, dich kostenlos abzumelden.</p><p style="font-size:13px;color:#666">Wird ein Platz weniger als 90 Minuten vor Stundenbeginn frei, bekommen alle Wartelisten-Yogis ein Spätangebot — wer zuerst klickt, kriegt den Platz.</p>`
         }
         html = base(`<p style="font-size:15px">Hallo ${fn},</p>${infoBlock}${btn('Zur Warteliste',APP_URL+'/warteliste')}${btn('Wieder austragen',unsubscribeUrl,'#6b2a2a')}${LG}`)
         break
@@ -210,7 +210,7 @@ serve(async (req) => {
         } else if (isFreeEvent) {
           regelBlock = hl(`<p style="margin:0 0 8px;font-size:14px;font-weight:bold">Gut zu wissen</p><p style="margin:4px 0;font-size:13px">✅ Das Event ist kostenlos — einfach kommen und mitmachen.</p><p style="margin:4px 0;font-size:13px">✅ Du kannst Dich jederzeit wieder abmelden.</p>`,'#e8ede6')
         } else {
-          regelBlock = `<p style="font-size:15px">Du hast <strong>1 Stunde Zeit</strong>, dich kostenlos abzumelden.</p>`
+          regelBlock = `<p style="font-size:15px">Du hast <strong>60 Minuten Zeit</strong>, dich — auch innerhalb der 3-Stunden-Abmeldefrist — kostenlos abzumelden. Dein Credit kommt dann zurück.</p>`
         }
         // Sarah-Regel 2026-05-28: Bei Kurs-/Einzelstunden zusätzlich einen direkten
         // "Wieder absagen"-Button — fuer den Fall, dass man versehentlich
@@ -225,7 +225,7 @@ serve(async (req) => {
       case 'waitlist_offer_late': {
         subject = `Letzte Chance: ${data.courseName} in Kürze`
         const acceptUrl = `${APP_URL}/warteliste/angebot/${encodeURIComponent(data.offerToken || '')}`
-        html = base(`<p style="font-size:15px">Hallo ${fn},</p><p style="font-size:15px">ein Platz wurde gerade frei — aber es ist weniger als 90 Minuten vor Stundenbeginn.</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">${KL}: ${cn}</p>`,'#fff3d6')}<p style="font-size:15px"><strong>Alle Wartelisten-Yogis bekommen diese Mail — wer zuerst klickt, bekommt den Platz.</strong></p>${btn('Ja, ich nehme den Platz',acceptUrl,'#3a5a30')}<p style="font-size:13px;color:#666">Wenn du nicht reagierst, passiert nichts — du bleibst auf der Warteliste und bekommst erneut eine Nachricht, falls wieder ein Platz frei wird.</p>${LG}`)
+        html = base(`<p style="font-size:15px">Hallo ${fn},</p><p style="font-size:15px">ein Platz wurde gerade frei — aber es ist weniger als 90 Minuten vor Beginn. Das ist unser <strong>Spätangebot</strong>:</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">${KL}: ${cn}</p>`,'#fff3d6')}<p style="font-size:15px"><strong>Alle Wartenden bekommen dieses Spätangebot — wer zuerst klickt, bekommt den Platz.</strong></p>${btn('Ja, ich nehme den Platz',acceptUrl,'#3a5a30')}<p style="font-size:13px;color:#666">Wenn du nicht reagierst, passiert nichts — du bleibst auf der Warteliste und bekommst erneut eine Nachricht, falls wieder ein Platz frei wird.</p>${LG}`)
         break
       }
       case 'waitlist_removed_credit_used_elsewhere':

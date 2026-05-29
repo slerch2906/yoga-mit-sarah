@@ -20,12 +20,16 @@ const SRC = () => fs.readFileSync(path.join(process.cwd(), 'app/kurse/[id]/page.
 // Die 6 exakten Strings (Kurs/Single >90, Kurs/Single ≤90, Event-frei >90,
 // Event-frei ≤90, Event-bezahlt >90, Event-bezahlt ≤90).
 const TEXTS = {
+  // Vorab-Hinweis-Box bei Kurs/Einzelstunde (Sarah-Spec 2026-05-29): trägt die
+  // Detail-Erklärung VOR dem Eintragen, daher Status-Box (over90) gekürzt.
+  courseSinglePreJoin:
+    'Wenn du dich auf die Warteliste setzt, rückst du <strong>bis 90 Minuten vor Beginn</strong> automatisch nach, sobald ein Platz frei wird (du brauchst dafür einen freien Credit). Du hast dann <strong>60 Minuten</strong> Zeit, dich — auch innerhalb der 3-Stunden-Abmeldefrist — kostenlos wieder abzumelden, dein Credit kommt zurück. <strong>Ab 90 Minuten vor Beginn</strong> bekommen alle Wartenden gleichzeitig ein <strong>Spätangebot</strong> — wer zuerst zusagt, bekommt den Platz.',
   courseSingleOver90:
-    'Du rückst bis 90 Minuten vor Stundenbeginn automatisch nach, sobald ein Platz frei wird. Du hast dann, auch innerhalb der 3 Stunden Abmeldefrist, 60 Minuten Zeit, dich noch kostenlos abzumelden — dein Credit kommt dann zurück. Ab 90 Minuten vor Stundenbeginn bekommen alle wartenden Yogis gleichzeitig eine Mail — wer zuerst zusagt, bekommt den Platz.',
+    'Du rückst bis 90 Minuten vor Beginn automatisch nach. Du hast dann 60 Minuten Zeit, dich kostenlos abzumelden (Credit zurück). Ab 90 Minuten vorher: Spätangebot an alle — wer zuerst zusagt, bekommt den Platz.',
   courseSingleUnder90:
     'So kurz vor Beginn rückst du nicht mehr automatisch nach, das könnte für einige zu kurzfristig sein. Wird jetzt noch ein Platz frei, bekommen alle Wartenden gleichzeitig ein Spätangebot — wer zuerst zusagt, bekommt den Platz.',
   eventFreeOver90:
-    'Du rückst automatisch nach, sobald ein Platz frei wird. Abmelden ist jederzeit kostenlos möglich.',
+    'Du rückst bis 90 Minuten vor Beginn automatisch nach. Abmelden ist jederzeit kostenlos. Ab 90 Minuten vorher: Spätangebot an alle — wer zuerst zusagt, bekommt den Platz.',
   eventFreeUnder90:
     'So kurz vor Beginn rückst du nicht mehr automatisch nach. Wird jetzt noch ein Platz frei, bekommen alle Wartenden gleichzeitig ein Spätangebot — wer zuerst zusagt, bekommt den Platz.',
   eventPaidOver90:
@@ -35,6 +39,13 @@ const TEXTS = {
 }
 
 test.describe('[E2E-Text] Wartelisten-Hinweise — eingefrorenes Wording (Sarah-Spec)', () => {
+  test('Kurs/Einzelstunde: Vorab-Hinweis-Box (vor dem Eintragen) vorhanden', () => {
+    const src = SRC()
+    expect(src).toContain(TEXTS.courseSinglePreJoin)
+    // Box wird NUR bei Nicht-Events gezeigt
+    expect(src).toMatch(/!isEvent\s*&&/)
+  })
+
   test('Kurs/Einzelstunde > 90 Min: exakter Text vorhanden', () => {
     expect(SRC()).toContain(TEXTS.courseSingleOver90)
   })

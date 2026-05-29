@@ -583,10 +583,10 @@ export default function SessionDetailPage() {
     : isEventFree
     ? (within90min
         ? 'So kurz vor Beginn rückst du nicht mehr automatisch nach. Wird jetzt noch ein Platz frei, bekommen alle Wartenden gleichzeitig ein Spätangebot — wer zuerst zusagt, bekommt den Platz.'
-        : 'Du rückst automatisch nach, sobald ein Platz frei wird. Abmelden ist jederzeit kostenlos möglich.')
+        : 'Du rückst bis 90 Minuten vor Beginn automatisch nach. Abmelden ist jederzeit kostenlos. Ab 90 Minuten vorher: Spätangebot an alle — wer zuerst zusagt, bekommt den Platz.')
     : (within90min
         ? 'So kurz vor Beginn rückst du nicht mehr automatisch nach, das könnte für einige zu kurzfristig sein. Wird jetzt noch ein Platz frei, bekommen alle Wartenden gleichzeitig ein Spätangebot — wer zuerst zusagt, bekommt den Platz.'
-        : 'Du rückst bis 90 Minuten vor Stundenbeginn automatisch nach, sobald ein Platz frei wird. Du hast dann, auch innerhalb der 3 Stunden Abmeldefrist, 60 Minuten Zeit, dich noch kostenlos abzumelden — dein Credit kommt dann zurück. Ab 90 Minuten vor Stundenbeginn bekommen alle wartenden Yogis gleichzeitig eine Mail — wer zuerst zusagt, bekommt den Platz.')
+        : 'Du rückst bis 90 Minuten vor Beginn automatisch nach. Du hast dann 60 Minuten Zeit, dich kostenlos abzumelden (Credit zurück). Ab 90 Minuten vorher: Spätangebot an alle — wer zuerst zusagt, bekommt den Platz.')
 
   // Welle 2.9 (Sarah 2026-05-26): Effective-Open-Logik. SYS-Container haben
   // is_open=false (Container ist NIE buchbar). Daher fuer single/event_*
@@ -1033,6 +1033,17 @@ export default function SessionDetailPage() {
                           <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 mb-3">
                             <p className="text-sm text-yoga-amber-text leading-relaxed">
                               Wenn du dich auf die Warteliste setzen lässt, rückst Du automatisch nach, wenn ein Platz frei wird. Damit wird deine Anmeldung <strong>verbindlich gebucht</strong>. Beachte die Stornofrist — nur bis <strong>7 Tage</strong> vorher — danach fällt die volle Gebühr an, außer du ernennst einen Ersatzteilnehmer.
+                            </p>
+                          </div>
+                        )}
+                        {/* Sarah-Spec 2026-05-29: Vorab-Hinweis bei Kurs/Einzelstunde
+                            (analog zu Events). Erklärt die Nachrück-Mechanik VOR dem
+                            Eintragen; Status-Box fasst sich danach kürzer. NUR auf
+                            Sarahs Auftrag ändern (Test 48 friert das Wording ein). */}
+                        {!isEvent && (
+                          <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 mb-3">
+                            <p className="text-sm text-yoga-amber-text leading-relaxed">
+                              Wenn du dich auf die Warteliste setzt, rückst du <strong>bis 90 Minuten vor Beginn</strong> automatisch nach, sobald ein Platz frei wird (du brauchst dafür einen freien Credit). Du hast dann <strong>60 Minuten</strong> Zeit, dich — auch innerhalb der 3-Stunden-Abmeldefrist — kostenlos wieder abzumelden, dein Credit kommt zurück. <strong>Ab 90 Minuten vor Beginn</strong> bekommen alle Wartenden gleichzeitig ein <strong>Spätangebot</strong> — wer zuerst zusagt, bekommt den Platz.
                             </p>
                           </div>
                         )}

@@ -15,7 +15,8 @@
     "test:e2e:waitlist": "playwright test tests/e2e/03-waitlist.spec.ts",
     "test:e2e:admin": "playwright test tests/e2e/admin/",
     "test:e2e:meine": "playwright test tests/e2e/06-meine.spec.ts",
-    "test:cleanup": "ts-node --project tsconfig.test.json -e \"const {cleanupAllE2EData}=require('./tests/utils/seed');cleanupAllE2EData().then(()=>console.log('Cleanup fertig')).catch(console.error)\""
+    "test:cleanup": "ts-node --project tsconfig.test.json -e \"const {cleanupAllE2EData}=require('./tests/utils/seed');cleanupAllE2EData().then(()=>console.log('Cleanup fertig')).catch(console.error)\"",
+    "test:szenario:spaetangebot": "ts-node --project tsconfig.test.json scripts/setup-spaetangebot-szenario.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.3.0",

@@ -2197,13 +2197,13 @@ export default function AdminKursePage() {
                 Auf kleinen Screens als Stack. Icons: ti-school / ti-yoga / ti-confetti. */}
             <div className="grid grid-cols-3 max-md:grid-cols-1 gap-2 mb-4">
               <button onClick={() => setShowForm(true)} className="btn-primary text-sm">
-                <i className="ti ti-school mr-1" /> Neuen Kurs anlegen
+                Neuer Kurs
               </button>
               <button onClick={() => setShowSingleForm(true)} className="btn-primary text-sm">
-                <i className="ti ti-yoga mr-1" /> Einzelstunde anlegen
+                Neue Einzelstunde
               </button>
               <button onClick={() => setShowEventForm(true)} className="btn-primary text-sm">
-                <i className="ti ti-confetti mr-1" /> Event anlegen
+                Neues Event
               </button>
             </div>
             {/* Welle 2.5 (Sarah 2026-05-26): Klar getrennte Reihenfolge —

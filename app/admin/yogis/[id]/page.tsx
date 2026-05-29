@@ -608,14 +608,11 @@ export default function AdminYogiDetailPage() {
           .select('id').eq('user_id', id).in('session_id', sessionIds).eq('status', 'active')
         cancelledCourseBookings = (bksToCancel || []).length
         if (cancelledCourseBookings > 0) {
-          // Sarah-BugFix 2026-05-26: cancel_late=TRUE (war false).
-          // Hintergrund: Der DB-Trigger recalc_credit_used zaehlt cancelled
-          // bookings nur dann als verbraucht, wenn cancel_late=true. Mit
-          // cancel_late=false wurde der alte Course-Credit zurueckgebucht
-          // (used--) UND parallel ein neuer Illness-Credit angelegt — Yogi
-          // hatte die Stunden DOPPELT. Loesung: Course-Credit bleibt als
-          // verbraucht markiert (kein Rueckfluss), Yogi nutzt den neuen
-          // Illness-Guthaben als Ersatz fuer den naechsten Kurs.
+          // cancel_late=TRUE: kein Credit-Rueckfluss waehrend der Stornierung
+          // (der DB-Trigger recalc_credit_used wuerde den alten Course-Credit
+          // sonst zurueckbuchen). Der alte Course-Credit wird ohnehin in
+          // Schritt 5b komplett geloescht — der Wert steckt im neuen
+          // Krankheits-Guthaben (Schritt 5). So kein Doppel-Credit.
           await supabase.from('bookings').update({
             status: 'cancelled',
             cancelled_at: new Date().toISOString(),
@@ -685,6 +682,25 @@ export default function AdminYogiDetailPage() {
           source: 'illness',
         } as any).select().single()
         newCreditId = newCredit?.id || null
+      }
+
+      // 5b) Alten Kurs-Credit DIESES Kurses loeschen (Sarah-Fix 2026-05-28).
+      //     Vorher blieb er als used=total stehen → in /meine hing eine
+      //     "0 / X genutzt"-Karte. Jetzt sauber loeschen — exakt wie beim
+      //     Kursabbruch; der Wert steckt vollstaendig im neuen Krankheits-
+      //     Guthaben (Schritt 5). Buchungen + Enrollment vorher entkoppeln,
+      //     sonst blockieren die FKs den DELETE still.
+      //     courseCreditIds wurde in Schritt 2 erfasst — VOR Anlage des neuen
+      //     Guthabens — enthaelt also nur die alten Course-Credits, nicht das
+      //     gerade angelegte Krankheits-Guthaben.
+      if (courseCreditIds.size > 0) {
+        const oldCreditIds = Array.from(courseCreditIds)
+        await supabase.from('bookings').update({ credit_id: null })
+          .eq('user_id', id).in('credit_id', oldCreditIds)
+        await supabase.from('enrollments').update({ credit_id: null })
+          .eq('user_id', id).in('credit_id', oldCreditIds)
+        const { error: oldCredDelErr } = await supabase.from('credits').delete().in('id', oldCreditIds)
+        if (oldCredDelErr) console.error('illness: Loeschen des alten Kurs-Credits fehlgeschlagen:', oldCredDelErr)
       }
 
       // 6) Audit-Log

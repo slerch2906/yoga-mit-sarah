@@ -104,6 +104,21 @@ test.describe('[E2E] Krankheits-Austragung — echter DB-Flow', () => {
         } as any)
       }
 
+      // 5b) Alten Kurs-Credit dieses Kurses loeschen (Sarah-Fix 2026-05-28).
+      //     Mirror des Handlers cancelEnrollmentDueToIllness: Buchungen
+      //     entkoppeln, dann den model='course'-Credit dieses Kurses loeschen.
+      //     Verhindert Doppel-Credit (alter Kurs-Credit + neues Guthaben).
+      const { data: oldCourseCreds } = await db.from('credits')
+        .select('id').eq('user_id', yogiId).eq('course_id', courseId)
+      const oldCourseCreditIds = (oldCourseCreds || []).map(c => c.id)
+      if (oldCourseCreditIds.length > 0) {
+        await db.from('bookings').update({ credit_id: null })
+          .eq('user_id', yogiId).in('credit_id', oldCourseCreditIds)
+        await db.from('enrollments').update({ credit_id: null })
+          .eq('user_id', yogiId).in('credit_id', oldCourseCreditIds)
+        await db.from('credits').delete().in('id', oldCourseCreditIds)
+      }
+
       // 6) Audit-Log eintrag
       await db.from('audit_log').insert({
         user_id: yogiId,
@@ -148,6 +163,14 @@ test.describe('[E2E] Krankheits-Austragung — echter DB-Flow', () => {
       expect(illnessCred?.model).toBe('guthaben')
       expect(illnessCred?.total).toBe(cancelledCount)
       expect(illnessCred?.used).toBe(0)
+
+      // d2) KEIN alter Kurs-Credit mehr (Sarah-Fix 2026-05-28): der model='course'
+      //     Credit dieses Kurses muss geloescht sein — sonst Doppel-Credit
+      //     (haengende "0 / X genutzt"-Karte in /meine zusaetzlich zum Guthaben).
+      const { data: leftoverCourseCred } = await db.from('credits')
+        .select('id').eq('user_id', yogiId).eq('course_id', courseId).eq('model', 'course')
+      expect(leftoverCourseCred?.length ?? 0,
+        'Alter Kurs-Credit muss nach Krankheits-Austragung geloescht sein').toBe(0)
       // Expiry-Check: ca. 10 Monate ab Attest-Datum (Toleranz 2 Tage)
       const expiryDt = new Date(illnessCred!.expires_at as string)
       const expectedDt = new Date(attestDateStr)

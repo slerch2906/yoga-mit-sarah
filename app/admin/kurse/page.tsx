@@ -1512,9 +1512,15 @@ export default function AdminKursePage() {
   async function loadParticipants(course: any) {
     const { data } = await supabase
       .from('enrollments')
-      .select('user_id, enrolled_from_unit, enrolled_until_unit, profile:profiles(id, first_name, last_name, email, is_dummy), credits(total, used, expires_at, course_id)')
+      .select('user_id, enrolled_from_unit, enrolled_until_unit, end_date, profile:profiles(id, first_name, last_name, email, is_dummy), credits(total, used, expires_at, course_id)')
       .eq('course_id', course.id)
-    const members = (data || []).map((e: any) => ({
+    // Sarah-Fix 2026-05-28: Beendete Enrollments (z.B. krankheitsbedingt
+    // ausgetragen) sind KEINE aktiven Teilnehmer mehr — exakt dieselbe
+    // Filter-Regel wie der Kurskarten-Counter (loadData), damit die
+    // Teilnehmer-Anzeige ueber alle Quellen hinweg konsistent ist.
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const activeEnrollments = (data || []).filter((e: any) => !e.end_date || e.end_date > todayStr)
+    const members = (activeEnrollments).map((e: any) => ({
       ...e.profile,
       enrolled_from_unit: e.enrolled_from_unit,
       enrolled_until_unit: e.enrolled_until_unit,

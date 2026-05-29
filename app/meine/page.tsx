@@ -346,6 +346,9 @@ export default function MeinePage() {
               const expiryFormatted = new Date(c.expires_at).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })
               // Restzeit in Tagen — immer anzeigen (Welle G Sarah-Wunsch)
               const daysLeft = Math.max(0, Math.ceil((new Date(c.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+              // Sarah-Wunsch 2026-05-28: Herkunfts-Kurstitel auch beim
+              // Krankheits-Guthaben anzeigen ("aus Kurs: X").
+              const illnessCourseName = isIllness ? (c.course?.name?.trim() || null) : null
               // Sarah-Wunsch 2026-05-28: bei Kursabbruch-Guthaben Herkunft anzeigen
               // — Kurstitel + Abbruch-Datum (= Anlage-Datum des Guthabens).
               const cancelCourseName = !isIllness ? (c.course?.name?.trim() || null) : null
@@ -365,6 +368,11 @@ export default function MeinePage() {
                       <div className="text-xs text-yoga-amber-text mt-1">
                         {isIllness ? 'Aus Krankheits-Austragung — gültig bis ' + expiryFormatted : 'Kursguthaben aus Kursabbruch — gültig bis ' + expiryFormatted}
                       </div>
+                      {isIllness && illnessCourseName && (
+                        <div className="text-xs text-yoga-text/55 mt-0.5">
+                          aus Kurs: {illnessCourseName}
+                        </div>
+                      )}
                       {!isIllness && (cancelCourseName || cancelDateStr) && (
                         <div className="text-xs text-yoga-text/55 mt-0.5">
                           {cancelCourseName ? `Kurs: ${cancelCourseName}` : 'Kurs unbekannt'}

@@ -680,7 +680,7 @@ export default function AdminKursePage() {
       // Bookings stornieren
       for (const b of (actBookings || []) as any[]) {
         await supabase.from('bookings').update({
-          status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false,
+          status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false, cancelled_by: 'admin',
         }).eq('id', b.id)
         if (b.profile?.email) {
           try {
@@ -825,7 +825,7 @@ export default function AdminKursePage() {
       const freedVorholSessionIds: string[] = []
       for (const b of toCancel) {
         await supabase.from('bookings').update({
-          status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false
+          status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false, cancelled_by: 'admin'
         }).eq('id', b.id)
         if (b.session?.id) freedVorholSessionIds.push(b.session.id)
         // Sarah-Regel 2026-05-28: KEINE separate Absage-Mail pro Vorhol-/Nachhol-
@@ -907,7 +907,7 @@ export default function AdminKursePage() {
 
       // Bookings stornieren (Trigger feuert → setzt credit.used neu)
       if (futureSessionIds.length > 0) {
-        await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+        await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_by: 'admin' })
           .eq('user_id', prof.id).in('session_id', futureSessionIds)
       }
 
@@ -928,7 +928,7 @@ export default function AdminKursePage() {
         const futureDropIns = (creditBookings || []).filter((b: any) => b.session?.date && b.session.date >= todayIso)
         if (futureDropIns.length > 0) {
           await supabase.from('bookings')
-            .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), credit_id: null })
+            .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), credit_id: null, cancelled_by: 'admin' })
             .in('id', futureDropIns.map((b: any) => b.id))
           for (const sid of Array.from(new Set(futureDropIns.map((b: any) => b.session.id)))) {
             try { await promoteWaitlistOrOfferLate(supabase, sid as string) } catch (e) { console.error('promote (dropin-cascade):', e) }
@@ -1842,7 +1842,7 @@ export default function AdminKursePage() {
       within7d = (sessionStart - Date.now()) <= 7 * 24 * 60 * 60 * 1000 && sessionStart > Date.now()
     }
     await supabase.from('bookings').update({
-      status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false,
+      status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false, cancelled_by: 'admin',
     }).eq('id', bookingId)
     await supabase.from('audit_log').insert({
       action: 'booking_cancelled_by_admin',

@@ -68,7 +68,7 @@ function AnwesenheitInner() {
       : ((session as any)?.course?.name || '')
 
     for (const b of bookings) {
-      await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString() }).eq('id', b.id)
+      await supabase.from('bookings').update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_by: 'admin' }).eq('id', b.id)
       // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
       // Email an jeden Yogi
       if (b.profile?.email) {

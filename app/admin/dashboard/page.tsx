@@ -17,6 +17,8 @@ import AdminBirthdayBanner from '@/components/AdminBirthdayBanner'
 // Welle S3/Pattern 3 (Sarah 2026-05-27): defensive Date-Parsing.
 import { parseSessionDateTime } from '@/lib/session-time'
 import { sessionDisplayName } from '@/lib/session-display'
+// Welle Akteur-Logik (Sarah 2026-05-29): Ausgetragen (Admin) vs. Abgemeldet (selbst)
+import { cancelledActorLabel } from '@/lib/session-status'
 
 const WEEKDAYS = ['So','Mo','Di','Mi','Do','Fr','Sa']
 const MONTHS = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']
@@ -234,7 +236,7 @@ export default function AdminDashboard() {
       }
       if (!confirm(confirmText)) return
       await supabase.from('bookings').update({
-        status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false,
+        status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false, cancelled_by: 'admin',
       }).eq('id', bookingId)
       // Welle 6A (Sarah 2026-05-27): within_7d + name für klares Protokoll
       let _within7d = false
@@ -303,7 +305,7 @@ export default function AdminDashboard() {
     setCancelChoice(null)
 
     await supabase.from('bookings').update({
-      status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: cancelLate
+      status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: cancelLate, cancelled_by: 'admin'
     }).eq('id', bookingId)
 
     // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
@@ -589,7 +591,7 @@ export default function AdminDashboard() {
       : ((selectedSession as any).course?.name || selectedSession.course_name || '')
     for (const b of activeBookings) {
       await supabase.from('bookings').update({
-        status: 'cancelled', cancelled_at: new Date().toISOString()
+        status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_by: 'admin'
       }).eq('id', b.id)
       // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
       // Welle 6.1 (Sarah 2026-05-27): Yogi-Dashboard-Banner anlegen
@@ -1131,7 +1133,7 @@ export default function AdminDashboard() {
                       href={`/admin/yogis/${b.user_id}`}
                       className="card mb-2 opacity-60 w-full text-left flex items-center justify-between no-underline text-yoga-text cursor-pointer hover:opacity-80 transition-opacity">
                       <div className="text-sm">{b.profile?.first_name} {b.profile?.last_name}</div>
-                      <span className="badge badge-left">Ausgetragen</span>
+                      <span className="badge badge-left">{cancelledActorLabel(b)}</span>
                     </Link>
                   ))}
                 </>

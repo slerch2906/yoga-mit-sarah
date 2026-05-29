@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Email } from '@/lib/email'
-import { isActive, isStarted, countActiveFutureUnits, isExcluded } from '@/lib/session-status'
+import { isActive, isStarted, countActiveFutureUnits, isExcluded, bookingStatusLabel, cancelledActorLabel } from '@/lib/session-status'
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
@@ -78,7 +78,7 @@ export default function AdminYogiDetailPage() {
     const [{ data: y }, { data: b }, { data: c }, { data: e }, { data: courseList }, { data: al }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', id).single(),
       supabase.from('bookings')
-        .select('*, session:sessions!bookings_session_id_fkey(id, date, time_start, duration_min, is_cancelled, replacement_session_id, course_id, name, session_type, course:courses(name, is_active, is_cancelled))')
+        .select('*, session:sessions!bookings_session_id_fkey(id, date, time_start, duration_min, is_cancelled, cancel_reason, replacement_session_id, course_id, name, session_type, course:courses(name, is_active, is_cancelled))')
         .eq('user_id', id).order('created_at', { ascending: false }),
       supabase.from('credits').select('*, course:courses(name)').eq('user_id', id).order('created_at', { ascending: false }),
       supabase.from('enrollments').select('*, course:courses(*, sessions(id, date, time_start, is_cancelled, cancel_reason, replacement_session_id, course_id))').eq('user_id', id),
@@ -215,6 +215,10 @@ export default function AdminYogiDetailPage() {
     await supabase.from('credits').delete().eq('user_id', id)
     await supabase.from('waitlist').delete().eq('user_id', id)
     await supabase.from('notification_log').delete().eq('user_id', id)
+    // Finding E1 (2026-05-29): Kursabbruch-Wahl-Tokens räumen — sonst blockiert ihr
+    // FK (course_cancellation_responses.user_id → profiles, NO ACTION) die profiles-
+    // Cascade beim Auth-Delete → Route 502, Auth-User bliebe trotz "gelöscht"-Mail.
+    await supabase.from('course_cancellation_responses').delete().eq('user_id', id)
 
     // 1b. Wartelisten der freigewordenen Stunden automatisch nachruecken
     //     (Sarah-Wunsch 2026-05-25, gleiches Verhalten wie bei Yogi-Selbst-Loeschung)
@@ -617,6 +621,7 @@ export default function AdminYogiDetailPage() {
             status: 'cancelled',
             cancelled_at: new Date().toISOString(),
             cancel_late: true,
+            cancelled_by: 'admin',
           }).eq('user_id', id).in('session_id', sessionIds).eq('status', 'active')
         }
       }
@@ -644,6 +649,7 @@ export default function AdminYogiDetailPage() {
           status: 'cancelled',
           cancelled_at: new Date().toISOString(),
           cancel_late: true, // ersatzlos → kein Credit-Rueckfluss
+          cancelled_by: 'admin',
         }).eq('id', b.id)
         if (b.session_id) vorholSessionIds.push(b.session_id)
       }
@@ -761,7 +767,7 @@ export default function AdminYogiDetailPage() {
 
     if (sessionIds.length > 0) {
       await supabase.from('bookings').update({
-        status: 'cancelled', cancelled_at: new Date().toISOString()
+        status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_by: 'admin'
       }).eq('user_id', id).in('session_id', sessionIds).eq('status', 'active')
 
       // Sarah-Regel 2026-05-23: zentraler Helper mit 90-Min-Cutoff.
@@ -835,8 +841,14 @@ export default function AdminYogiDetailPage() {
 
   // "Teilgenommen" ab Stundenstart — Logik aus lib/session-status.ts
   function getStatusBadge(b: any) {
-    if (b.status === 'cancelled') return <span className="badge badge-left">Ausgetragen</span>
-    if (isStarted(b.session)) return <span className="badge badge-done">Teilgenommen </span>
+    // Welle Akteur-Logik (Sarah 2026-05-29): zentrales Status-Wort.
+    // Fix U2: Session-Absage (Abgesagt/Ausgeschlossen) hat jetzt Vorrang.
+    // Fix U1: Storno-Akteur unterscheidet Ausgetragen (Admin) vs. Abgemeldet (selbst).
+    const label = bookingStatusLabel(b.session, b)
+    if (label === 'Ausgeschlossen') return <span className="badge badge-left">Ausgeschlossen</span>
+    if (label === 'Abgesagt') return <span className="badge" style={{background:'var(--yoga-red-bg)',color:'var(--yoga-red-text)'}}>Abgesagt</span>
+    if (label === 'Ausgetragen' || label === 'Abgemeldet') return <span className="badge badge-left">{label}</span>
+    if (label === 'Teilgenommen') return <span className="badge badge-done">Teilgenommen </span>
     return <span className="badge badge-enrolled">Angemeldet</span>
   }
 
@@ -1569,7 +1581,8 @@ export default function AdminYogiDetailPage() {
                               ? { label: 'Teilgenommen', bg: '#e8ede6', fg: '#3a5a30' }
                               : { label: 'Eingebucht', bg: '#e8ede6', fg: '#3a5a30' }
                           } else if (myBooking?.status === 'cancelled') {
-                            badge = { label: 'Abgemeldet', bg: '#f0eded', fg: '#7a6a6a' }
+                            // Welle Akteur-Logik (Sarah 2026-05-29): Ausgetragen (Admin) vs. Abgemeldet (selbst)
+                            badge = { label: cancelledActorLabel(myBooking), bg: '#f0eded', fg: '#7a6a6a' }
                           } else {
                             // Kein Booking — Yogi war für diese Session nicht eingebucht (mid-course Einstieg)
                             badge = { label: '—', bg: '#f5f2f0', fg: '#999' }

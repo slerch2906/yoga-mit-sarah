@@ -39,7 +39,7 @@ function BestaetigungInner() {
       .select('*').eq('session_id', id).eq('user_id', user.id).eq('status', 'active').single()
     if (booking) {
       await supabase.from('bookings').update({
-        status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false
+        status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false, cancelled_by: 'self'
       }).eq('id', booking.id)
       // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
     }

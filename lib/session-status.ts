@@ -100,3 +100,48 @@ export function sessionStatusLabel(s: SessionLike | null | undefined):
   if (isStarted(s)) return 'Vergangen'
   return 'Aktiv'
 }
+
+/** Buchung mit Status + (seit 2026-05-29) Akteur einer Stornierung. */
+export type BookingLike = {
+  status?: string | null
+  cancelled_by?: string | null
+}
+
+/**
+ * Akteur-Wort für eine STORNIERTE Buchung (Sarah-Regel 2026-05-29):
+ *   'admin'     → 'Ausgetragen'  (Sarah/Admin hat den Yogi herausgenommen)
+ *   'self'/NULL → 'Abgemeldet'   (Yogi selbst; NULL = Altbestand ohne Herkunft)
+ *
+ * WICHTIG: Eine Session-Absage (isCancelled) hat in der Anzeige IMMER Vorrang
+ * ('Abgesagt') und wird VOR diesem Helfer geprüft — siehe bookingStatusLabel.
+ */
+export function cancelledActorLabel(
+  booking: BookingLike | null | undefined,
+): 'Ausgetragen' | 'Abgemeldet' {
+  return booking?.cancelled_by === 'admin' ? 'Ausgetragen' : 'Abgemeldet'
+}
+
+/**
+ * Vollständiges Status-Wort einer Buchung in einer Session.
+ * Reihenfolge (Vorrang von oben nach unten):
+ *   1. Session ausgeschlossen           → 'Ausgeschlossen'
+ *   2. Session abgesagt                 → 'Abgesagt'
+ *   3. Buchung storniert (Akteur!)      → 'Ausgetragen' | 'Abgemeldet'
+ *   4. Buchung aktiv & Stunde gestartet → 'Teilgenommen'
+ *   5. Buchung aktiv & zukünftig        → null
+ *      (Aufrufer rendert 'Angemeldet' bzw. 'Eingebucht')
+ *
+ * Fehlende Buchung (null) wird wie 'storniert' behandelt → 'Abgemeldet'
+ * (entspricht der bisherigen /meine-Logik: `!mb || status==='cancelled'`).
+ */
+export function bookingStatusLabel(
+  session: SessionLike | null | undefined,
+  booking: BookingLike | null | undefined,
+):
+  | 'Ausgeschlossen' | 'Abgesagt' | 'Ausgetragen' | 'Abgemeldet' | 'Teilgenommen' | null {
+  if (isExcluded(session)) return 'Ausgeschlossen'
+  if (isCancelled(session)) return 'Abgesagt'
+  if (!booking || booking.status === 'cancelled') return cancelledActorLabel(booking)
+  if (isStarted(session)) return 'Teilgenommen'
+  return null
+}

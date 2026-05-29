@@ -122,7 +122,7 @@ export default function AdminSessionPage() {
       }
       if (!confirm(confirmText)) return
       await supabase.from('bookings').update({
-        status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false,
+        status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false, cancelled_by: 'admin',
       }).eq('id', bookingId)
       // Welle 6A (Sarah 2026-05-27): within_7d + name für klares Protokoll
       let _within7d = false
@@ -194,7 +194,7 @@ export default function AdminSessionPage() {
     setCancelChoice(null)
 
     await supabase.from('bookings').update({
-      status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: cancelLate,
+      status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: cancelLate, cancelled_by: 'admin',
     }).eq('id', bookingId)
 
     void within3h // (audit_log unten enthaelt den Flag)
@@ -791,6 +791,7 @@ export default function AdminSessionPage() {
         status: 'cancelled',
         cancelled_at: new Date().toISOString(),
         cancel_late: false,
+        cancelled_by: 'admin',
       }).eq('id', booking.id)
 
       // Credit zurückbuchen ODER direkt in Ersatztermin einbuchen

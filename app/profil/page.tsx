@@ -389,7 +389,7 @@ export default function ProfilPage() {
     //     — Credit-Anzeige zerlegt sich später eh durch profil-Anonymisierung)
     if (sessionsToPromote.length > 0) {
       await supabase.from('bookings').update({
-        status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false,
+        status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false, cancelled_by: 'self',
       }).eq('user_id', user.id).eq('status', 'active').in('session_id', sessionsToPromote)
     }
     // 3c) Enrollments komplett entfernen — Yogi ist nicht mehr Kursteilnehmer
@@ -412,6 +412,10 @@ export default function ProfilPage() {
     await supabase.from('credits').delete().eq('user_id', user.id)
     await supabase.from('notification_log').delete().eq('user_id', user.id)
     await supabase.from('waitlist_offers').delete().eq('user_id', user.id)
+    // Finding E1 (2026-05-29): Kursabbruch-Wahl-Tokens räumen — sonst blockiert ihr
+    // FK (course_cancellation_responses.user_id → profiles, NO ACTION) die profiles-
+    // Cascade beim Auth-Delete → Route 502, Auth-User bliebe trotz "gelöscht"-Mail.
+    await supabase.from('course_cancellation_responses').delete().eq('user_id', user.id)
 
     // 3e) Audit-Log Einträge anonymisieren (DSGVO – PII aus details JSONB entfernen)
     try { await supabase.rpc('anonymize_user_audit_logs' as any, { target_user_id: user.id }) } catch {}

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/auth'
-import { isActive, isExcluded, isCancelled, isStarted, isCourseEnded } from '@/lib/session-status'
+import { isActive, isExcluded, isCancelled, isStarted, isCourseEnded, bookingStatusLabel } from '@/lib/session-status'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import { getCurrentAgbVersion } from '@/lib/agb-version'
@@ -189,14 +189,17 @@ export default function MeinePage() {
   // Kursstunden Badge — kanonisches Status-Modell aus lib/session-status.ts
   function getStatusBadge(session: any) {
     const mb = session.myBooking
-    // Excluded sollte hier eigentlich nicht ankommen (vorher gefiltert), aber sicher ist sicher
-    if (isExcluded(session))
+    // Welle Akteur-Logik (Sarah 2026-05-29): zentrales Status-Wort aus
+    // lib/session-status.ts. Unterscheidet jetzt Abgemeldet (selbst) vs.
+    // Ausgetragen (Admin) — Quelle ist booking.cancelled_by.
+    const label = bookingStatusLabel(session, mb)
+    if (label === 'Ausgeschlossen')
       return <span className="badge badge-left">Ausgeschlossen</span>
-    if (isCancelled(session))
+    if (label === 'Abgesagt')
       return <span className="badge" style={{background:'var(--yoga-red-bg)',color:'var(--yoga-red-text)'}}>Abgesagt</span>
-    if (!mb || mb.status === 'cancelled')
-      return <span className="badge badge-left">Abgemeldet</span>
-    if (isStarted(session))
+    if (label === 'Ausgetragen' || label === 'Abgemeldet')
+      return <span className="badge badge-left">{label}</span>
+    if (label === 'Teilgenommen')
       return <span className="badge badge-done">Teilgenommen</span>
     return <span className="badge badge-enrolled">Angemeldet</span>
   }

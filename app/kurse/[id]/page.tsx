@@ -402,7 +402,7 @@ export default function SessionDetailPage() {
     setActionLoading(true)
 
     await supabase.from('bookings').update({
-      status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: late
+      status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: late, cancelled_by: 'self'
     }).eq('id', myBooking.id)
 
     // credit.used wird automatisch durch trg_sync_credit_used aktualisiert

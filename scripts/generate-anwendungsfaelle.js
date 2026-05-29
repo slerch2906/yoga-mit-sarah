@@ -195,7 +195,7 @@ content.push(new Paragraph({
 content.push(new Paragraph({
   alignment: AlignmentType.CENTER,
   spacing: { after: 80 },
-  children: [new TextRun({ text: 'Version 2.3 — Stand der App nach Welle A bis I (UI-Refresh, Credit-Banner, 3h-Modal, Quick-Credit-Form, Krankheits-Austragung, Click-Wrap, 2J-Auto-Refund, DSGVO-Confirm-Mail, Audit-Fixes 29.05.2026)', font: FONT, size: 22 })],
+  children: [new TextRun({ text: 'Version 2.4 — Stand der App nach Welle A bis I (UI-Refresh, Credit-Banner, 3h-Modal, Quick-Credit-Form, Krankheits-Austragung, Click-Wrap, 2J-Auto-Refund, DSGVO-Confirm-Mail, Audit-Fixes 29.05.2026 inkl. DSGVO-Restdaten-Löschung) + Akteur-Logik der Storno-Labels (Abgemeldet / Ausgetragen / Abgesagt, einheitlich überall — 29.05.2026)', font: FONT, size: 22 })],
 }))
 content.push(pageBreak())
 
@@ -856,18 +856,22 @@ content.push(...ucase({
   ablauf: [
     'Yogi öffnet „Meine".',
     'Oben Credit-Card, darunter Buchungen nach Kurs gruppiert.',
-    'Pro Buchung: Datum, Uhrzeit, Status (Angemeldet / Vergangen / Abgesagt).',
+    'Pro Buchung: Datum, Uhrzeit, Status (Angemeldet / Teilgenommen / Abgemeldet / Ausgetragen / Abgesagt).',
     'Klick auf eine Buchung führt zur Detail-Ansicht der Stunde.',
   ],
   regeln: [
     'Vergangene Stunden werden mit der Markierung „Vergangen" (durchgestrichen) angezeigt.',
     'Ausgeschlossene Stunden des Kurses (Sarah hat sie als „nicht Teil des Kurses" markiert) werden NICHT angezeigt.',
     'Einzelstunden-Buchungen (Drop-Ins) erscheinen in einer eigenen Sektion unten.',
+    'Akteur-Logik der Storno-Markierung (seit 29.05.2026, überall einheitlich): Hat sich der Yogi SELBST abgemeldet, steht „Abgemeldet". Hat Sarah den Yogi ausgetragen, steht „Ausgetragen". Wurde die ganze Stunde abgesagt, steht IMMER „Abgesagt" (das hat Vorrang vor beiden anderen Worten).',
   ],
   texte: [
     'Angemeldet',
-    'Vergangen',
+    'Teilgenommen',
+    'Abgemeldet',
+    'Ausgetragen',
     'Abgesagt',
+    'Vergangen',
     'Ersatzstunde für [Datum] · [Uhrzeit]',
     'Du nimmst teil vom [Datum] bis [Datum]',
     'Keine Buchungen',
@@ -947,14 +951,15 @@ content.push(...ucase({
     'Pflicht-Häkchen: „Ich verstehe, dass ich danach nicht mehr in meine Kurse zurückkehren kann."',
     'Erst dann ist der rote Button „Ja, Account löschen" aktiv. Zweiter Button: „Abbrechen".',
     'Nach Bestätigung läuft folgende Cascade automatisch durch: Vor-/Nachname auf „Gelöschter Nutzer", E-Mail entfernt, Notfallkontakt entfernt. Warteliste-Einträge entfernt. Alle zukünftigen aktiven Buchungen werden storniert. Enrollments (Kurs-Teilnahmen) werden gelöscht — auch für ganze Kurse. Audit-Log-Einträge anonymisiert.',
+    'Zusätzlich werden die zugehörigen Datensätze explizit geräumt (nicht nur über die DB-Cascade): Buchungen, Credits/Guthaben, Benachrichtigungs-Log, Wartelisten-Angebote und Kursabbruch-Wahl-Tokens (course_cancellation_responses). Letztere müssen VOR der finalen Auth-Löschung weg, sonst blockiert ihr Fremdschlüssel das Löschen des Auth-Users und das Konto bliebe trotz „gelöscht"-Bestätigung bestehen (Audit-Fix 29.05.2026, Finding E1).',
     'Für jede so freigewordene Stunde wird automatisch der nächste Wartelisten-Yogi nachgerückt (Auto-Promote bzw. Late-Offer je nach Zeit bis Start).',
     'Sarah bekommt eine Dashboard-Benachrichtigung „Account DSGVO-gelöscht" und eine E-Mail mit Hinweis auf die manuelle PDF-Löschung im Drive.',
     'Yogi wird sofort ausgeloggt und kann sich nicht mehr einloggen.',
   ],
   regeln: [
-    'Plätze werden sofort frei — nicht erst bei tatsächlicher Auth-User-Löschung. Falls die API-Löschung fehlschlägt, sind die Daten trotzdem schon anonymisiert und die Plätze frei.',
+    'Plätze werden sofort frei — nicht erst bei tatsächlicher Auth-User-Löschung. Falls die finale Auth-Löschung fehlschlägt, sind die Daten trotzdem schon anonymisiert und die Plätze frei; die Route meldet den Fehlschlag seit dem Audit-Fix (29.05.2026) jedoch EHRLICH (kein „success" mehr) und legt für Sarah eine Dashboard-Benachrichtigung an (admin_notifications „auth_delete_failed").',
     'Admin (Sarah) kann diesen Button NICHT sehen — er erscheint nur für nicht-Admin-Konten.',
-    'Credits werden bei Yogi-Selbstlöschung NICHT explizit gelöscht — sie verlieren beim Anonymisieren ihren Bezug.',
+    'Credits/Guthaben werden seit dem Audit-Fix (29.05.2026) auch bei der Yogi-Selbstlöschung explizit gelöscht (zusammen mit Buchungen, Benachrichtigungs-Log, Wartelisten-Angeboten und Kursabbruch-Wahl-Tokens) — vorher blieben sie bei der Anonymisierung nur ohne Bezug zurück.',
   ],
   texte: [
     'Account löschen',
@@ -988,7 +993,7 @@ content.push(...ucase({
     'Erster Bestätigungs-Dialog mit Aufzählung: Plätze werden frei, aktive Buchungen + Guthaben werden gelöscht, persönliche Daten werden anonymisiert, Buchungshistorie bleibt anonym im Protokoll.',
     'Zweiter Sicherheits-Dialog: „Bist du sicher? Diese Aktion kann nicht rückgängig gemacht werden!"',
     'Nach Bestätigung läuft die gleiche Cascade wie bei Yogi-Selbstlöschung: zukünftige Plätze frei, Enrollments weg, Wartelisten der freigewordenen Stunden nachrücken, PII anonymisiert, Email an Sarah.',
-    'Im Unterschied zur Selbst-Löschung werden hier auch Credits explizit gelöscht (Admin-Pfad ist robuster, falls Auth-Delete später fehlschlägt).',
+    'Wie bei der Selbst-Löschung werden auch hier alle Yogi-Ressourcen explizit geräumt: Buchungen, Enrollments, Credits/Guthaben, Warteliste, Benachrichtigungs-Log und Kursabbruch-Wahl-Tokens (course_cancellation_responses) — Letztere VOR der Auth-Löschung, damit ihr Fremdschlüssel das endgültige Löschen des Auth-Users nicht blockiert (Audit-Fix 29.05.2026, Finding E1).',
     'Nach Erfolg landet Sarah zurück in der Yogi-Übersicht.',
   ],
   texte: [
@@ -1128,7 +1133,8 @@ content.push(...ucase({
   ],
   regeln: [
     'Kurs kann erst ab dem 9. Tag nach Kursende gelöscht werden — gleicher Schutz wie beim Archivieren.',
-    'Zusätzliche Safety-Net-Prüfung: Falls noch Yogi-Credits dieses Kurses mit Restwert vorhanden sind → Löschen wird blockiert, mit klarem Hinweis.',
+    'Zusätzliche Safety-Net-Prüfung: Falls noch einlösbare KURS-Credits (model „course") dieses Kurses mit Restwert vorhanden sind → Löschen wird blockiert, mit klarem Hinweis.',
+    'Guthaben (aus Kursabbruch-Wahl oder Krankheit, model „guthaben") blockiert die Löschung NICHT: Es wird beim Löschen vom Kurs entkoppelt (course_id → null) und überlebt mit seinem Herkunfts-Namen (source_course_name) — die Guthaben-Karte zeigt weiter „aus Kurs: [Name]". Ebenso werden Kursabbruch-Wahl-Tokens (course_cancellation_responses) mitgelöscht.',
   ],
   texte: [
     'Kurs kann erst ab dem 9. Tag nach Kursende gelöscht werden.',
@@ -1413,6 +1419,7 @@ content.push(...ucase({
     'Das 3h-Modal ist ein echtes React-Modal (kein confirm() mehr) — sowohl in /admin/sessions/[id] als auch im Admin-Dashboard-Session-Detail-Modal identisch (Welle F, gleicher Tag).',
     'Die Frist wird IMMER frisch aus der DB ermittelt, nicht aus dem Client-State (verhindert veraltete Anzeigen nach Refresh).',
     'cancel_late=true verhindert das automatische Credit-Zurückbuchen über den DB-Trigger.',
+    'Akteur-Logik (seit 29.05.2026): Weil SARAH austrägt, wird die Buchung mit „von Admin" markiert (cancelled_by=admin). Überall — in „Meine" beim Yogi, in der Yogi-Detail-Liste, im Kalender-Raster und im Dashboard — steht dann einheitlich „Ausgetragen" (nicht „Abgemeldet", denn der Yogi hat sich nicht selbst abgemeldet).',
   ],
   texte: [
     'Stunde beginnt in weniger als 3 Stunden',
@@ -2205,6 +2212,9 @@ content.push(...[
   ['Dummy-Yogi', 'Yogi-Profil ohne eigenen Zugang. Wird von Sarah verwaltet, bekommt keine E-Mails.'],
   ['Ausgeschlossene Stunde', 'Termin, den Sarah aus dem Kurs gestrichen hat (z.B. Feiertag). Wird Yogi NICHT angezeigt. Zählt nicht zur Kursdauer.'],
   ['Abgesagte Stunde', 'Termin, den Sarah einzeln abgesagt hat. Bleibt für Yogis sichtbar (mit Hinweis + ggf. Ersatztermin).'],
+  ['„Abgemeldet" (Status-Label)', 'Storno-Markierung, wenn der Yogi sich SELBST von einer Stunde abgemeldet hat. Steht so in „Meine", in der Yogi-Detail-Liste, im Kalender-Raster und im Dashboard.'],
+  ['„Ausgetragen" (Status-Label)', 'Storno-Markierung, wenn SARAH den Yogi aus einer Stunde ausgetragen hat (nicht der Yogi selbst). Einheitlich überall sichtbar.'],
+  ['cancelled_by (Welle Akteur-Logik, 29.05.2026)', 'Merk-Spalte auf der bookings-Tabelle: „self" = Yogi hat sich selbst abgemeldet (→ „Abgemeldet"), „admin" = Sarah hat ausgetragen (→ „Ausgetragen"). Eine abgesagte GANZE Stunde hat in der Anzeige immer Vorrang („Abgesagt"). Sorgt dafür, dass dasselbe Storno überall mit demselben Wort erscheint.'],
   ['Kursabbruch', 'Sarah beendet einen Kurs vorzeitig. Alle zukünftigen Stunden entfallen, Yogis bekommen Erstattung oder Guthaben.'],
   ['Punktekarte', 'Credit-Modell „tenpack" — Yogi kauft mehrere Einzelstunden-Credits. Default 90 Tage gültig (Welle C). Kursübergreifend einsetzbar.'],
   ['Quartal-Abo', 'Credit-Modell „quarterly" — Credits gelten für ein ganzes Quartal (Q1–Q4). Verfall = letzter Tag des Quartals. Bei „nächstes Quartal" wird valid_from gesetzt, Yogi sieht die Credits sofort, kann sie aber erst ab Quartalsstart einsetzen.'],

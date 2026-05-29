@@ -544,6 +544,20 @@ test.describe('[E2E] Gnadenfrist — Source-Coverage', () => {
     expect(src).toMatch(/!isFreeEvent && data\.sessionId/)
   })
 
+  test('Edge Function: waitlist_promoted bezahltes Event — neuer Hinweis-Text (Sarah 2026-05-29)', () => {
+    const src = read('supabase/functions/send-email/index.ts')
+    // Überschrift: "verbindliche Anmeldung" (vorher "verbindliche Buchung")
+    expect(src).toContain('Wichtig — verbindliche Anmeldung:')
+    // 60-Min-Hinweis steht zuerst, nennt "von Warteliste" + "Danach bist Du verbindlich angemeldet."
+    expect(src).toContain('Versehentlich von Warteliste nachgerückt? Du hast jetzt noch 60 Minuten Zeit, Dich kostenlos wieder abzumelden. Danach bist Du verbindlich angemeldet.')
+    // Bezahlung als eigene Zeile
+    expect(src).toContain('✅ Die Bezahlung läuft direkt mit Sarah (PayPal oder Bar).')
+    // Storno + volle Gebühr in EINER Zeile (⚠️)
+    expect(src).toContain('vor dem Event — bis dahin kannst du dich kostenfrei abmelden. Bei späterer Abmeldung fällt die <strong>volle Gebühr</strong> an.')
+    // Anti-Rückfall: alter Promote-Einstiegssatz ist ENTFERNT
+    expect(src).not.toContain('✅ Du bist jetzt verbindlich gebucht. Die Bezahlung läuft direkt mit Sarah (PayPal oder Bar).')
+  })
+
   test('Claim-Route: echter Titel + Events ohne Credit', () => {
     const src = read('app/api/waitlist-offer/[token]/route.ts')
     // session.name + session_type werden geladen (für Titel + Credit-Entscheidung)

@@ -1087,6 +1087,10 @@ export default function AdminYogiDetailPage() {
         const cn = d.course_name || courseName
         return { text: `Yogi wurde automatisch von Warteliste nachgerückt${cn ? ` — ${cn}` : ''}`, subject: '' }
       }
+      case 'waitlist_auto_removed': {
+        const cn = d.course_name || courseName
+        return { text: `Yogi automatisch von Warteliste entfernt (letzter Credit verbraucht)${cn ? ` — ${cn}` : ''}`, subject: '' }
+      }
       case 'admin_dsgvo_deletion': {
         const reason = d.reason ? ` (Grund: ${d.reason})` : ''
         return { text: `Admin hat Yogi-Account DSGVO-konform gelöscht${reason}`, subject: '' }

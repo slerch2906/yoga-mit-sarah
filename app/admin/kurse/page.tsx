@@ -944,8 +944,18 @@ export default function AdminKursePage() {
         // hat den Kurs-Credit DOPPELT (alt + neues Guthaben aus Abbruch).
         await supabase.from('enrollments').update({ credit_id: null })
           .eq('user_id', prof.id).in('credit_id', cIds)
+        // Sarah-Fix 2026-05-29 (Fall 2): GLEICHES SCHUTZMUSTER wie in deleteCourse.
+        // Guthaben (Krankheits-/Kursabbruch-Guthaben, model='guthaben') NICHT
+        // mitloeschen, auch wenn es an diesem Kurs haengt — es ist fuer JEDEN Kurs
+        // einloesbar (10 Mon. / 2 Jahre) und muss erhalten bleiben. Daher nur die
+        // Herkunfts-Verknuepfung loesen (course_id=null); der Kurstitel bleibt in
+        // source_course_name stehen. Nur die kursgebundenen Credits (model != guthaben)
+        // werden geloescht. Vorher wurden ALLE Credits dieses Kurses geloescht →
+        // Guthaben des Yogi konnte beim Kursabbruch verschwinden.
+        await supabase.from('credits').update({ course_id: null })
+          .eq('user_id', prof.id).eq('course_id', cancellingCourse.id).eq('model', 'guthaben')
         const { error: credDelErr } = await supabase.from('credits').delete()
-          .eq('user_id', prof.id).eq('course_id', cancellingCourse.id)
+          .eq('user_id', prof.id).eq('course_id', cancellingCourse.id).neq('model', 'guthaben')
         if (credDelErr) console.error('cancelCourse: Course-Credit-Loeschung fehlgeschlagen:', credDelErr)
       }
 

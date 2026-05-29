@@ -47,14 +47,28 @@ export async function POST(req: NextRequest) {
     if (!res.ok) {
       const errText = await res.text().catch(() => '')
       console.error('Delete user error:', res.status, errText)
-      // Fehler im Response aber trotzdem success zurueckgeben
-      // (User ist bereits anonymisiert, Auth-Loeschung ist optional)
-      return NextResponse.json({ success: true, warning: 'Auth deletion failed but profile anonymized' })
+      // Sarah-Fix 2026-05-29 (Fall 4, "voll absichern"): NICHT mehr faelschlich
+      // success:true zurueckgeben. Der Auth-User existiert dann noch (Profil ist
+      // zwar anonymisiert, aber Login/Session waere theoretisch wieder moeglich).
+      // Stattdessen ehrlich melden UND Admin benachrichtigen, damit Sarah den
+      // Auth-User manuell im Supabase-Dashboard loeschen kann.
+      try {
+        await sb.from('admin_notifications').insert({
+          type: 'auth_delete_failed',
+          message: 'DSGVO-Loeschung: Auth-User konnte NICHT geloescht werden — bitte manuell im Supabase-Dashboard entfernen.',
+          details: { user_id: userId, status: res.status, error: errText?.slice(0, 500) },
+          read: false,
+        })
+      } catch (notifErr) { console.error('admin_notifications auth_delete_failed:', notifErr) }
+      return NextResponse.json(
+        { success: false, error: 'auth_deletion_failed', detail: errText?.slice(0, 500) },
+        { status: 502 },
+      )
     }
 
     return NextResponse.json({ success: true })
   } catch (e: any) {
     console.error('delete-account error:', e)
-    return NextResponse.json({ success: true, warning: e.message })
+    return NextResponse.json({ success: false, error: e?.message || 'unknown' }, { status: 500 })
   }
 }

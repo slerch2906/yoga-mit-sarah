@@ -400,6 +400,19 @@ export default function ProfilPage() {
       promoteWaitlistOrOfferLate(supabase, sId).catch(e => console.error('promote on delete:', e))
     }
 
+    // 3d-bis) Sarah-Fix 2026-05-29 (Fall 4, "voll absichern"): ALLE verbleibenden
+    //   Yogi-Ressourcen EXPLIZIT löschen — NICHT auf den FK-Cascade des Auth-Deletes
+    //   verlassen. Der Auth-Delete läuft unten fire-and-forget; schlägt er fehl,
+    //   blieben Buchungshistorie/Credits sonst beim (anonymisierten) Profil hängen,
+    //   obwohl die Bestätigungs-Mail dem Yogi "Buchungshistorie gelöscht / Credits
+    //   verfallen" zusichert. Gleiche robuste Reihenfolge wie im Admin-Lösch-Pfad
+    //   (app/admin/yogis/[id]/page.tsx). enrollments + waitlist sind oben bereits weg.
+    //   Erst NACH Cancel+Promote oben, damit Trigger/Nachrücken korrekt liefen.
+    await supabase.from('bookings').delete().eq('user_id', user.id)
+    await supabase.from('credits').delete().eq('user_id', user.id)
+    await supabase.from('notification_log').delete().eq('user_id', user.id)
+    await supabase.from('waitlist_offers').delete().eq('user_id', user.id)
+
     // 3e) Audit-Log Einträge anonymisieren (DSGVO – PII aus details JSONB entfernen)
     try { await supabase.rpc('anonymize_user_audit_logs' as any, { target_user_id: user.id }) } catch {}
 

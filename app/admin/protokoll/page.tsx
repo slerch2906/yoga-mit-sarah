@@ -27,6 +27,9 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   waitlist_joined:                { label: 'Warteliste eingetragen',         color: 'text-yoga-amber-text' },
   waitlist_promoted:              { label: 'Warteliste nachgerückt',         color: 'text-yoga-green-text' },
   waitlist_offer_late_accepted:   { label: 'Warteliste — Spät-Angebot angenommen', color: 'text-yoga-green-text' },
+  // Fall 3 (Sarah 2026-05-29): automatisches Entfernen von ANDEREN Wartelisten,
+  // wenn der nachgerückte Yogi seinen letzten freien Credit aufgebraucht hat.
+  waitlist_auto_removed:          { label: 'Von Warteliste entfernt (letzter Credit verbraucht)', color: 'text-yoga-amber-text' },
   // ── Welle 2: Events / Einzelstunden / Container-Sessions ─────────────
   single_session_created:         { label: 'Einzelstunde angelegt',          color: 'text-yoga-green-text' },
   single_session_updated:         { label: 'Einzelstunde bearbeitet',        color: 'text-yoga-amber-text' },

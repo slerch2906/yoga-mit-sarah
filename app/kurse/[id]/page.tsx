@@ -13,7 +13,7 @@ import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import { sessionDisplayName } from '@/lib/session-display'
 // Welle S3/Pattern 3 (Sarah 2026-05-27): defensive Date-Parsing.
-import { parseSessionDateTime } from '@/lib/session-time'
+import { parseSessionDateTime, parseSessionDateTimeBerlin } from '@/lib/session-time'
 
 // Welle 3 (Sarah 2026-05-26): Helper für Emails — bei Einzelstunden/Events
 // soll NICHT der SYS-Container-Name ("SYS · Einzelstunden") in der Mail
@@ -347,7 +347,13 @@ export default function SessionDetailPage() {
     const user = await getCurrentUser()
     // Server-Zeit verwenden statt Browser-Zeit
     const serverNow = await getServerNow()
-    const sessionStart = new Date(`${session.date}T${session.time_start}`)
+    // Sarah-Fix 2026-05-29 (Fall 5): Stundenstart IMMER in deutscher Zeitzone
+    // (Europe/Berlin) verankern — nicht in der Browser-Zeitzone. Sonst werden die
+    // harten Abmeldefristen (3 h / 7 Tage / 90 Min) für Yogis im Ausland falsch
+    // berechnet. Fallback auf die alte Browser-Parsing-Logik nur, falls der
+    // Berlin-Parser (kaputte Daten) NULL liefert.
+    const sessionStart = parseSessionDateTimeBerlin(session.date, session.time_start)
+      ?? new Date(`${session.date}T${session.time_start}`)
     const sessType = (session as any)?.session_type
     const isEventPaid = sessType === 'event_paid'
     const isEventFree = sessType === 'event_free'
@@ -447,9 +453,12 @@ export default function SessionDetailPage() {
 
     // Sarah-Wunsch 2026-05-23: bei ≤90 Min vor Stundenbeginn KEIN Auto-Promote,
     // sondern alle Waitlist-Yogis kriegen Auswahl-Mail (waitlist_offer_late).
-    const sessStartMs = session?.date && session?.time_start
-      ? new Date(`${session.date}T${session.time_start}`).getTime() : 0
-    const minsUntilStart = (sessStartMs - Date.now()) / 60000
+    // Sarah-Fix 2026-05-29 (Fall 5): auch der 90-Min-Cutoff Berlin-verankert +
+    // Server-Zeit (statt Browser-Zeit) für konsistente Fristberechnung.
+    const sessStartBerlin = parseSessionDateTimeBerlin(session?.date, session?.time_start)
+    const sessStartMs = sessStartBerlin ? sessStartBerlin.getTime()
+      : (session?.date && session?.time_start ? new Date(`${session.date}T${session.time_start}`).getTime() : 0)
+    const minsUntilStart = (sessStartMs - serverNow.getTime()) / 60000
     if (sessStartMs > 0 && minsUntilStart <= 90) {
       try { await promoteWaitlistOrOfferLate(supabase, id as string) } catch (e) { console.error('late-offer:', e) }
       // Sarah-Wunsch 2026-05-29: nach Abmeldung Erfolgs-Banner auf /meine zeigen.
@@ -520,6 +529,35 @@ export default function SessionDetailPage() {
     })
     const position = result?.position ?? 0
     const unsubscribeToken = result?.unsubscribe_token
+
+    // Sarah-Fix 2026-05-29 (Fall 3b): Warteliste-Beitritt im Protokoll festhalten
+    // (Name + Titel + Datum/Uhrzeit). Sichtbar in Yogi-Historie + zentralem Protokoll.
+    // Nur echter Warteliste-Beitritt (nicht 'notify' = "bei freiem Platz informieren").
+    // user_id = self → RLS-konform. Audit-Fehler darf den Flow nicht abreissen.
+    if (type === 'waitlist') {
+      try {
+        const { error: auditErr } = await supabase.from('audit_log').insert({
+          user_id: user!.id, action: 'waitlist_joined',
+          details: {
+            session_id: id, position,
+            course_name: mailCourseName(session),
+            session_date: session?.date, session_time: session?.time_start,
+            session_type: (session as any)?.session_type,
+          },
+        })
+        if (auditErr) throw auditErr
+      } catch (auditErr: any) {
+        console.error('Audit-Log-Insert fehlgeschlagen (waitlist_joined):', auditErr)
+        try {
+          await supabase.from('admin_notifications').insert({
+            type: 'audit_log_insert_failed',
+            message: 'Audit-Eintrag fuer waitlist_joined fehlgeschlagen',
+            details: { action: 'waitlist_joined', user_id: user!.id, session_id: id, error_message: auditErr?.message || String(auditErr) },
+            read: false,
+          })
+        } catch (notifErr) { console.error('admin_notifications audit_log_insert_failed:', notifErr) }
+      }
+    }
 
     // Wartelisten-Bestätigung nur wenn Yogi sie aktiviert hat (Default: ja). Nur waitlist (nicht notify).
     if (type === 'waitlist' && prof && prof.notify_waitlist_joined !== false) {
@@ -913,6 +951,15 @@ export default function SessionDetailPage() {
                     : 'Dein Credit wird zurückgebucht.'}
                 </p>
               </div>
+            )}
+            {/* Sarah-Fix 2026-05-29 (Fall 5): Hinweis auf die maßgebliche Zeitzone.
+                Nur relevant, wo eine Abmeldefrist greift (Kurs/Einzelstunde/bezahltes
+                Event) — bei kostenlosen Stunden ist Abmelden ohnehin jederzeit frei. */}
+            {!(course?.is_free || isEventFree) && (
+              <p className="text-xs text-gray-500 mb-2 flex items-start gap-1">
+                <i className="ti ti-clock-hour-4 mt-0.5" />
+                <span>Für alle Fristen gilt die deutsche Zeitzone (Europe/Berlin).</span>
+              </p>
             )}
             {/* Ja-Abmelden-Button NUR wenn nicht hart-geblockt */}
             {!within7d && (

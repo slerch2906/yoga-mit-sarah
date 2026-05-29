@@ -1,7 +1,7 @@
 # Test Fixtures
 
 ## send-email-snapshot.txt
-Snapshot der deployten send-email Edge Function (Version 46).
+Snapshot der deployten send-email Edge Function (Version 80).
 
 Wird zur Test-Laufzeit gelesen von tests/e2e/27-email-plausibilitaet.spec.ts
 um conditional-logic der Email-Templates zu prüfen.

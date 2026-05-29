@@ -536,6 +536,29 @@ test.describe('[E2E] Gnadenfrist — Source-Coverage', () => {
     expect(matches.length, 'promoted_at = now() in beiden Auto-Promote-Pfaden der RPC').toBeGreaterThanOrEqual(2)
   })
 
+  // Guard-Test (Sarah 2026-05-29): Die 60-Min-Gnadenfrist muss auch auf DB-Ebene
+  // greifen. Der Trigger enforce_event_paid_7d_cancel_block sperrt die Selbst-
+  // Abmeldung von bezahlten Events innerhalb der 7-Tage-Frist HART (RAISE EXCEPTION).
+  // Ohne diese Ausnahme wäre die App-Logik (inPromoteGrace) auf DB-Ebene wirkungslos:
+  // Wer unfreiwillig in ein bezahltes Event nachgerückt ist, käme trotz 60-Min-
+  // Zusage in App/Mail/AGB nicht mehr kostenlos raus. Schlägt dieser Test fehl,
+  // wurde der Hardblock-Trigger so verändert, dass die Gnadenfrist umgangen wird —
+  // dann mit Sarah abstimmen, bevor irgendetwas committed wird.
+  test('DB-Trigger enforce_event_paid_7d_cancel_block: 60-Min-Gnadenfrist VOR dem 7d-Hardblock', () => {
+    const src = read('supabase/migrations/20260529_event_paid_7d_block_respect_promote_grace.sql')
+    // Die Gnadenfrist-Ausnahme: promoted_at gesetzt UND < 60 Minuten her → RETURN NEW
+    expect(src).toMatch(/NEW\.promoted_at IS NOT NULL AND \(now\(\) - NEW\.promoted_at\) < interval '60 minutes'/)
+    // Reihenfolge: Die Gnadenfrist-Ausnahme MUSS vor der 7-Tage-RAISE-EXCEPTION stehen,
+    // sonst würde der Hardblock zuerst feuern und die Ausnahme nie erreicht.
+    const graceIdx = src.indexOf("(now() - NEW.promoted_at) < interval '60 minutes'")
+    const blockIdx = src.indexOf("interval '7 days'")
+    expect(graceIdx, 'Gnadenfrist-Check existiert').toBeGreaterThan(-1)
+    expect(blockIdx, '7-Tage-Block existiert').toBeGreaterThan(-1)
+    expect(graceIdx, '60-Min-Gnadenfrist steht VOR dem 7-Tage-Hardblock').toBeLessThan(blockIdx)
+    // Der eigentliche Hardblock (RAISE EXCEPTION) ist weiterhin vorhanden (kein versehentliches Entfernen)
+    expect(src).toMatch(/RAISE EXCEPTION 'Selbst-Abmeldung von bezahlten Events ist innerhalb der 7-Tage-Stornofrist/)
+  })
+
   test('Edge Function: waitlist_promoted-Mail hat "Hier abmelden"-Button', () => {
     const src = read('supabase/functions/send-email/index.ts')
     expect(src).toMatch(/Versehentlich nachgerückt\? Hier abmelden/)

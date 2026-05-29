@@ -37,6 +37,11 @@ const TEXTS = {
   // Detail-Erklärung VOR dem Eintragen, daher Status-Box (over90) gekürzt.
   courseSinglePreJoin:
     'Wenn du dich auf die Warteliste setzt, rückst du <strong>bis 90 Minuten vor Beginn</strong> automatisch nach, sobald ein Platz frei wird (du brauchst dafür einen freien Credit). Du hast dann <strong>60 Minuten</strong> Zeit, dich — auch innerhalb der 3-Stunden-Abmeldefrist — kostenlos wieder abzumelden, dein Credit kommt zurück. <strong>Ab 90 Minuten vor Beginn</strong> bekommen alle Wartenden gleichzeitig ein <strong>Spätangebot</strong> — wer zuerst zusagt, bekommt den Platz.',
+  // Vorab-Hinweis-Box bei bezahltem Event (Sarah 2026-05-29): VOR dem Eintragen
+  // auf die Warteliste. Muss — wie die Bestätigungsseite — die 60-Min-Gnadenfrist
+  // nach dem Nachrücken nennen (Bugfix: fehlte vorher in dieser Box).
+  eventPaidPreJoin:
+    'Wenn du dich auf die Warteliste setzen lässt, rückst Du automatisch nach, wenn ein Platz frei wird. Nach dem Nachrücken hast du noch <strong>60 Minuten</strong> Zeit, dich kostenlos wieder abzumelden. Danach wird deine Anmeldung <strong>verbindlich gebucht</strong> — es gilt die Stornofrist (nur bis <strong>7 Tage</strong> vorher), danach fällt die volle Gebühr an, außer du ernennst einen Ersatzteilnehmer.',
   courseSingleOver90:
     'Du rückst bis 90 Minuten vor Beginn automatisch nach. Du hast dann 60 Minuten Zeit, dich kostenlos abzumelden (Credit zurück). Ab 90 Minuten vorher: Spätangebot an alle — wer zuerst zusagt, bekommt den Platz.',
   courseSingleUnder90:
@@ -57,6 +62,19 @@ test.describe('[E2E-Text] Wartelisten-Hinweise — eingefrorenes Wording (Sarah-
     expect(src).toContain(TEXTS.courseSinglePreJoin)
     // Box wird NUR bei Nicht-Events gezeigt
     expect(src).toMatch(/!isEvent\s*&&/)
+  })
+
+  test('Bezahltes Event: Vorab-Hinweis-Box nennt 60-Min-Gnadenfrist (Bugfix)', () => {
+    const src = SRC()
+    expect(src).toContain(TEXTS.eventPaidPreJoin)
+    // Sicherheits-Anker: 60-Min-Frist + Verbindlichkeit müssen drinstehen
+    expect(TEXTS.eventPaidPreJoin).toMatch(/60 Minuten/)
+    expect(TEXTS.eventPaidPreJoin).toMatch(/verbindlich gebucht/)
+    expect(TEXTS.eventPaidPreJoin).toMatch(/7 Tage/)
+  })
+
+  test('Bezahltes Event: alter Vorab-Text OHNE 60-Min-Frist ist ENTFERNT (kein Rückfall)', () => {
+    expect(SRC()).not.toContain('Wenn du dich auf die Warteliste setzen lässt, rückst Du automatisch nach, wenn ein Platz frei wird. Damit wird deine Anmeldung <strong>verbindlich gebucht</strong>. Beachte die Stornofrist — nur bis <strong>7 Tage</strong> vorher — danach fällt die volle Gebühr an, außer du ernennst einen Ersatzteilnehmer.')
   })
 
   test('Kurs/Einzelstunde > 90 Min: exakter Text vorhanden', () => {

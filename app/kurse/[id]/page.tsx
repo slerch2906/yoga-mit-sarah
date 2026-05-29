@@ -1062,7 +1062,7 @@ export default function SessionDetailPage() {
                         {isEventPaid && (
                           <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 mb-3">
                             <p className="text-sm text-yoga-amber-text leading-relaxed">
-                              Wenn du dich auf die Warteliste setzen lässt, rückst Du automatisch nach, wenn ein Platz frei wird. Damit wird deine Anmeldung <strong>verbindlich gebucht</strong>. Beachte die Stornofrist — nur bis <strong>7 Tage</strong> vorher — danach fällt die volle Gebühr an, außer du ernennst einen Ersatzteilnehmer.
+                              Wenn du dich auf die Warteliste setzen lässt, rückst Du automatisch nach, wenn ein Platz frei wird. Nach dem Nachrücken hast du noch <strong>60 Minuten</strong> Zeit, dich kostenlos wieder abzumelden. Danach wird deine Anmeldung <strong>verbindlich gebucht</strong> — es gilt die Stornofrist (nur bis <strong>7 Tage</strong> vorher), danach fällt die volle Gebühr an, außer du ernennst einen Ersatzteilnehmer.
                             </p>
                           </div>
                         )}

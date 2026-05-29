@@ -404,7 +404,7 @@ test.describe('[E2E-Logic] 9-Tage-Sperre — Source-Logik prüfen', () => {
     const path = require('path') as typeof import('path')
     const src = fs.readFileSync(path.join(process.cwd(), 'app/admin/kurse/page.tsx'), 'utf8')
     // Find deleteCourse function
-    const deleteCourseMatch = src.match(/async function deleteCourse[\s\S]{0,2000}/)
+    const deleteCourseMatch = src.match(/async function deleteCourse[\s\S]{0,3500}/)
     expect(deleteCourseMatch).not.toBeNull()
     const deleteFn = deleteCourseMatch![0]
     expect(deleteFn).toMatch(/date_end/)

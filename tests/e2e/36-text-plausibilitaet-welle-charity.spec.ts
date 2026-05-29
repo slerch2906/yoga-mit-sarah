@@ -72,7 +72,7 @@ test.describe('[E2E-Text] Charity-Konsistenz — kein Credit-Hinweis bei is_free
 test.describe('[E2E-Text] 9-Tage-Sperre — Alert-Text plausibel', () => {
   test('deleteCourse Alert nennt "9. Tag nach Kursende" + Begründung Credit-Schutz', async () => {
     const src = read('app/admin/kurse/page.tsx')
-    const fn = src.match(/async function deleteCourse[\s\S]{0,2500}/)![0]
+    const fn = src.match(/async function deleteCourse[\s\S]{0,3500}/)![0]
     // Alert-Text ist im fn
     expect(fn).toMatch(/9\.\s*Tag\s*nach\s*Kursende/i)
     // Begründung: warum 9 Tage? → 8 Tage Credit-Gueltigkeit + 1 Tag Puffer
@@ -87,7 +87,7 @@ test.describe('[E2E-Text] 9-Tage-Sperre — Alert-Text plausibel', () => {
 
   test('Safety-Net Alert: separater Hinweis wenn noch valide Credits da sind', async () => {
     const src = read('app/admin/kurse/page.tsx')
-    const fn = src.match(/async function deleteCourse[\s\S]{0,3000}/)![0]
+    const fn = src.match(/async function deleteCourse[\s\S]{0,4500}/)![0]
     // 2. Defensive: noch validCredits → eigene Meldung
     expect(fn).toMatch(/validCredits/)
     expect(fn).toMatch(/stillUsable/)

@@ -206,7 +206,7 @@ serve(async (req) => {
         subject = `Du bist dabei: ${data.courseName}`
         let regelBlock = ''
         if (isPaidEvent) {
-          regelBlock = hl(`<p style="margin:0 0 8px;font-size:14px;font-weight:bold">Wichtig — verbindliche Anmeldung:</p><p style="margin:4px 0;font-size:13px">✅ <strong>Versehentlich von Warteliste nachgerückt? Du hast jetzt noch 60 Minuten Zeit, Dich kostenlos wieder abzumelden. Danach bist Du verbindlich angemeldet.</strong></p><p style="margin:4px 0;font-size:13px">✅ Die Bezahlung läuft direkt mit Sarah (PayPal oder Bar).</p><p style="margin:4px 0;font-size:13px">⚠️ <strong>Stornofrist: 7 Tage</strong> vor dem Event — bis dahin kannst du dich kostenfrei abmelden. Bei späterer Abmeldung fällt die <strong>volle Gebühr</strong> an.</p><p style="margin:4px 0;font-size:13px">👯 Du kannst aber gerne einen <strong>Ersatzkandidaten</strong> benennen — wende dich dafür direkt an Sarah.</p>`,'#fff3d6')
+          regelBlock = hl(`<p style="margin:0 0 8px;font-size:14px;font-weight:bold">Wichtig — verbindliche Anmeldung:</p><p style="margin:4px 0;font-size:13px">✅ <strong>Versehentlich von Warteliste nachgerückt? Du hast jetzt noch 60 Minuten Zeit, Dich kostenlos abzumelden. Danach bist Du verbindlich angemeldet.</strong></p><p style="margin:4px 0;font-size:13px">✅ Die Bezahlung läuft direkt mit Sarah (PayPal oder Bar).</p><p style="margin:4px 0;font-size:13px">⚠️ <strong>Stornofrist: 7 Tage</strong> vor dem Event — bis dahin kannst du dich kostenfrei abmelden. Bei späterer Abmeldung fällt die <strong>volle Gebühr</strong> an.</p><p style="margin:4px 0;font-size:13px">👯 Du kannst aber gerne einen <strong>Ersatzkandidaten</strong> benennen — wende dich dafür direkt an Sarah.</p>`,'#fff3d6')
         } else if (isFreeEvent) {
           regelBlock = hl(`<p style="margin:0 0 8px;font-size:14px;font-weight:bold">Gut zu wissen</p><p style="margin:4px 0;font-size:13px">✅ Das Event ist kostenlos — einfach kommen und mitmachen.</p><p style="margin:4px 0;font-size:13px">✅ Du kannst Dich jederzeit wieder abmelden.</p>`,'#e8ede6')
         } else {
@@ -218,7 +218,7 @@ serve(async (req) => {
         // greift (kostenlose Abmeldung; bei Kurs/Single kommt der Credit zurueck).
         // Nur kostenlose Events brauchen ihn nicht (Abmelden ist ohnehin frei).
         const undoBtn = (!isFreeEvent && data.sessionId)
-          ? btn('Versehentlich nachgerückt? Wieder absagen', APP_URL+'/kurse/'+encodeURIComponent(data.sessionId), '#6b2a2a')
+          ? btn('Versehentlich nachgerückt? Hier abmelden', APP_URL+'/kurse/'+encodeURIComponent(data.sessionId), '#6b2a2a')
           : ''
         html = base(`<p style="font-size:15px">Hallo ${fn},</p><p style="font-size:15px">🎉 Ein Platz ist frei – du bist automatisch eingebucht!</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">${KL}: ${cn}</p>`)}${regelBlock}${btn('Meine Buchungen',APP_URL+'/meine')}${undoBtn}${LG}`)
         break

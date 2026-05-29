@@ -536,9 +536,9 @@ test.describe('[E2E] Gnadenfrist — Source-Coverage', () => {
     expect(matches.length, 'promoted_at = now() in beiden Auto-Promote-Pfaden der RPC').toBeGreaterThanOrEqual(2)
   })
 
-  test('Edge Function: waitlist_promoted-Mail hat "Wieder absagen"-Button', () => {
+  test('Edge Function: waitlist_promoted-Mail hat "Hier abmelden"-Button', () => {
     const src = read('supabase/functions/send-email/index.ts')
-    expect(src).toMatch(/Versehentlich nachgerückt\? Wieder absagen/)
+    expect(src).toMatch(/Versehentlich nachgerückt\? Hier abmelden/)
     // Button bei Kurs/Einzelstunde UND bezahlten Events (Sarah 2026-05-29: auch
     // bezahlte Events haben jetzt die 60-Min-Gnadenfrist). Nur kostenlose Events nicht.
     expect(src).toMatch(/!isFreeEvent && data\.sessionId/)
@@ -549,7 +549,7 @@ test.describe('[E2E] Gnadenfrist — Source-Coverage', () => {
     // Überschrift: "verbindliche Anmeldung" (vorher "verbindliche Buchung")
     expect(src).toContain('Wichtig — verbindliche Anmeldung:')
     // 60-Min-Hinweis steht zuerst, nennt "von Warteliste" + "Danach bist Du verbindlich angemeldet."
-    expect(src).toContain('Versehentlich von Warteliste nachgerückt? Du hast jetzt noch 60 Minuten Zeit, Dich kostenlos wieder abzumelden. Danach bist Du verbindlich angemeldet.')
+    expect(src).toContain('Versehentlich von Warteliste nachgerückt? Du hast jetzt noch 60 Minuten Zeit, Dich kostenlos abzumelden. Danach bist Du verbindlich angemeldet.')
     // Bezahlung als eigene Zeile
     expect(src).toContain('✅ Die Bezahlung läuft direkt mit Sarah (PayPal oder Bar).')
     // Storno + volle Gebühr in EINER Zeile (⚠️)

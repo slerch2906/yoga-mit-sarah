@@ -17,6 +17,20 @@ import * as path from 'path'
 
 const SRC = () => fs.readFileSync(path.join(process.cwd(), 'app/kurse/[id]/page.tsx'), 'utf8')
 const SRC_UEBERSICHT = () => fs.readFileSync(path.join(process.cwd(), 'app/warteliste/page.tsx'), 'utf8')
+const SRC_BESTAETIGUNG = () => fs.readFileSync(path.join(process.cwd(), 'app/kurse/[id]/bestaetigung/page.tsx'), 'utf8')
+
+// Bestätigungsseite (Sarah 2026-05-29): nach dem Eintragen auf die Warteliste.
+// Die 3 Typ-Varianten sind mit Sarah abgestimmt. Der Einzelstunden-Text MUSS die
+// 3-Stunden-Abmeldefrist nennen (Bugfix: fehlte vorher) — passend zur Mail + zur
+// Stundenseite. Schlägt einer fehl, wurde ein Text unbeauftragt verändert.
+const BESTAETIGUNG_TEXTS = {
+  eventFree:
+    'Wenn ein Platz frei wird, rutschst Du bis <strong>90 Minuten</strong> davor automatisch nach und wirst per E-Mail informiert. In den letzten 90 Minuten gilt: wer zuerst zusagt, bekommt den Platz.',
+  eventPaid:
+    'Du stehst jetzt auf der Warteliste und rückst automatisch nach, wenn ein Platz frei wird. Nach dem Nachrücken hast du noch <strong>60 Minuten Zeit</strong>, dich kostenlos wieder abzumelden. Danach ist deine Anmeldung <strong>verbindlich</strong> und es gilt die 7-Tage-Stornofrist — danach fällt die volle Gebühr an, außer du ernennst einen Ersatzteilnehmer.',
+  courseSingle:
+    'Wenn ein Platz frei wird, rückst du <strong>bis 90 Minuten vor Beginn</strong> automatisch nach. Du hast dann <strong>1 Stunde Zeit</strong>, dich — auch innerhalb der 3-Stunden-Abmeldefrist — kostenlos abzumelden. Reagierst du nicht, wird dein <strong>Credit verbraucht</strong> und der Platz ist verbindlich gebucht.',
+}
 
 // Übersichts-Box auf /warteliste (Sarah 2026-05-29): Sammel-Hinweis unter der
 // Wartelisten-Sektion. Auf Sarahs Wunsch um die 90-Min- und Event-Regeln
@@ -147,5 +161,30 @@ test.describe('[E2E-Text] Warteliste-Übersicht (/warteliste): Sammel-Hinweis-Bo
 
   test('Alter generischer Einzeiler ist ENTFERNT (kein Rückfall)', () => {
     expect(SRC_UEBERSICHT()).not.toContain('Wenn ein Platz frei wird, rückst Du automatisch nach und hast auch innerhalb der 3 Stunden Frist noch eine Stunde Zeit dich kostenlos wieder abzumelden.')
+  })
+})
+
+test.describe('[E2E-Text] Warteliste-Bestätigungsseite (/kurse/[id]/bestaetigung): eingefrorenes Wording (Sarah-Spec)', () => {
+  test('Kostenloses Event: exakter Text vorhanden', () => {
+    expect(SRC_BESTAETIGUNG()).toContain(BESTAETIGUNG_TEXTS.eventFree)
+  })
+
+  test('Bezahltes Event: exakter Text inkl. 60-Min-Frist + 7-Tage-Storno', () => {
+    const src = SRC_BESTAETIGUNG()
+    expect(src).toContain(BESTAETIGUNG_TEXTS.eventPaid)
+    expect(BESTAETIGUNG_TEXTS.eventPaid).toMatch(/60 Minuten/)
+    expect(BESTAETIGUNG_TEXTS.eventPaid).toMatch(/verbindlich/)
+    expect(BESTAETIGUNG_TEXTS.eventPaid).toMatch(/7-Tage-Stornofrist/)
+  })
+
+  test('Kurs/Einzelstunde: exakter Text nennt die 3-Stunden-Abmeldefrist (Bugfix)', () => {
+    const src = SRC_BESTAETIGUNG()
+    expect(src).toContain(BESTAETIGUNG_TEXTS.courseSingle)
+    // Sicherheits-Anker: die 3-Stunden-Abmeldefrist MUSS drinstehen
+    expect(BESTAETIGUNG_TEXTS.courseSingle).toMatch(/auch innerhalb der 3-Stunden-Abmeldefrist/)
+  })
+
+  test('Kurs/Einzelstunde: alter Text OHNE 3-Stunden-Abmeldefrist ist ENTFERNT (kein Rückfall)', () => {
+    expect(SRC_BESTAETIGUNG()).not.toContain('Du hast dann <strong>1 Stunde Zeit</strong>, dich kostenlos abzumelden. Reagierst du nicht, wird dein <strong>Credit verbraucht</strong> und der Platz ist verbindlich gebucht.')
   })
 })

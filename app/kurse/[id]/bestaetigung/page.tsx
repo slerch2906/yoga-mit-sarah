@@ -192,7 +192,7 @@ function BestaetigungInner() {
                   <i className="ti ti-alert-circle mr-1" /> Wichtig – bitte beachten:
                 </p>
                 <p className="text-sm text-yoga-amber-text leading-relaxed">
-                  Wenn ein Platz frei wird, rückst du <strong>bis 90 Minuten vor Beginn</strong> automatisch nach. Du hast dann <strong>1 Stunde Zeit</strong>, dich kostenlos abzumelden. Reagierst du nicht, wird dein <strong>Credit verbraucht</strong> und der Platz ist verbindlich gebucht.
+                  Wenn ein Platz frei wird, rückst du <strong>bis 90 Minuten vor Beginn</strong> automatisch nach. Du hast dann <strong>1 Stunde Zeit</strong>, dich — auch innerhalb der 3-Stunden-Abmeldefrist — kostenlos abzumelden. Reagierst du nicht, wird dein <strong>Credit verbraucht</strong> und der Platz ist verbindlich gebucht.
                 </p>
               </div>
             )

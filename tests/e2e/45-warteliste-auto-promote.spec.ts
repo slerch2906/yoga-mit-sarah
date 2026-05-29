@@ -497,6 +497,35 @@ test.describe('[E2E] Gnadenfrist — Source-Coverage', () => {
     expect(src).toMatch(/Versehentlich von Warteliste nachgerückt/)
   })
 
+  // Sarah 2026-05-29 (präzisiert): Der Gnadenfrist-Hinweis + Button dürfen NUR
+  // erscheinen, wenn die 60-Min-Frist bis IN die gesperrte Frist HINEINREICHT —
+  // also wenn (promoted_at + 60 Min) hinter der Fristgrenze liegt. NICHT mehr
+  // "jetzt innerhalb 3h", denn beim Sonderfall Nachrücken 3:30 h vorher muss der
+  // Hinweis schon bei 3:29 h (noch vor der 3h-Frist) erscheinen.
+  test('UI: Grace-Anzeige reicht-in-Frist-gegated (Gnadenfrist-Ende > Fristgrenze)', () => {
+    const src = read('app/kurse/[id]/page.tsx')
+    // Display-Flag existiert und kombiniert Gnadenfrist mit "reicht in Frist"
+    expect(src).toMatch(/showPromoteGrace/)
+    expect(src).toMatch(/const\s+showPromoteGrace\s*=\s*inPromoteGrace\s*&&\s*!isEventFree\s*&&\s*graceReachesIntoFrist/)
+    // Gnadenfrist-Ende = promoted_at + 60 Min
+    expect(src).toMatch(/graceEndMs\s*=\s*promotedAtMs\s*!=\s*null\s*\?\s*promotedAtMs\s*\+\s*60 \* 60 \* 1000/)
+    // Fristgrenze: bezahltes Event = Start − 7 Tage, sonst Start − 3 Stunden
+    expect(src).toMatch(/isEventPaid\s*\n?\s*\?\s*sessStartMsHint\s*-\s*7 \* 24 \* 60 \* 60 \* 1000/)
+    expect(src).toMatch(/sessStartMsHint\s*-\s*3 \* 60 \* 60 \* 1000/)
+    // "reicht hinein" = Gnadenfrist-Ende liegt NACH der Fristgrenze
+    expect(src).toMatch(/graceReachesIntoFrist\s*=\s*graceEndMs\s*!=\s*null\s*&&\s*fristStartMs\s*!=\s*null\s*&&\s*graceEndMs\s*>\s*fristStartMs/)
+    // Box + Button hängen an showPromoteGrace (nicht mehr nur an inPromoteGrace)
+    expect(src).toMatch(/showPromoteGrace\s*&&\s*!course\?\.is_free\s*&&\s*!isEventFree/)
+  })
+
+  test('handleCancel: bezahltes Event innerhalb 7d ist während Gnadenfrist NICHT hart geblockt', () => {
+    const src = read('app/kurse/[id]/page.tsx')
+    // Der 7-Tage-Hardblock greift nur, wenn KEINE Gnadenfrist läuft
+    expect(src).toMatch(/serverNow > deadline7d && !inPromoteGrace/)
+    // Auch die Confirm-Dialog-Sperre (within7d) berücksichtigt die Gnadenfrist
+    expect(src).toMatch(/&&\s*!inPromoteGrace/)
+  })
+
   test('RPC process_cancellation_full: beide Auto-Promote-Pfade setzen promoted_at', () => {
     // RLS-Kontext-Fix (Sarah 2026-05-29): Das Setzen von promoted_at (Basis der
     // 60-Min-Gnadenfrist) ist von den Client-Helfern in die SECURITY-DEFINER-RPC
@@ -510,8 +539,9 @@ test.describe('[E2E] Gnadenfrist — Source-Coverage', () => {
   test('Edge Function: waitlist_promoted-Mail hat "Wieder absagen"-Button', () => {
     const src = read('supabase/functions/send-email/index.ts')
     expect(src).toMatch(/Versehentlich nachgerückt\? Wieder absagen/)
-    // Button nur bei Kurs/Einzelstunde (nicht bei Events)
-    expect(src).toMatch(/!isPaidEvent && !isFreeEvent && data\.sessionId/)
+    // Button bei Kurs/Einzelstunde UND bezahlten Events (Sarah 2026-05-29: auch
+    // bezahlte Events haben jetzt die 60-Min-Gnadenfrist). Nur kostenlose Events nicht.
+    expect(src).toMatch(/!isFreeEvent && data\.sessionId/)
   })
 
   test('Claim-Route: echter Titel + Events ohne Credit', () => {

@@ -207,7 +207,9 @@ export default function SessionDetailPage() {
             await Email.waitlistRemovedCreditUsedElsewhere({
               email: prof.email,
               firstName: prof.first_name || 'Yogi',
-              courseName: w.session?.course?.name || '',
+              // SYS-Container-Name-Leak-Fix (Sarah 2026-05-29): bei Einzelstunden/
+              // Events den echten session.name nutzen, nicht den SYS-Kursnamen.
+              courseName: mailCourseName(w.session),
               date: w.session?.date || '',
               timeStart: w.session?.time_start || '',
             })
@@ -351,14 +353,24 @@ export default function SessionDetailPage() {
     const isEventFree = sessType === 'event_free'
     const isEvent = isEventPaid || isEventFree
 
-    // Welle 3.6 (Sarah 2026-05-26):
+    // Sarah-Regel 2026-05-28/29: Wer AUTOMATISCH von der Warteliste nachrückt (hat
+    // promoted_at gesetzt), darf sich 60 Min lang KOSTENLOS wieder abmelden —
+    // auch wenn die normale Abmeldefrist (3h bei Kurs/Einzelstunde, 7 Tage bei
+    // bezahltem Event) schon überschritten ist. Außerhalb der jeweiligen Frist ist
+    // Abmelden ohnehin frei, daher greift die Gnadenfrist nur INNERHALB der Frist.
+    const promotedAtMs = myBooking?.promoted_at ? new Date(myBooking.promoted_at).getTime() : null
+    const inPromoteGrace = promotedAtMs != null && serverNow.getTime() < promotedAtMs + 60 * 60 * 1000
+
+    // Welle 3.6 (Sarah 2026-05-26) + Gnadenfrist (Sarah 2026-05-29):
     // event_paid: 7-Tage-Frist HART. Yogi kann sich NICHT selbst abmelden bei <7d.
     //   → blockieren mit Hinweis "Wende dich an Sarah / Ersatzkandidat".
+    //   AUSNAHME: läuft gerade die 60-Min-Nachrück-Gnadenfrist, ist Selbst-Abmelden
+    //   trotzdem kostenfrei möglich (unfreiwilliges Auto-Nachrücken).
     // event_free: jederzeit kostenlos abmelden, kein 3h-Check.
     // course_session/single: 3h-Frist mit Credit-Verfall-Confirm (bisheriges Verhalten).
     if (isEventPaid) {
       const deadline7d = new Date(sessionStart.getTime() - 7 * 24 * 60 * 60 * 1000)
-      if (serverNow > deadline7d) {
+      if (serverNow > deadline7d && !inPromoteGrace) {
         alert(
           'Du bist innerhalb der 7-Tage-Stornofrist.\n\n' +
           'Eine Selbst-Abmeldung ist jetzt nicht mehr möglich — die volle Gebühr fällt an.\n\n' +
@@ -370,12 +382,6 @@ export default function SessionDetailPage() {
 
     // 3h-Check NUR bei nicht-Event Sessions
     const deadline3h = new Date(sessionStart.getTime() - 3 * 60 * 60 * 1000)
-    // Sarah-Regel 2026-05-28: Wer AUTOMATISCH von der Warteliste nachrückt (hat
-    // promoted_at gesetzt), darf sich 60 Min lang KOSTENLOS wieder abmelden —
-    // auch wenn die normale 3h-Frist schon überschritten ist (Credit kommt
-    // zurück). Außerhalb der 3h-Frist ist Abmelden ohnehin kostenlos.
-    const promotedAtMs = myBooking?.promoted_at ? new Date(myBooking.promoted_at).getTime() : null
-    const inPromoteGrace = promotedAtMs != null && serverNow.getTime() < promotedAtMs + 60 * 60 * 1000
     const late = !isEvent && serverNow > deadline3h && !inPromoteGrace
 
     // Sarah-Wunsch 2026-05-23: Yogi muss bewusst bestätigen wenn er innerhalb
@@ -579,7 +585,7 @@ export default function SessionDetailPage() {
   const waitlistHintText = isEventPaid
     ? (within90min
         ? 'So kurz vor Beginn rückst du nicht mehr automatisch nach. Wird jetzt noch ein Platz frei, bekommen alle Wartenden ein Spätangebot; wer zuerst zusagt, bucht verbindlich — 7-Tage-Stornofrist beachten.'
-        : 'Du rückst automatisch nach, sobald ein Platz frei wird. Achtung: Mit dem Nachrücken ist deine Teilnahme verbindlich gebucht. Es gilt die 7-Tage-Stornofrist — danach fällt die volle Gebühr an; du kannst aber einen Ersatzkandidaten benennen.')
+        : 'Du rückst automatisch nach, sobald ein Platz frei wird. Nach dem Nachrücken hast du noch 60 Minuten Zeit, dich kostenlos wieder abzumelden. Danach ist deine Teilnahme verbindlich und es gilt die 7-Tage-Stornofrist — danach fällt die volle Gebühr an; du kannst aber einen Ersatzkandidaten benennen.')
     : isEventFree
     ? (within90min
         ? 'So kurz vor Beginn rückst du nicht mehr automatisch nach. Wird jetzt noch ein Platz frei, bekommen alle Wartenden gleichzeitig ein Spätangebot — wer zuerst zusagt, bekommt den Platz.'
@@ -587,6 +593,24 @@ export default function SessionDetailPage() {
     : (within90min
         ? 'So kurz vor Beginn rückst du nicht mehr automatisch nach, das könnte für einige zu kurzfristig sein. Wird jetzt noch ein Platz frei, bekommen alle Wartenden gleichzeitig ein Spätangebot — wer zuerst zusagt, bekommt den Platz.'
         : 'Du rückst bis 90 Minuten vor Beginn automatisch nach. Du hast dann 60 Minuten Zeit, dich kostenlos abzumelden (Credit zurück). Ab 90 Minuten vorher: Spätangebot an alle — wer zuerst zusagt, bekommt den Platz.')
+
+  // Sarah-Regel 2026-05-29 (präzisiert): Der "Versehentlich nachgerückt? Schnell
+  // noch absagen"-Hinweis + Button erscheinen NUR, wenn die 60-Min-Gnadenfrist
+  // bis in die gesperrte Frist HINEINREICHT — also wenn promoted_at + 60 Min
+  // hinter der Fristgrenze liegt. Beispiel Kurs/Single (Grenze = Start − 3h):
+  // Nachrücken 3:30 h vorher → Gnadenfrist bis 2:30 h vorher → reicht über die
+  // 3h-Grenze → Hinweis durchgehend zeigen (auch bei 3:29 h, noch vor der Frist).
+  // Nachrücken 5 h vorher → Gnadenfrist endet 4 h vorher → endet VOR der 3h-Frist
+  // → kein Hinweis (Abmelden ist ohnehin kostenlos).
+  //   Kurs/Einzelstunde → Grenze = Start − 3 Stunden
+  //   bezahltes Event   → Grenze = Start − 7 Tage
+  //   kostenloses Event → nie (Abmelden ist immer kostenlos)
+  const graceEndMs = promotedAtMs != null ? promotedAtMs + 60 * 60 * 1000 : null
+  const fristStartMs = sessStartMsHint > 0
+    ? (isEventPaid ? sessStartMsHint - 7 * 24 * 60 * 60 * 1000 : sessStartMsHint - 3 * 60 * 60 * 1000)
+    : null
+  const graceReachesIntoFrist = graceEndMs != null && fristStartMs != null && graceEndMs > fristStartMs
+  const showPromoteGrace = inPromoteGrace && !isEventFree && graceReachesIntoFrist
 
   // Welle 2.9 (Sarah 2026-05-26): Effective-Open-Logik. SYS-Container haben
   // is_open=false (Container ist NIE buchbar). Daher fuer single/event_*
@@ -813,15 +837,17 @@ export default function SessionDetailPage() {
               <p className="text-sm text-yoga-text/80 leading-relaxed">
                 {course?.is_free || isEventFree
                   ? 'Du bist angemeldet. Abmeldung jederzeit möglich.'
+                  : showPromoteGrace
+                  ? <>Du bist gerade von der Warteliste nachgerückt. Du hast <strong>noch etwa 1 Stunde</strong> Zeit, dich kostenlos wieder abzumelden{isEventPaid ? '.' : <> – dein Credit kommt dann zurück.</>}</>
                   : isEventPaid
                   ? 'Du bist angemeldet. Diese Buchung ist verbindlich. Stornofrist: 7 Tage vor dem Event.'
-                  : inPromoteGrace
-                  ? <>Du bist gerade von der Warteliste nachgerückt. Du hast <strong>noch etwa 1 Stunde</strong> Zeit, dich kostenlos wieder abzumelden – dein Credit kommt dann zurück.</>
                   : <>Du bist angemeldet. Abmeldung kostenlos bis <strong>{deadline}</strong> – danach gilt die Stunde als wahrgenommen.</>}
               </p>
             </div>
-            {/* Sarah-Regel 2026-05-28: 60-Min-Gnadenfrist-Button nach Nachrücken. */}
-            {inPromoteGrace && !course?.is_free && !isEvent && (
+            {/* Sarah-Regel 2026-05-28/29: 60-Min-Gnadenfrist-Button nach Nachrücken —
+                nur wenn die Frist tatsächlich über die normale Abmeldefrist hinausreicht
+                (Kurs/Einzelstunde innerhalb 3h, bezahltes Event innerhalb 7 Tage). */}
+            {showPromoteGrace && !course?.is_free && !isEventFree && (
               <button onClick={() => setShowCancel(true)} className="btn-secondary mb-2 border-yoga-red-text/40">
                 <i className="ti ti-alert-triangle mr-1" /> Versehentlich von Warteliste nachgerückt? Schnell noch absagen
               </button>
@@ -840,7 +866,9 @@ export default function SessionDetailPage() {
         {!past && !session.is_cancelled && myBooking && showCancel && (() => {
           // Welle 3.6 (Sarah 2026-05-26): event_paid in 7-Tage-Frist HART blockieren.
           const sessionStartTs = new Date(`${session.date}T${session.time_start}`).getTime()
-          const within7d = isEventPaid && (sessionStartTs - Date.now()) < 7 * 24 * 60 * 60 * 1000
+          // Sarah 2026-05-29: Während der 60-Min-Nachrück-Gnadenfrist ist Selbst-
+          // Abmelden auch innerhalb der 7-Tage-Frist kostenfrei möglich → nicht hart blocken.
+          const within7d = isEventPaid && (sessionStartTs - Date.now()) < 7 * 24 * 60 * 60 * 1000 && !inPromoteGrace
           return (
           <>
             {course?.is_free || isEventFree ? (
@@ -860,11 +888,13 @@ export default function SessionDetailPage() {
                 </p>
               </div>
             ) : isEventPaid ? (
-              // event_paid, noch vor 7-Tage-Frist
+              // event_paid, noch vor 7-Tage-Frist ODER innerhalb der Nachrück-Gnadenfrist
               <div className="rounded-yoga p-3 mb-4 bg-yoga-green-bg text-yoga-green-text">
-                <p className="text-sm font-semibold mb-1">Rechtzeitige Abmeldung</p>
+                <p className="text-sm font-semibold mb-1">{showPromoteGrace ? 'Gerade nachgerückt – Abmeldung kostenfrei' : 'Rechtzeitige Abmeldung'}</p>
                 <p className="text-sm leading-relaxed opacity-90">
-                  Du bist noch vor der 7-Tage-Stornofrist — deine Abmeldung ist kostenfrei.
+                  {showPromoteGrace
+                    ? 'Du bist gerade automatisch von der Warteliste nachgerückt — innerhalb der ersten Stunde kannst du dich kostenfrei wieder abmelden.'
+                    : 'Du bist noch vor der 7-Tage-Stornofrist — deine Abmeldung ist kostenfrei.'}
                 </p>
               </div>
             ) : (

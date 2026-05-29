@@ -2024,7 +2024,7 @@ content.push(...ucase({
   ],
   regeln: [
     'Die neue Frist gilt sowohl in der App-Bestätigungs-E-Mail (Email-Template yogi_enrolled_by_admin) als auch auf /rechtliches und im AGB-Dokument.',
-    'Für Veranstaltungen (Workshops, Specials) bleibt die alte 7-Tage-Frist gemäß AGB § 1.2.',
+    'Für Veranstaltungen (Workshops, Specials) gilt die 7-Tage-Frist gemäß AGB § 1.2. Neu: Rückt ein Yogi automatisch von der Warteliste nach, hat er noch 60 Minuten Zeit, sich kostenlos wieder abzumelden — auch bei bezahlten Events innerhalb der 7-Tage-Sperre. Danach gilt die 7-Tage-Frist wieder.',
   ],
   texte: [
     'Kostenfreie Stornierung bis 14 Tage vor Kursbeginn',

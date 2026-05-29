@@ -100,7 +100,7 @@ export default function WartelistePage() {
                       Ab 90 Minuten vor Beginn rückst Du nicht mehr automatisch nach: Alle Wartenden bekommen gleichzeitig ein Spätangebot – wer zuerst zusagt, bekommt den Platz.
                     </p>
                     <p className="text-sm text-yoga-text/65 leading-relaxed">
-                      Bei Events ist die Teilnahme mit dem Nachrücken verbindlich – es gilt die 7-Tage-Stornofrist.
+                      Bei Events ist die Teilnahme mit dem Nachrücken verbindlich – es gilt die 7-Tage-Stornofrist. Auch hier hast Du nach dem Nachrücken noch 60 Minuten Zeit, Dich kostenlos wieder abzumelden.
                     </p>
                   </div>
                 </>

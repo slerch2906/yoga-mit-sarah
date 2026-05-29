@@ -27,7 +27,7 @@ const UEBERSICHT_TEXTS = {
   spaetangebot:
     'Ab 90 Minuten vor Beginn rückst Du nicht mehr automatisch nach: Alle Wartenden bekommen gleichzeitig ein Spätangebot – wer zuerst zusagt, bekommt den Platz.',
   event:
-    'Bei Events ist die Teilnahme mit dem Nachrücken verbindlich – es gilt die 7-Tage-Stornofrist.',
+    'Bei Events ist die Teilnahme mit dem Nachrücken verbindlich – es gilt die 7-Tage-Stornofrist. Auch hier hast Du nach dem Nachrücken noch 60 Minuten Zeit, Dich kostenlos wieder abzumelden.',
 }
 
 // Die 6 exakten Strings (Kurs/Single >90, Kurs/Single ≤90, Event-frei >90,
@@ -46,7 +46,7 @@ const TEXTS = {
   eventFreeUnder90:
     'So kurz vor Beginn rückst du nicht mehr automatisch nach. Wird jetzt noch ein Platz frei, bekommen alle Wartenden gleichzeitig ein Spätangebot — wer zuerst zusagt, bekommt den Platz.',
   eventPaidOver90:
-    'Du rückst automatisch nach, sobald ein Platz frei wird. Achtung: Mit dem Nachrücken ist deine Teilnahme verbindlich gebucht. Es gilt die 7-Tage-Stornofrist — danach fällt die volle Gebühr an; du kannst aber einen Ersatzkandidaten benennen.',
+    'Du rückst automatisch nach, sobald ein Platz frei wird. Nach dem Nachrücken hast du noch 60 Minuten Zeit, dich kostenlos wieder abzumelden. Danach ist deine Teilnahme verbindlich und es gilt die 7-Tage-Stornofrist — danach fällt die volle Gebühr an; du kannst aber einen Ersatzkandidaten benennen.',
   eventPaidUnder90:
     'So kurz vor Beginn rückst du nicht mehr automatisch nach. Wird jetzt noch ein Platz frei, bekommen alle Wartenden ein Spätangebot; wer zuerst zusagt, bucht verbindlich — 7-Tage-Stornofrist beachten.',
 }
@@ -79,7 +79,7 @@ test.describe('[E2E-Text] Wartelisten-Hinweise — eingefrorenes Wording (Sarah-
     const src = SRC()
     expect(src).toContain(TEXTS.eventPaidOver90)
     // Sicherheits-Anker: Verbindlichkeit + Stornofrist müssen drinstehen
-    expect(TEXTS.eventPaidOver90).toMatch(/verbindlich gebucht/)
+    expect(TEXTS.eventPaidOver90).toMatch(/verbindlich/)
     expect(TEXTS.eventPaidOver90).toMatch(/7-Tage-Stornofrist/)
   })
 

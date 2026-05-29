@@ -180,7 +180,7 @@ function BestaetigungInner() {
                     <i className="ti ti-alert-circle mr-1" /> Wichtig – bitte beachten:
                   </p>
                   <p className="text-sm text-yoga-amber-text leading-relaxed">
-                    Du stehst jetzt auf der Warteliste und rückst automatisch nach, wenn ein Platz frei wird. Damit wird deine Anmeldung <strong>verbindlich gebucht</strong>. Beachte die Stornofrist — nur bis <strong>7 Tage</strong> vorher — danach fällt die volle Gebühr an, außer du ernennst einen Ersatzteilnehmer.
+                    Du stehst jetzt auf der Warteliste und rückst automatisch nach, wenn ein Platz frei wird. Nach dem Nachrücken hast du noch <strong>60 Minuten Zeit</strong>, dich kostenlos wieder abzumelden. Danach ist deine Anmeldung <strong>verbindlich</strong> und es gilt die 7-Tage-Stornofrist — danach fällt die volle Gebühr an, außer du ernennst einen Ersatzteilnehmer.
                   </p>
                 </div>
               )

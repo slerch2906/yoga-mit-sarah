@@ -16,6 +16,19 @@ import * as fs from 'fs'
 import * as path from 'path'
 
 const SRC = () => fs.readFileSync(path.join(process.cwd(), 'app/kurse/[id]/page.tsx'), 'utf8')
+const SRC_UEBERSICHT = () => fs.readFileSync(path.join(process.cwd(), 'app/warteliste/page.tsx'), 'utf8')
+
+// Übersichts-Box auf /warteliste (Sarah 2026-05-29): Sammel-Hinweis unter der
+// Wartelisten-Sektion. Auf Sarahs Wunsch um die 90-Min- und Event-Regeln
+// erweitert (vorher nur generischer Happy-Path-Satz).
+const UEBERSICHT_TEXTS = {
+  autoNachruecken:
+    'Sobald ein Platz frei wird, rückst Du bis 90 Minuten vor Beginn automatisch nach – und hast dann auch innerhalb der 3-Stunden-Frist noch eine Stunde Zeit, Dich kostenlos wieder abzumelden.',
+  spaetangebot:
+    'Ab 90 Minuten vor Beginn rückst Du nicht mehr automatisch nach: Alle Wartenden bekommen gleichzeitig ein Spätangebot – wer zuerst zusagt, bekommt den Platz.',
+  event:
+    'Bei Events ist die Teilnahme mit dem Nachrücken verbindlich – es gilt die 7-Tage-Stornofrist.',
+}
 
 // Die 6 exakten Strings (Kurs/Single >90, Kurs/Single ≤90, Event-frei >90,
 // Event-frei ≤90, Event-bezahlt >90, Event-bezahlt ≤90).
@@ -89,5 +102,32 @@ test.describe('[E2E-Text] Wartelisten-Hinweise — eingefrorenes Wording (Sarah-
   test('Alter generischer Satz ist ENTFERNT (kein Rückfall)', () => {
     // Der frühere undifferenzierte Satz darf nicht mehr existieren.
     expect(SRC()).not.toContain('Du rückst automatisch nach wenn ein Platz frei wird. Du hast dann 1 Stunde Zeit dich kostenlos abzumelden.')
+  })
+})
+
+test.describe('[E2E-Text] Warteliste-Übersicht (/warteliste): Sammel-Hinweis-Box (Sarah-Spec)', () => {
+  test('Box erklärt Auto-Nachrücken + 3h/60-Min-Frist', () => {
+    expect(SRC_UEBERSICHT()).toContain(UEBERSICHT_TEXTS.autoNachruecken)
+  })
+
+  test('Box erklärt die 90-Min-Regel (Spätangebot)', () => {
+    expect(SRC_UEBERSICHT()).toContain(UEBERSICHT_TEXTS.spaetangebot)
+  })
+
+  test('Box erklärt Event-Verbindlichkeit + 7-Tage-Storno', () => {
+    const src = SRC_UEBERSICHT()
+    expect(src).toContain(UEBERSICHT_TEXTS.event)
+    expect(UEBERSICHT_TEXTS.event).toMatch(/verbindlich/)
+    expect(UEBERSICHT_TEXTS.event).toMatch(/7-Tage-Stornofrist/)
+  })
+
+  test('Box steht weiterhin NUR unter der echten Warteliste (nicht bei Benachrichtigungen)', () => {
+    const src = SRC_UEBERSICHT()
+    // Hinweis ist innerhalb des waitlist.length-Blocks, der Notify-Block hat keinen solchen Text.
+    expect(src).toMatch(/waitlist\.length > 0/)
+  })
+
+  test('Alter generischer Einzeiler ist ENTFERNT (kein Rückfall)', () => {
+    expect(SRC_UEBERSICHT()).not.toContain('Wenn ein Platz frei wird, rückst Du automatisch nach und hast auch innerhalb der 3 Stunden Frist noch eine Stunde Zeit dich kostenlos wieder abzumelden.')
   })
 })

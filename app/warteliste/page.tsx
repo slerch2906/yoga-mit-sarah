@@ -92,9 +92,15 @@ export default function WartelistePage() {
                   {/* Sarah-Wunsch 2026-05-28: Hinweis DIREKT unter die Warteliste —
                       gilt nur fürs automatische Nachrücken, NICHT für die
                       Benachrichtigung. Daher zwischen den beiden Sektionen. */}
-                  <div className="mt-4 bg-yoga-gray border border-yoga-border rounded-yoga p-3">
+                  <div className="mt-4 bg-yoga-gray border border-yoga-border rounded-yoga p-3 space-y-2">
                     <p className="text-sm text-yoga-text/65 leading-relaxed">
-                      Wenn ein Platz frei wird, rückst Du automatisch nach und hast auch innerhalb der 3 Stunden Frist noch eine Stunde Zeit dich kostenlos wieder abzumelden.
+                      Sobald ein Platz frei wird, rückst Du bis 90 Minuten vor Beginn automatisch nach – und hast dann auch innerhalb der 3-Stunden-Frist noch eine Stunde Zeit, Dich kostenlos wieder abzumelden.
+                    </p>
+                    <p className="text-sm text-yoga-text/65 leading-relaxed">
+                      Ab 90 Minuten vor Beginn rückst Du nicht mehr automatisch nach: Alle Wartenden bekommen gleichzeitig ein Spätangebot – wer zuerst zusagt, bekommt den Platz.
+                    </p>
+                    <p className="text-sm text-yoga-text/65 leading-relaxed">
+                      Bei Events ist die Teilnahme mit dem Nachrücken verbindlich – es gilt die 7-Tage-Stornofrist.
                     </p>
                   </div>
                 </>

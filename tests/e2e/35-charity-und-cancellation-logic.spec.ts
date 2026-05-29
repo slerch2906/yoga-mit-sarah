@@ -417,11 +417,31 @@ test.describe('[E2E-Logic] 9-Tage-Sperre — Source-Logik prüfen', () => {
     const fs = require('fs') as typeof import('fs')
     const path = require('path') as typeof import('path')
     const src = fs.readFileSync(path.join(process.cwd(), 'app/admin/kurse/page.tsx'), 'utf8')
-    const archiveCourseMatch = src.match(/async function archiveCourse[\s\S]{0,1500}/)
+    const archiveCourseMatch = src.match(/async function archiveCourse[\s\S]{0,3500}/)
     expect(archiveCourseMatch).not.toBeNull()
     const archiveFn = archiveCourseMatch![0]
     expect(archiveFn).toMatch(/date_end/)
     expect(archiveFn).toMatch(/9\.?\s*Tag/i)
+  })
+
+  test('archiveCourse: Kurs OHNE Teilnehmer ist IMMER archivierbar (9-Tage-Sperre nur bei Teilnehmern)', async () => {
+    // Sarah-Fix 2026-05-29: Admin kann Kurse ohne Teilnehmer immer archivieren,
+    // unabhängig vom Datum. Die 9-Tage-Sperre greift nur, wenn es etwas zu
+    // schützen gibt (aktive Buchungen / Enrollments / einlösbare Credits).
+    const fs = require('fs') as typeof import('fs')
+    const path = require('path') as typeof import('path')
+    const src = fs.readFileSync(path.join(process.cwd(), 'app/admin/kurse/page.tsx'), 'utf8')
+    const archiveCourseMatch = src.match(/async function archiveCourse[\s\S]{0,3500}/)
+    expect(archiveCourseMatch).not.toBeNull()
+    const archiveFn = archiveCourseMatch![0]
+    // Teilnehmer-Erkennung vorhanden (Buchungen + Enrollments + Credits)
+    expect(archiveFn).toMatch(/aHasParticipants/)
+    expect(archiveFn).toMatch(/from\(['"]bookings['"]\)/)
+    expect(archiveFn).toMatch(/from\(['"]enrollments['"]\)/)
+    // 9-Tage-Sperre ist an aHasParticipants gekoppelt (nicht mehr bedingungslos)
+    expect(archiveFn).toMatch(/aHasParticipants\s*&&\s*courseObj\.date_end/)
+    // Guthaben zählt NICHT als schützenswert (kursunabhängig einlösbar)
+    expect(archiveFn).toMatch(/guthaben/)
   })
 
   test('Safety-Net: deleteCourse prüft auf credits mit expires_at > NOW vor dem Löschen', async () => {

@@ -81,7 +81,7 @@ test.describe('[E2E-Text] 9-Tage-Sperre — Alert-Text plausibel', () => {
 
   test('archiveCourse Alert nennt 9. Tag-Sperre', async () => {
     const src = read('app/admin/kurse/page.tsx')
-    const fn = src.match(/async function archiveCourse[\s\S]{0,1500}/)![0]
+    const fn = src.match(/async function archiveCourse[\s\S]{0,3500}/)![0]
     expect(fn).toMatch(/9\.\s*Tag\s*nach\s*Kursende/i)
   })
 

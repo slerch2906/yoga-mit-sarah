@@ -1062,8 +1062,33 @@ export default function AdminKursePage() {
     //
     // Reine Code-Analyse: Archivieren macht aktuell NUR is_active=false und
     // löscht KEINE Credits. Aber als safe Default + uniforme Logik mit Löschen.
+    //
+    // Sarah-Fix 2026-05-29: Ein Kurs OHNE Teilnehmer kann der Admin IMMER
+    // sofort archivieren — unabhängig vom Datum. Die 9-Tage-Sperre (Credit-
+    // Schutz) greift nur, wenn es überhaupt etwas zu schützen gibt. "Keine
+    // Teilnehmer" = keine aktiven Buchungen, keine Enrollments, keine noch
+    // einlösbaren Credits. Exakt dieselbe Ausnahme wie in deleteCourse().
     // ───────────────────────────────────────────────────────────────────────
-    if (courseObj.date_end) {
+    const { data: aSessions } = await supabase.from('sessions').select('id').eq('course_id', courseObj.id)
+    const aSessionIds = (aSessions || []).map((s: any) => s.id)
+    let aActiveBookingsCount = 0
+    if (aSessionIds.length > 0) {
+      const { count } = await supabase.from('bookings')
+        .select('id', { count: 'exact', head: true })
+        .in('session_id', aSessionIds).eq('status', 'active')
+      aActiveBookingsCount = count || 0
+    }
+    const { count: aEnrollCount } = await supabase.from('enrollments')
+      .select('id', { count: 'exact', head: true }).eq('course_id', courseObj.id)
+    const { data: aCourseCredits } = await supabase.from('credits')
+      .select('total, used, model').eq('course_id', courseObj.id)
+    // Guthaben (Krankheits-/Kursabbruch-Guthaben) NICHT als "schützenswert"
+    // zählen — es ist kursunabhängig einlösbar und übersteht Löschung/Archiv.
+    const aUsableCreditsCount = (aCourseCredits || [])
+      .filter((c: any) => c.model !== 'guthaben' && (c.total - c.used) > 0).length
+    const aHasParticipants = aActiveBookingsCount > 0 || (aEnrollCount || 0) > 0 || aUsableCreditsCount > 0
+
+    if (aHasParticipants && courseObj.date_end) {
       const dateEnd = new Date(courseObj.date_end)
       const earliestArchive = new Date(dateEnd.getTime() + 9 * 24 * 60 * 60 * 1000)
       const now = new Date()
@@ -1085,10 +1110,12 @@ export default function AdminKursePage() {
       }
     }
 
-    // Safety-Net: noch gültige Credits mit Restbestand?
+    // Safety-Net: noch gültige Credits mit Restbestand? (Guthaben ausgenommen —
+    // es übersteht Archivierung/Löschung und ist kursunabhängig einlösbar.)
     const { data: validCredits } = await supabase.from('credits')
       .select('id, total, used, expires_at')
       .eq('course_id', courseObj.id)
+      .neq('model', 'guthaben')
       .gt('expires_at', new Date().toISOString())
     if (validCredits && validCredits.length > 0) {
       const stillUsable = validCredits.filter(c => (c.total - c.used) > 0)

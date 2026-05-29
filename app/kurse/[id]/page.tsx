@@ -564,6 +564,30 @@ export default function SessionDetailPage() {
   const isEventPaid = sessionType === 'event_paid'
   const isEventFree = sessionType === 'event_free'
   const isEvent = isEventPaid || isEventFree
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Sarah-Spec 2026-05-29 (final, abgestimmtes Wording — NUR auf Sarahs
+  // ausdrücklichen Auftrag ändern! Der Test 48-warteliste-hinweis-texte.spec.ts
+  // friert exakt diese Sätze ein.):
+  // Wartelisten-Status-Box differenziert nach Session-Typ + 90-Min-Fenster.
+  //   > 90 Min vor Beginn → Auto-Promote (+ 60-Min-Gnadenfrist bei Kurs/Single)
+  //   ≤ 90 Min vor Beginn → kein Auto-Promote, Spätangebot per Mail an alle
+  // ───────────────────────────────────────────────────────────────────────
+  const sessStartMsHint = session?.date && (session as any)?.time_start
+    ? new Date(`${session.date}T${(session as any).time_start}`).getTime() : 0
+  const within90min = sessStartMsHint > 0 && (sessStartMsHint - Date.now()) <= 90 * 60 * 1000
+  const waitlistHintText = isEventPaid
+    ? (within90min
+        ? 'So kurz vor Beginn rückst du nicht mehr automatisch nach. Wird jetzt noch ein Platz frei, bekommen alle Wartenden ein Spätangebot; wer zuerst zusagt, bucht verbindlich — 7-Tage-Stornofrist beachten.'
+        : 'Du rückst automatisch nach, sobald ein Platz frei wird. Achtung: Mit dem Nachrücken ist deine Teilnahme verbindlich gebucht. Es gilt die 7-Tage-Stornofrist — danach fällt die volle Gebühr an; du kannst aber einen Ersatzkandidaten benennen.')
+    : isEventFree
+    ? (within90min
+        ? 'So kurz vor Beginn rückst du nicht mehr automatisch nach. Wird jetzt noch ein Platz frei, bekommen alle Wartenden gleichzeitig ein Spätangebot — wer zuerst zusagt, bekommt den Platz.'
+        : 'Du rückst automatisch nach, sobald ein Platz frei wird. Abmelden ist jederzeit kostenlos möglich.')
+    : (within90min
+        ? 'So kurz vor Beginn rückst du nicht mehr automatisch nach, das könnte für einige zu kurzfristig sein. Wird jetzt noch ein Platz frei, bekommen alle Wartenden gleichzeitig ein Spätangebot — wer zuerst zusagt, bekommt den Platz.'
+        : 'Du rückst bis 90 Minuten vor Stundenbeginn automatisch nach, sobald ein Platz frei wird. Du hast dann, auch innerhalb der 3 Stunden Abmeldefrist, 60 Minuten Zeit, dich noch kostenlos abzumelden — dein Credit kommt dann zurück. Ab 90 Minuten vor Stundenbeginn bekommen alle wartenden Yogis gleichzeitig eine Mail — wer zuerst zusagt, bekommt den Platz.')
+
   // Welle 2.9 (Sarah 2026-05-26): Effective-Open-Logik. SYS-Container haben
   // is_open=false (Container ist NIE buchbar). Daher fuer single/event_*
   // wird stattdessen session.is_open genutzt (Default = true wenn NULL).
@@ -1064,7 +1088,7 @@ export default function SessionDetailPage() {
               </p>
               <p className="text-sm text-yoga-amber-text/90 leading-relaxed">
                 {myWaitlist.type === 'waitlist'
-                  ? 'Du rückst automatisch nach wenn ein Platz frei wird. Du hast dann 1 Stunde Zeit dich kostenlos abzumelden.'
+                  ? waitlistHintText
                   : 'Sobald ein Platz frei wird, bekommst du eine Benachrichtigung.'}
               </p>
             </div>

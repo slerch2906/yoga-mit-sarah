@@ -145,15 +145,35 @@ test.describe('[E2E] Alle Admin-Austrag-Pfade rufen Promote auf', () => {
   // Sarah-Regel 2026-05-28: ERST Warteliste nachrücken, DANN (nur wenn Platz
   // noch frei) Benachrichtigungen. Die notify-Aufrufe dürfen NICHT vor dem
   // Promote-Versuch stehen.
+  //
+  // RLS-Kontext-Fix (Sarah 2026-05-29): Der Helper delegiert die Entscheidung
+  // jetzt an die SECURITY-DEFINER-RPC process_cancellation_full. Die Garantie
+  // bleibt: der notify-Pfad (mode === 'notify-only') wird server-seitig NUR
+  // zurückgegeben, wenn NIEMAND nachgerückt ist — und im Helper steht der
+  // notify-Mailversand strukturell NACH dem auto-promoted-Return.
   test('Benachrichtigungen erst NACH erfolglosem Promote (TS-Helper)', () => {
     const src = fs.readFileSync(path.join(process.cwd(), 'lib/waitlist-promote.ts'), 'utf8')
-    const idxPromotedReturn = src.indexOf("if (promoted) return { mode: 'auto-promoted'")
-    const idxFirstNotify = src.indexOf('notifyAllSubscribers(supabase, sessionId')
-    expect(idxPromotedReturn, 'Promote-Return muss existieren').toBeGreaterThan(-1)
-    expect(idxFirstNotify, 'notifyAllSubscribers muss existieren').toBeGreaterThan(-1)
-    // Der erste notify-Aufruf steht im Source NACH dem Auto-Promote-Return,
-    // d.h. er wird nur erreicht wenn niemand nachgerückt ist.
-    expect(idxFirstNotify, 'notify darf nicht VOR dem Promote stehen').toBeGreaterThan(idxPromotedReturn)
+    const idxPromotedReturn = src.indexOf("return { mode: 'auto-promoted'")
+    const idxNotifyBranch = src.indexOf("mode === 'notify-only'")
+    const idxNotifyMail = src.indexOf('Email.notifyPlaceFree')
+    expect(idxPromotedReturn, 'Auto-Promote-Return muss existieren').toBeGreaterThan(-1)
+    expect(idxNotifyBranch, "notify-only-Zweig muss existieren").toBeGreaterThan(-1)
+    expect(idxNotifyMail, 'notifyPlaceFree-Mail muss existieren').toBeGreaterThan(-1)
+    // Der notify-Zweig + Mailversand stehen im Source NACH dem Auto-Promote-
+    // Return → werden nur erreicht, wenn niemand nachgerückt ist.
+    expect(idxNotifyBranch, 'notify-Zweig darf nicht VOR dem Promote stehen').toBeGreaterThan(idxPromotedReturn)
+    expect(idxNotifyMail, 'notify-Mail darf nicht VOR dem Promote stehen').toBeGreaterThan(idxPromotedReturn)
+  })
+
+  test('Helper delegiert an SECURITY-DEFINER-RPC (kein RLS-blinder Client-Pfad)', () => {
+    const src = fs.readFileSync(path.join(process.cwd(), 'lib/waitlist-promote.ts'), 'utf8')
+    // Privilegierte DB-Arbeit läuft server-seitig (RLS-frei)
+    expect(src).toContain('process_cancellation_full')
+    // Notify-Einträge werden nur on-success server-seitig gelöscht
+    expect(src).toContain('delete_notify_subscribers')
+    // Der alte RLS-blinde Client-Pfad ist ENTFERNT
+    expect(src).not.toContain(".from('waitlist')")
+    expect(src).not.toContain(".from('credits')")
   })
 })
 
@@ -477,10 +497,14 @@ test.describe('[E2E] Gnadenfrist — Source-Coverage', () => {
     expect(src).toMatch(/Versehentlich von Warteliste nachgerückt/)
   })
 
-  test('waitlist-promote.ts: beide Auto-Promote-Helfer setzen promoted_at', () => {
-    const src = read('lib/waitlist-promote.ts')
-    const matches = src.match(/promoted_at:\s*new Date\(\)\.toISOString\(\)/g) || []
-    expect(matches.length, 'promoted_at in tryAutoPromoteOne + tryAutoPromoteOneFree').toBeGreaterThanOrEqual(2)
+  test('RPC process_cancellation_full: beide Auto-Promote-Pfade setzen promoted_at', () => {
+    // RLS-Kontext-Fix (Sarah 2026-05-29): Das Setzen von promoted_at (Basis der
+    // 60-Min-Gnadenfrist) ist von den Client-Helfern in die SECURITY-DEFINER-RPC
+    // gewandert. Dort müssen beide Auto-Promote-Pfade (Event/Charity ohne Credit
+    // + Kurs/Einzelstunde mit Credit) promoted_at = now() setzen.
+    const src = read('supabase/migrations/20260529_process_cancellation_full.sql')
+    const matches = src.match(/promoted_at\s*=\s*now\(\)/g) || []
+    expect(matches.length, 'promoted_at = now() in beiden Auto-Promote-Pfaden der RPC').toBeGreaterThanOrEqual(2)
   })
 
   test('Edge Function: waitlist_promoted-Mail hat "Wieder absagen"-Button', () => {

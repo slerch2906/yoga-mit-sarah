@@ -348,10 +348,13 @@ export default function MeinePage() {
               const daysLeft = Math.max(0, Math.ceil((new Date(c.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
               // Sarah-Wunsch 2026-05-28: Herkunfts-Kurstitel auch beim
               // Krankheits-Guthaben anzeigen ("aus Kurs: X").
-              const illnessCourseName = isIllness ? (c.course?.name?.trim() || null) : null
+              // Sarah-Fix 2026-05-29: source_course_name als Fallback — der Titel
+              // bleibt erhalten, auch wenn der Quell-Kurs geloescht wurde (course_id
+              // dann null, aber der Name steht weiter in source_course_name).
+              const illnessCourseName = isIllness ? (c.course?.name?.trim() || c.source_course_name?.trim() || null) : null
               // Sarah-Wunsch 2026-05-28: bei Kursabbruch-Guthaben Herkunft anzeigen
               // — Kurstitel + Abbruch-Datum (= Anlage-Datum des Guthabens).
-              const cancelCourseName = !isIllness ? (c.course?.name?.trim() || null) : null
+              const cancelCourseName = !isIllness ? (c.course?.name?.trim() || c.source_course_name?.trim() || null) : null
               const cancelDateStr = (!isIllness && c.created_at)
                 ? new Date(c.created_at).toLocaleDateString('de-DE', { day:'numeric', month:'long', year:'numeric' })
                 : null

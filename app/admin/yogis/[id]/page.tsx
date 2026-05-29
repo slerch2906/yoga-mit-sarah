@@ -672,9 +672,16 @@ export default function AdminYogiDetailPage() {
         // "Krankheits-Guthaben aus Kurs: <name> (ausgetragen am <attest_date>)"
         // anzeigen kann. course_id ist trotzdem NUR Herkunfts-Info — der Yogi
         // kann den Guthaben fuer JEDEN Kurs einloesen.
+        // Sarah-Fix 2026-05-29: source_course_name zusaetzlich speichern. Der
+        // Kurstitel muss DAUERHAFT erhalten bleiben — auch wenn der Admin den
+        // Quell-Kurs spaeter loescht (dann wird course_id entkoppelt, der Titel
+        // bleibt aber in source_course_name stehen).
+        const { data: srcCourse } = await supabase.from('courses')
+          .select('name').eq('id', courseId).single()
         const { data: newCredit } = await supabase.from('credits').insert({
           user_id: id,
           course_id: courseId,
+          source_course_name: srcCourse?.name || null,
           model: 'guthaben',
           total: hoursCredited,
           used: 0,
@@ -1191,7 +1198,9 @@ export default function AdminYogiDetailPage() {
                       // den Herkunfts-Kurs + Datum (Anlage = created_at) anzeigen,
                       // damit der Admin nachvollziehen kann woher das Guthaben kommt.
                       const created = c.created_at ? new Date(c.created_at).toLocaleDateString('de-DE') : null
-                      const courseName = c.course?.name || null
+                      // Sarah-Fix 2026-05-29: source_course_name als Fallback — bleibt
+                      // erhalten, auch wenn der Quell-Kurs geloescht (course_id entkoppelt) wurde.
+                      const courseName = c.course?.name || c.source_course_name || null
                       const isGuthaben = c.model === 'guthaben'
                       const isIllness = isGuthaben && c.source === 'illness'
                       const label =

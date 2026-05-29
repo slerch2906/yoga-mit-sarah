@@ -109,12 +109,12 @@ export default function AdminYogisPage() {
 
         <div className="flex gap-2 mb-4">
           <button onClick={() => router.push('/admin/einladen')}
-            className="flex-1 btn-secondary flex items-center justify-center gap-2 text-sm">
+            className="flex-1 btn-primary flex items-center justify-center gap-2 text-sm">
             <i className="ti ti-mail-forward" />
             Yogi einladen
           </button>
           <button onClick={() => { setShowDummyForm(true); setDummyError('') }}
-            className="flex-1 btn-secondary flex items-center justify-center gap-2 text-sm">
+            className="flex-1 btn-primary flex items-center justify-center gap-2 text-sm">
             <i className="ti ti-user-plus" />
             Dummy anlegen
           </button>

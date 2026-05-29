@@ -976,6 +976,10 @@ export default function AdminKursePage() {
         const { data: provCred } = await supabase.from('credits').insert({
           user_id: prof.id,
           course_id: cancellingCourse.id,
+          // Sarah-Fix 2026-05-29: Kurstitel dauerhaft mitspeichern. Bleibt erhalten,
+          // auch wenn der Quell-Kurs spaeter geloescht wird (course_id wird dann
+          // entkoppelt, der Titel steht weiter in source_course_name).
+          source_course_name: cancellingCourse.name,
           model: 'guthaben',
           source: 'cancellation_choice',
           total: newCreditsCount,
@@ -1159,8 +1163,13 @@ export default function AdminKursePage() {
     const { count: enrollCount } = await supabase.from('enrollments')
       .select('id', { count: 'exact', head: true }).eq('course_id', courseId)
     const { data: courseCredits } = await supabase.from('credits')
-      .select('total, used').eq('course_id', courseId)
-    const usableCreditsCount = (courseCredits || []).filter((c: any) => (c.total - c.used) > 0).length
+      .select('total, used, model').eq('course_id', courseId)
+    // Sarah-Fix 2026-05-29: Guthaben (Krankheits-/Kursabbruch-Guthaben) NICHT als
+    // "schuetzenswert" zaehlen — es wird beim Loeschen NICHT geloescht, sondern
+    // entkoppelt (course_id=null) und bleibt fuer JEDEN Kurs einloesbar erhalten.
+    // Nur kursgebundene Course-Credits (model='course') wuerden verloren gehen.
+    const usableCreditsCount = (courseCredits || [])
+      .filter((c: any) => c.model !== 'guthaben' && (c.total - c.used) > 0).length
     const hasParticipants = activeBookingsCount > 0 || (enrollCount || 0) > 0 || usableCreditsCount > 0
 
     if (hasParticipants && course?.date_end) {
@@ -1186,6 +1195,7 @@ export default function AdminKursePage() {
     const { data: validCredits } = await supabase.from('credits')
       .select('id, user_id, expires_at, total, used')
       .eq('course_id', courseId)
+      .neq('model', 'guthaben') // Guthaben ueberlebt das Loeschen (wird entkoppelt) → kein Block
       .gt('expires_at', new Date().toISOString())
     if (validCredits && validCredits.length > 0) {
       const stillUsable = validCredits.filter(c => (c.total - c.used) > 0)
@@ -1231,7 +1241,16 @@ export default function AdminKursePage() {
       await supabase.from('sessions').delete().eq('course_id', courseId)
     }
     await supabase.from('enrollments').delete().eq('course_id', courseId)
-    await supabase.from('credits').delete().eq('course_id', courseId)
+    // Sarah-Fix 2026-05-29: Guthaben (Krankheits-/Kursabbruch-Guthaben) NICHT
+    // mitloeschen! Es ist fuer JEDEN Kurs einloesbar (10 Mon. / 2 Jahre gueltig)
+    // und muss erhalten bleiben, wenn der Quell-Kurs geloescht wird. Daher nur
+    // die Herkunfts-Verknuepfung loesen (course_id=null) — der Kurstitel bleibt
+    // dauerhaft in source_course_name stehen, damit die Karte weiter
+    // "aus Kurs: X" anzeigen kann. Nur kursgebundene Credits werden geloescht.
+    await supabase.from('credits').update({ course_id: null })
+      .eq('course_id', courseId).eq('model', 'guthaben')
+    await supabase.from('credits').delete()
+      .eq('course_id', courseId).neq('model', 'guthaben')
     await supabase.from('invitations').delete().eq('course_id', courseId)
     // course_cancellation_responses (Yogi-Wahl-Tokens nach Kursabbruch) auch löschen,
     // sonst blockiert FK constraint den courses.delete bei archivierten Kursen
@@ -2200,7 +2219,7 @@ export default function AdminKursePage() {
                 Neuer Kurs
               </button>
               <button onClick={() => setShowSingleForm(true)} className="btn-primary text-sm">
-                Neue Einzelstunde
+                Neue Stunde
               </button>
               <button onClick={() => setShowEventForm(true)} className="btn-primary text-sm">
                 Neues Event

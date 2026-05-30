@@ -139,7 +139,7 @@ Die freie Menge berechnet sich als `free = Math.max(0, c.total - c.used)`.
 |---|---|---|
 | **Middleware** | `middleware.ts` | Bewusst **Pass-Through** (`matcher: []`). Gesamte Auth läuft in den Seiten — die Middleware-Variante hatte eine Login-Schleife verursacht. |
 | **`getCurrentUser()`** | `lib/auth.ts` | Client-seitig; `supabase.auth.getUser()` (server-validiert), lädt Profil, **erzwingt Logout** bei fehlendem Profil oder anonymisiertem Profil (`first_name === 'Gelöschter'`). Prüft **nicht** `is_admin` — nur Authentifizierung. |
-| **Admin-Guard** | `app/admin/layout.tsx` | **Client-seitiger** `useEffect`: keine Session → `/login`; Profil mit `!is_admin` → Redirect `/kurse`. Dies ist der einzige `is_admin`-Gate für Admin-Seiten. |
+| **Admin-Guard** | `app/admin/layout.tsx` | **Client-seitiger** `useEffect`: keine Session → `/login`; Profil mit `!is_admin` → Redirect `/kurse`. Das ist nur der **UI-Gate** — die Daten sind unabhängig davon server-seitig per RLS + Spalten-Grants + Triggern geschützt (siehe § 5.0). |
 | **RLS / RPCs** | `supabase/migrations/*.sql` | Tabellen haben RLS aktiv. Sensible RPCs lesen `COALESCE(is_admin,false)` aus `profiles WHERE id = auth.uid()` und folgen dem Muster: **Admin umgeht die Pro-Yogi-Beschränkung; ein Yogi darf nur auf seine eigene Buchung wirken.** `GRANT EXECUTE ... TO authenticated, service_role` (Service-Role umgeht RLS vollständig). |
 
 ### 2.4 Daten-Spiegelung (Yogi-Sicht ⇄ Admin-Sicht)
@@ -415,6 +415,22 @@ Einzelstunden (siehe `selectCreditForBooking`, 3.2).
 
 ## 5. DSGVO, Daten-Lebensdauer & Sicherheit
 
+### 5.0 Server-seitige Rechte-Härtung (Pre-Go-Live-Audit, 2026-05-30)
+
+Der clientseitige Admin-Guard (`app/admin/layout.tsx`, § 2.3) schützt nur die **UI-Navigation**.
+Die **Daten** sind unabhängig davon server-seitig abgesichert (RLS-Policies + Spalten-Grants +
+Trigger). Drei im Audit gefundene Lücken wurden geschlossen:
+
+| Lücke | Fix (live) | Test |
+|---|---|---|
+| **Privilege-Escalation:** Yogi konnte sich selbst `is_admin = true` setzen (RLS ist nur zeilen-, nicht spaltenbasiert). | `REVOKE UPDATE` + per-Spalten-`GRANT` ohne `is_admin` **und** Trigger `prevent_self_admin_escalation`. | `59-security-rls-guards` |
+| **Credit-Selbstgutschrift:** Yogi konnte sich selbst Credits anlegen (Policy „Credits bearbeiten", ALL). | Auto-Einbuchung über `SECURITY DEFINER`-RPC `consume_invitation_enrollment` (server-bestimmte Menge); Yogi-Schreibrecht auf `credits`/`enrollments` entzogen (nur noch SELECT + DELETE-eigene). | `59-security-rls-guards` |
+| **3-Std-Frist umgehbar:** Yogi konnte `cancel_late=false` per Direktaufruf erzwingen. | Trigger `enforce_self_cancel_late_flag` berechnet `cancel_late` bei Nicht-Admin-Selbst-Abmeldung autoritativ aus der Stundenzeit (Berlin). | `59-security-rls-guards` |
+
+**Geprüft & unauffällig:** alle API-Routes (`delete-account`, `admin/bulk-mail`, `agb-drive-upload`,
+`email`-Proxy) mit serverseitigem Bearer-Token-/`is_admin`-Check; RLS aktiv auf allen 17 Tabellen;
+`courses`/`sessions`/`agb_versions`/`admin_announcement`/`invitations` nur Admin-schreibbar.
+
 ### 5.1 Konto-Selbstlöschung (technisch & logisch)
 
 **UI:** `app/profil/page.tsx`, Button „Account löschen" (nur für Nicht-Admins, Zeilen ~1146–1181).
@@ -615,7 +631,9 @@ Quelle: `app/admin/protokoll/page.tsx`, Zeilen 13–69. Jeder Schlüssel hat Lab
 Yogis, die seit **24 Monaten inaktiv** sind, sollen **zusammen mit ihren Protokollen**
 automatisch gelöscht/anonymisiert werden. Eine Löschung darf **nur** erfolgen, wenn der Yogi:
 
-1. seit ≥ 24 Monaten nicht mehr eingeloggt war (`auth.users.last_sign_in_at < now() - interval '24 months'`),
+1. seit ≥ 24 Monaten inaktiv ist — gemessen am **robusten Aktivitätssignal**
+   `GREATEST(auth.users.last_sign_in_at, letzte audit_log-Aktion des Yogis)` (nicht nur am
+   `last_sign_in_at`: ein aktiver PWA-Dauer-Login hätte sonst ein veraltetes Login-Datum),
 2. **keine offenen Credits** mehr hat (kein `credits`-Eintrag mit `total > used` und `expires_at > now()`),
 3. **keine zukünftigen Buchungen** hat (keine `bookings` mit `status = 'active'` auf eine Session `>= heute`),
 4. **kein Admin** ist (`profiles.is_admin = false`).

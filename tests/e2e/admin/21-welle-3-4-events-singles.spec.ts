@@ -21,6 +21,7 @@ import path from 'path'
 import * as dotenv from 'dotenv'
 import { getAdminClient, getUserIdByEmail } from '../../utils/db'
 import { E2E_PREFIX, futureDateStr } from '../../utils/seed'
+import { LoginPage } from '../../page-objects/LoginPage'
 
 dotenv.config({ path: '.env.test' })
 
@@ -637,7 +638,14 @@ test.describe('[E2E] Welle 3.5 — Abgesagte Stunden & Events-Sektion in /admin/
 // ═══════════════════════════════════════════════════════════════════════════
 
 test.describe('[E2E] Welle 3 — Text-/Plausi-Checks im Yogi-Detail-View', () => {
-  test.use({ storageState: 'tests/.auth/yogi1.json' })
+  // Frischer Login (siehe Begründung in 14-admin-audit-log): vermeidet abgelaufene
+  // yogi1-Session spät im Voll-Lauf, die /kurse/[id] auf /login umleiten würde.
+  test.use({ storageState: { cookies: [], origins: [] } })
+  test.beforeEach(async ({ page }) => {
+    const login = new LoginPage(page)
+    await login.goto()
+    await login.login(process.env.TEST_YOGI1_EMAIL!, process.env.TEST_YOGI1_PASSWORD!)
+  })
 
   let sessionFreeId: string
   let sessionPaidId: string

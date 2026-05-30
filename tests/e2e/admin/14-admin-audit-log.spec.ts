@@ -8,6 +8,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { SessionDetailPage } from '../../page-objects/SessionDetailPage'
+import { LoginPage } from '../../page-objects/LoginPage'
 import { createTestCourse, giveYogiSingleCredit, E2E_PREFIX } from '../../utils/seed'
 import {
   getUserIdByEmail, getAdminClient, getActiveBooking,
@@ -50,7 +51,15 @@ test.describe('Audit-Log: Buchung + Abmeldung loggen Events', () => {
   })
 
   test.describe('Yogi bucht', () => {
-    test.use({ storageState: 'tests/.auth/yogi1.json' })
+    // Frischer Login statt gespeichertem yogi1.json: spät im Voll-Lauf ist die
+    // gespeicherte Session evtl. ungültig (globaler Logout in einem früheren Test)
+    // → /kurse/[id] würde auf /login leiten und der Buchen-Button fehlt (Flake).
+    test.use({ storageState: { cookies: [], origins: [] } })
+    test.beforeEach(async ({ page }) => {
+      const login = new LoginPage(page)
+      await login.goto()
+      await login.login(process.env.TEST_YOGI1_EMAIL!, process.env.TEST_YOGI1_PASSWORD!)
+    })
 
     test('Buchung erzeugt booking_created Audit-Log-Eintrag', async ({ page }) => {
       const sessionPage = new SessionDetailPage(page)

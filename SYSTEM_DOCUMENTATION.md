@@ -122,13 +122,13 @@ Die freie Menge berechnet sich als `free = Math.max(0, c.total - c.used)`.
 
 | Bereich | Datei | Zusätzliche Rechte |
 |---|---|---|
-| **Dashboard** | `app/admin/dashboard/page.tsx` | Wochen-Session-Grid; pro Session: Yogi hinzufügen, Session absagen + Ersatztermin anlegen, Yogi-Buchung stornieren (mit 3-Std-Fenster-Wahl), Statistik-Kacheln, offene Storno-Aufgaben, `admin_notifications`-Feed, `AdminBirthdayBanner` |
+| **Dashboard** | `app/admin/dashboard/page.tsx` | Wochen-Session-Grid; pro Session: Yogi hinzufügen, Session absagen + Ersatztermin anlegen, Yogi-Buchung stornieren (mit 3-Std-Fenster-Wahl), Statistik-Kacheln (Buchungen / Abmeldungen / Warteliste — **Roll-up über die Stunden DIESER Woche**, nicht nach `created_at`), offene Storno-Aufgaben, `admin_notifications`-Feed, `AdminBirthdayBanner` |
 | **Yogis** | `app/admin/yogis/page.tsx` (Liste), `app/admin/yogis/[id]/page.tsx` (Detail) | Kacheln „Freie Credits / Absolvierte Stunden / Guthaben"; Aktionen: „In Kurs einbuchen" (`handleEnroll`, mit Range-Modus + automatischer Guthaben-Verrechnung), „Credits vergeben", Credits bearbeiten/löschen (`handleEditCredit`/`handleDeleteCredit`), aus Kurs austragen (`removeFromCourse`), Krankheits-Austragung mit Guthaben (`cancelEnrollmentDueToIllness`), DSGVO-Löschung (`handleDeleteYogi`), pro-Yogi-Protokoll (`formatAuditEntry`) |
 | **Kurse** | `app/admin/kurse/page.tsx` | Kurs/Einzelstunde/Event anlegen, bearbeiten, Sessions absagen, `archiveCourse` (`is_active=false`, 9-Tage-nach-Ende-Schutz), `deleteCourse`, Buchung freigeben/sperren |
 | **Sessions** | `app/admin/sessions/[id]/page.tsx` | Session absagen (+Ersatz), Yogi manuell hinzufügen, Schnell-Credit, Einzelstunde/Event bearbeiten/löschen |
 | **Anwesenheit** | `app/admin/anwesenheit/page.tsx` | Teilnehmerliste pro Session mit Credit-Info |
 | **Protokoll** | `app/admin/protokoll/page.tsx` | Zentrales Audit-Log (siehe Sektion 6) |
-| Weitere | `admin/credits`, `admin/einladen` + `admin/einladungen`, `admin/kursabbruch`, `admin/nachweise`, `admin/stats/[type]` | Credits vergeben, einladen, Kursabbrüche, AGB-Nachweise, Statistiken |
+| Weitere | `admin/credits`, `admin/einladen` + `admin/einladungen`, `admin/kursabbruch`, `admin/nachweise`, `admin/stats/[type]` | Credits vergeben, einladen, Kursabbrüche, AGB-Nachweise, Statistik-Detail-Listen (Buchungen/Abmeldungen/Warteliste der Woche; echter Event-/Einzelstunden-Titel via `sessionDisplayName`, **kein SYS-Container-Name**) |
 
 > **Hinweis:** Kurse mit `is_system_container = true` (interne SYS-Container) dürfen niemals in
 > der UI, in E-Mails oder in Hinweisen auftauchen und werden aus allen Listen herausgefiltert.
@@ -392,6 +392,24 @@ entgegen und formulieren das Substantiv passend („Stunde" / „Event" / „Kur
 `send-email` mappt darauf die Betreffzeilen (z. B. „Buchung bestätigt:" bei Kurs vs.
 „Anmeldung bestätigt:" bei Event). **Guthaben** ist ausdrücklich nur für ganze Kurse, nie für
 Einzelstunden (siehe `selectCreditForBooking`, 3.2).
+
+### Story 5 — Einladung & Registrierung (Auto-Einbuchung in den Kurs)
+
+1. **Admin lädt ein:** `app/admin/einladen` erstellt eine `invitations`-Zeile mit `token`, optional
+   `course_id` + `credits_to_assign` (Kurs-Einladung). Mail `Email.invitationSent`; der Link läuft
+   nach **14 Tagen** ab (`Email.invitationReminder`).
+2. **Yogi registriert sich:** `app/register/page.tsx?token=…` liest die Einladung über die
+   `SECURITY DEFINER`-RPC **`read_invitation_by_token`** (anon-fähig, vor dem Login). Pflichtfelder:
+   Passwort + Geburtsdatum; E-Mail/Name sind vorausgefüllt.
+3. **Auto-Einbuchung (Kern der Kurs-Einladung):** Sind `course_id` **und** `credits_to_assign`
+   gesetzt, legt die Register-Seite nach `signUp` automatisch an: `enrollments` (Yogi ↔ Kurs), einen
+   `credits`-Eintrag (`model = 'course'`, `total = credits_to_assign`, Ablauf **8 Tage nach letzter
+   Stunde**) **und** für **jede** aktive zukünftige Session eine aktive Buchung (`type = 'course'`).
+   > ⚠️ **Voraussetzung:** `read_invitation_by_token` muss `credits_to_assign` (+ `course_total_units`)
+   > **mitliefern** — fehlt das Feld, überspringt die Register-Seite die Einbuchung stillschweigend
+   > (Live-Bug 30.05.2026, behoben; abgesichert per E2E `58-coverage-gaps-browser`).
+4. **Nach Registrierung:** Redirect auf `/rechtliches` (AGB-Clickwrap). Welcome-Mail `Email.welcome`,
+   Admin-Info `Email.adminNewYogi`.
 
 ---
 

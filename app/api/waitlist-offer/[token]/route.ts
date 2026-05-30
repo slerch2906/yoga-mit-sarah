@@ -120,6 +120,12 @@ export async function POST(
     user_id: (offer as any).user_id, session_id: (offer as any).session_id,
     credit_id: creditId, type: 'single', status: 'active',
     cancelled_at: null, cancel_late: false,
+    // Sarah-Regel 2026-05-30: Late-Offer-Annahme (< 90 Min vor Start) ist AB
+    // SEKUNDE 1 verbindlich — KEINE 60-Min-Nachrück-Gnadenfrist. promoted_at
+    // bewusst auf null setzen, damit auch beim Reaktivieren einer alten (zuvor
+    // auto-promoteten + stornierten) Buchung kein veralteter Nachrück-Zeitstempel
+    // hängenbleibt, der sonst fälschlich eine Gnadenfrist gewähren würde.
+    promoted_at: null,
   }, { onConflict: 'user_id,session_id' })
   if (bookingErr) {
     await rollbackOffer('booking_upsert_failed', { error_message: bookingErr.message })

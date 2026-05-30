@@ -63,6 +63,11 @@ export default function WaitlistOfferPage() {
                 })} Uhr
               </p>
             )}
+            {/* Sarah-Regel 2026-05-30: Late-Offer ist ab Sekunde 1 verbindlich,
+                keine 60-Min-Gnadenfrist. */}
+            <p className="text-sm font-semibold text-yoga-red-text mt-3 leading-snug">
+              Verbindliche Sofort-Buchung – kostenfreie Stornierung so kurzfristig nicht mehr möglich.
+            </p>
             <a href="/meine" className="btn-primary mt-4 inline-block">Zu meinen Buchungen</a>
           </div>
         )}

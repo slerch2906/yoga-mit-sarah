@@ -202,3 +202,92 @@ test.describe('[E2E] Guthaben-Ablauf: Krankheit (löschen) vs Kursabbruch (Ausza
     expect(src).toMatch(/gelöscht/)
   })
 })
+
+// ════════════════════════════════════════════════════════════════════════════
+// Late-Offer (< 90 Min): KEINE 60-Min-Gnadenfrist — ab Sekunde 1 verbindlich
+// ════════════════════════════════════════════════════════════════════════════
+test.describe('[E2E] Late-Offer-Annahme: keine Gnadenfrist, Storno gilt sofort als „spät"', () => {
+  let yogi2Id: string
+  test.beforeAll(async () => { yogi2Id = (await getUserIdByEmail(process.env.TEST_YOGI2_EMAIL!))! })
+  test.beforeEach(async () => { await resetYogi(yogi2Id) })
+  test.afterAll(async () => { await resetYogi(yogi2Id) })
+
+  test('[E2E] 45 Min vor Start angenommen → kein promoted_at; Storno 5 Min später = spät (Credit verfällt)', async () => {
+    const db = await getAdminClient()
+    const s = svc()
+    const course = await createTestCourse({ name: `${E2E_PREFIX} LateOffer-NoGrace`, sessionCount: 1, startDaysFromNow: 0 })
+    const sessionId = course.sessionIds[0]
+    const when = berlinInMinutes(45) // 45 Min vor Start → < 90 Min (Late-Offer) und < 3h (Storno wäre spät)
+    await db.from('sessions').update({ date: when.date, time_start: when.time }).eq('id', sessionId)
+    await db.from('courses').update({ date_start: when.date, date_end: when.date }).eq('id', course.courseId)
+
+    // Yogi2 hat genau 1 freien Credit
+    const exp = new Date(); exp.setFullYear(exp.getFullYear() + 1)
+    const { data: cred } = await db.from('credits').insert({
+      user_id: yogi2Id, course_id: null, model: 'single', total: 1, used: 0, expires_at: exp.toISOString(),
+    }).select('id').single()
+
+    // Stale-Setup (Härtetest des Fixes): Yogi2 war für DIESE Stunde früher schon mal
+    // auto-promoted (promoted_at gesetzt) und hat storniert. Die Late-Offer-Annahme
+    // MUSS diesen Zeitstempel löschen — sonst greift fälschlich eine Gnadenfrist.
+    const stalePromotedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+    await db.from('bookings').insert({
+      user_id: yogi2Id, session_id: sessionId, credit_id: null, type: 'single',
+      status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false,
+      promoted_at: stalePromotedAt,
+    })
+
+    await db.from('waitlist').insert({ user_id: yogi2Id, session_id: sessionId, type: 'waitlist' })
+    const sessStartIso = new Date(`${when.date}T${when.time}`).toISOString()
+    const { data: offer } = await s.from('waitlist_offers').insert({
+      session_id: sessionId, user_id: yogi2Id, expires_at: sessStartIso,
+    }).select('token').single()
+
+    try {
+      // Late-Offer aktiv per Link annehmen → echte deployte Route
+      const res = await fetch(`${process.env.BASE_URL}/api/waitlist-offer/${offer!.token}`, { method: 'POST' })
+      expect(res.ok, `Annahme sollte ok sein (HTTP ${res.status})`).toBeTruthy()
+
+      const { data: bk } = await db.from('bookings')
+        .select('id, status, cancel_late, promoted_at')
+        .eq('user_id', yogi2Id).eq('session_id', sessionId).maybeSingle()
+      expect(bk?.status, 'Buchung aktiv nach Annahme').toBe('active')
+      expect(bk?.cancel_late).toBe(false)
+      // KERN: kein Nachrück-Zeitstempel → keine Gnadenfrist möglich (ab Sekunde 1 verbindlich)
+      expect(bk?.promoted_at, 'Late-Offer-Gewinner darf KEIN promoted_at haben (sonst Gnadenfrist)').toBeNull()
+      const { data: c1 } = await db.from('credits').select('used').eq('id', cred!.id).single()
+      expect(c1?.used, 'Credit nach Annahme verbraucht').toBe(1)
+
+      // 5 Min später stornieren: Session ~40 Min entfernt (< 3h) UND promoted_at=null
+      // → keine Gnadenfrist → handleCancel setzt cancel_late = true (spät storniert).
+      const late = true // = within3h && !inPromoteGrace; inPromoteGrace ist false (promoted_at null, s. o.)
+      await db.from('bookings').update({
+        status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: late, cancelled_by: 'self',
+      }).eq('id', bk!.id)
+
+      // recalc_credit_used zählt cancel_late=true als „used" → Credit bleibt verfallen
+      const { data: c2 } = await db.from('credits').select('used').eq('id', cred!.id).single()
+      expect(c2?.used, 'Credit bleibt verfallen (Spät-Storno, kein Gnaden-Rückbuchen)').toBe(1)
+      const { data: bk2 } = await db.from('bookings').select('cancel_late').eq('id', bk!.id).single()
+      expect(bk2?.cancel_late, 'Storno als spät markiert').toBe(true)
+    } finally {
+      await s.from('audit_log').delete().eq('action', 'waitlist_offer_late_accepted').eq('user_id', yogi2Id)
+      await s.from('waitlist_offers').delete().eq('session_id', sessionId)
+    }
+  })
+
+  test('[E2E] Offer-Seite, Mail & Route kodieren „verbindlich, keine Gnadenfrist"', () => {
+    const hint = 'Verbindliche Sofort-Buchung'
+    const page = fs.readFileSync(path.join(process.cwd(), 'app/warteliste/angebot/[token]/page.tsx'), 'utf8')
+    expect(page.includes(hint), 'Offer-Seite enthält Verbindlichkeits-Hinweis').toBe(true)
+
+    const mail = fs.readFileSync(path.join(process.cwd(), 'supabase/functions/send-email/index.ts'), 'utf8')
+    const idx = mail.indexOf("case 'waitlist_offer_late'")
+    expect(idx, 'waitlist_offer_late-Template vorhanden').toBeGreaterThan(0)
+    expect(mail.slice(idx, idx + 1500).includes(hint), 'waitlist_offer_late-Mail enthält Hinweis').toBe(true)
+
+    // Route bucht mit promoted_at: null → keine 60-Min-Gnadenfrist
+    const route = fs.readFileSync(path.join(process.cwd(), 'app/api/waitlist-offer/[token]/route.ts'), 'utf8')
+    expect(route).toMatch(/promoted_at:\s*null/)
+  })
+})

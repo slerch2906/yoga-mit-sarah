@@ -172,7 +172,7 @@ Formel und denselben `lib/session-status`-Zählern. Die Zahlen stimmen **per Kon
 | Frist | Konstante / Ort | Gilt für | Verhalten an der Grenze |
 |---|---|---|---|
 | **90 Minuten** | `v_within90 := (v_start - v_now) <= interval '90 minutes'` (`process_cancellation_full`) | Warteliste bei Absage | **> 90 Min:** automatisches Nachrücken (Auto-Promote) des ersten passenden Wartelisten-Yogis. **≤ 90 Min:** Spät-Angebot (Late-Offer) an **alle** Wartelisten-Yogis gleichzeitig (Magic-Token, „first-click wins"). |
-| **60 Minuten** | `bookings.promoted_at`; Prüfung `now() - NEW.promoted_at < interval '60 minutes'` | Frisch nachgerückte Yogis | „Promote-Gnadenfrist": Ein automatisch nachgerückter Yogi darf sich innerhalb von 60 Min nach dem Nachrücken **kostenlos** wieder abmelden — auch innerhalb des sonst gesperrten Fensters. **Hard Cut-Off:** Diese Gnadenfrist endet spätestens zum **Stundenanfang** — ab Kursbeginn ist keine kostenlose Stornierung mehr möglich (UI-Gate `!past` blendet die Abmelde-Sektion aus). App + Mail zeigen „Kostenlose Stornierung nur bis zum Stundenanfang möglich!". |
+| **60 Minuten** | `bookings.promoted_at`; Prüfung `now() - NEW.promoted_at < interval '60 minutes'` | **Nur AUTO-nachgerückte** Yogis (> 90 Min, `auto-promoted`) | „Promote-Gnadenfrist": Ein **automatisch** nachgerückter Yogi darf sich innerhalb von 60 Min nach dem Nachrücken **kostenlos** wieder abmelden — auch innerhalb des sonst gesperrten Fensters. **Hard Cut-Off:** Diese Gnadenfrist endet spätestens zum **Stundenanfang** — ab Kursbeginn ist keine kostenlose Stornierung mehr möglich (UI-Gate `!past` blendet die Abmelde-Sektion aus). App + Mail zeigen „Kostenlose Stornierung nur bis zum Stundenanfang möglich!". **AUSSCHLUSS:** Gilt **NICHT** für Late-Offer-Annahmen (< 90 Min). Die Annahme-Route setzt `promoted_at = null` → keine Gnadenfrist; die Buchung ist **ab Sekunde 1 verbindlich** (Storno < 3h = `cancel_late = true`). |
 | **3 Stunden** | `isPastDeadline(...)` mit `hoursBeforeAllowed = 3` (`lib/server-time.ts`) | Normale Selbst-Abmeldung (Kursstunden & Einzelstunden) | Bis 3 Std vor Beginn frei abmeldbar (Credit kommt zurück). Danach „spät storniert" (`cancel_late = true`, kein Credit zurück). |
 | **7 Tage** | `enforce_event_paid_7d_cancel_block()` (DB-Trigger) | Bezahlte Events (`event_paid`) | Innerhalb von 7 Tagen vor Beginn ist die **Selbst-Abmeldung gesperrt** (harter DB-Block). **Ausnahmen:** Admin; sowie Yogis innerhalb der 60-Min-Promote-Gnadenfrist. |
 | **8 Tage** | `EIGHT_DAYS_MS = 8*24*60*60*1000` (`lib/credit-selector.ts`); `expiresAt.setDate(getDate()+8)` | Kurs-Credits nach Kursende | Kurs-Credits bleiben bis 8 Tage **nach** `date_end` nutzbar (Nachhol-Fenster). Danach 8d-Cleanup. |
@@ -254,10 +254,19 @@ Ohne Credit nachrücken?  v_promote_without_credit = is_event OR is_free   (z. B
 
 | Modus | Auslöser | Aktion + E-Mails |
 |---|---|---|
-| **`auto-promoted`** | Platz frei, **> 90 Min** vor Beginn | Ersten passenden Wartelisten-Yogi automatisch nachrücken (eigener Kurs-Credit bevorzugt). Mails: `Email.waitlistPromoted` + ggf. `Email.waitlistRemovedCreditUsedElsewhere`. Audit: `waitlist_promoted`, evtl. `waitlist_auto_removed`. |
-| **`late-offer`** | Platz frei, **≤ 90 Min** vor Beginn | Spät-Angebot an **alle** Wartelisten-Yogis (Token in `waitlist_offers`, „first-click wins"). **Überbuchungsschutz:** atomarer Guard `UPDATE … WHERE resolved_winner_user_id IS NULL` (`app/api/waitlist-offer/[token]/route.ts`) → **nur ein** Gewinner, kein DB-Fehler; zweiter Klicker bekommt `409 too_late` + „Schade, ein anderer Yogi war schneller!". Mail je Angebot: `Email.waitlistOfferLate`. |
+| **`auto-promoted`** | Platz frei, **> 90 Min** vor Beginn | Ersten passenden Wartelisten-Yogi automatisch nachrücken (eigener Kurs-Credit bevorzugt), **`promoted_at = now()`** wird gesetzt → **60-Min-Gnadenfrist** greift (s. 3.1). Mails: `Email.waitlistPromoted` + ggf. `Email.waitlistRemovedCreditUsedElsewhere`. Audit: `waitlist_promoted`, evtl. `waitlist_auto_removed`. |
+| **`late-offer`** | Platz frei, **≤ 90 Min** vor Beginn | Spät-Angebot an **alle** Wartelisten-Yogis (Token in `waitlist_offers`, „first-click wins"). **Überbuchungsschutz:** atomarer Guard `UPDATE … WHERE resolved_winner_user_id IS NULL` (`app/api/waitlist-offer/[token]/route.ts`) → **nur ein** Gewinner, kein DB-Fehler; zweiter Klicker bekommt `409 too_late` + „Schade, ein anderer Yogi war schneller!". Mail je Angebot: `Email.waitlistOfferLate`. **KEINE 60-Min-Gnadenfrist:** die Annahme-Route setzt `promoted_at` **explizit auf `null`** → die Buchung ist **ab Sekunde 1 verbindlich**; ein Storno < 3h vor Start gilt sofort als „spät storniert" (`cancel_late = true`, Credit verfällt). |
 | **`notify-only`** | Platz bleibt frei (kein passender Yogi) | Mail `Email.notifyPlaceFree` an Abonnenten, danach `delete_notify_subscribers`-RPC (nur bei Erfolg). |
 | **`noop`** | nichts zu tun | keine Aktion |
+
+> **⚠️ Gnadenfrist nur bei Auto-Promote, NICHT bei Late-Offer.** Der `auto-promoted`-Pfad
+> (> 90 Min) setzt `promoted_at = now()` → 60-Min-Gnadenfrist (unfreiwilliges Nachrücken).
+> Der `late-offer`-Pfad (≤ 90 Min) ist eine **aktive, bewusste** Annahme per Link-Klick →
+> `app/api/waitlist-offer/[token]/route.ts` setzt `promoted_at = null`. Dadurch ist die Buchung
+> **ab Sekunde 1 verbindlich**; ein Storno < 3h vor Start zählt sofort als „spät storniert"
+> (`cancel_late = true`, Credit verfällt). Offer-Seite + Mail (`Email.waitlistOfferLate`) zeigen:
+> „Verbindliche Sofort-Buchung – kostenfreie Stornierung so kurzfristig nicht mehr möglich."
+> Abgesichert durch `tests/e2e/55-fristen-audit.spec.ts` (inkl. Stale-`promoted_at`-Härtetest).
 
 ---
 
@@ -297,7 +306,13 @@ Ohne Credit nachrücken?  v_promote_without_credit = is_event OR is_free   (z. B
    (`UPDATE waitlist_offers … WHERE resolved_winner_user_id IS NULL`): es kann **nur genau einen
    Gewinner** geben → keine Überbuchung, kein DB-Fehler. Der zweite Klicker erhält `409 too_late`
    und sieht „**Schade, ein anderer Yogi war schneller!**". Schlägt ein Folgeschritt fehl, rollt
-   `rollbackOffer` den Platz zurück (Audit `waitlist_offer_rollback`).
+   `rollbackOffer` den Platz zurück (Audit `waitlist_offer_rollback`). Audit bei Erfolg:
+   `waitlist_offer_late_accepted`.
+   → **Verbindlich ab Sekunde 1 — KEINE 60-Min-Gnadenfrist:** Die Annahme-Route bucht mit
+   `promoted_at = null` (anders als der Auto-Promote-Pfad). Ein Storno < 3h vor Start zählt daher
+   **sofort** als „spät storniert" (`cancel_late = true`, Credit verfällt). Offer-Seite **und**
+   Mail zeigen: „**Verbindliche Sofort-Buchung – kostenfreie Stornierung so kurzfristig nicht mehr
+   möglich.**"
 5. **Fall „Platz bleibt frei" (`notify-only`):** Interessenten werden via `Email.notifyPlaceFree`
    informiert, danach werden die Notify-Abonnenten gelöscht.
 
@@ -467,7 +482,7 @@ Die Lebensdauer zeitgebundener Datensätze wird durch geplante Jobs (`pg_cron` /
 | **Kursabbruch-Guthaben** (`source='cancellation_choice'`) | **2 Jahre** | `fn_check_guthaben_2y_expiry()` | **Nicht gelöscht** → `used = total` + **Auszahlung** angestoßen | Audit `guthaben_2y_auto_refund`; Notification `refund_pending_auto_2y` (dedup) + Mail `admin_guthaben_2y_expiry` |
 | **Kurs-Credits** | **8 Tage** nach Kursende | `lib/credit-selector.ts` (Gültigkeits-Filter) | Nicht mehr buchbar (Nachhol-Fenster zu) | — |
 | **Kursabbruch-Wahl-Token** | **7 Tage** | `course_cancellation_responses.expires_at` | Auto-Erstattung des vorläufigen Guthabens | Audit `token_expired_auto_refund` |
-| **Wartelisten-Spätangebot-Token** | bis Stundenbeginn | `waitlist_offers.expires_at` | Angebot verfällt; „first-click wins" | — |
+| **Wartelisten-Spätangebot-Token** | bis Stundenbeginn | `waitlist_offers.expires_at` | Angebot verfällt; „first-click wins". **Annahme ist ab Sekunde 1 verbindlich** (`promoted_at = null`, keine 60-Min-Gnadenfrist) | Audit `waitlist_offer_late_accepted` |
 | **Audit-Trail (PII)** | bei Konto-Löschung | `anonymize_user_audit_logs(user_id)` | PII aus `details` gescrubbt, **Zeile bleibt** | `yogi_anonymized_dsgvo` |
 | **Inaktive Konten** (Konzept) | **24 Monate** | siehe Abschnitt 7 (Trockenlauf-Cron) | geplant: Anonymisierung/Löschung nach Vorwarnung | — |
 

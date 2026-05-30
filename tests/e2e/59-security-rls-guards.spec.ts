@@ -10,10 +10,27 @@
 import { test, expect } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
 import * as dotenv from 'dotenv'
-import { getAdminClient, getServiceClient } from '../utils/db'
+import { getAdminClient, getServiceClient, getUserIdByEmail } from '../utils/db'
 import { createTestCourse, E2E_PREFIX } from '../utils/seed'
 
 dotenv.config({ path: '.env.test' })
+
+function berlinInMinutes(minutes: number): { date: string; time: string } {
+  const d = new Date(Date.now() + minutes * 60 * 1000)
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(d)
+  const g = (t: string) => p.find(x => x.type === t)!.value
+  return { date: `${g('year')}-${g('month')}-${g('day')}`, time: `${g('hour')}:${g('minute')}:${g('second')}` }
+}
+async function resetYogiAll(userId: string) {
+  const db = await getAdminClient()
+  await db.from('waitlist').delete().eq('user_id', userId)
+  await db.from('bookings').delete().eq('user_id', userId)
+  await db.from('credits').delete().eq('user_id', userId)
+  await db.from('enrollments').delete().eq('user_id', userId)
+}
 
 function svc() {
   return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
@@ -91,6 +108,41 @@ test.describe('[E2E] Security: serverseitige Rechte-Guards', () => {
       await client.auth.signOut()
     }
   })
+
+  test('[E2E] Yogi kann cancel_late bei Spät-Storno NICHT auf false fälschen', async () => {
+    const db = await getAdminClient()
+    const yogi1Id = (await getUserIdByEmail(process.env.TEST_YOGI1_EMAIL!))!
+    await resetYogiAll(yogi1Id)
+    // Kursstunde in 60 Minuten (INNERHALB der 3-Std-Frist)
+    const course = await createTestCourse({ name: `${E2E_PREFIX} CancelLate-Guard`, sessionCount: 1, startDaysFromNow: 0 })
+    const sid = course.sessionIds[0]
+    const w = berlinInMinutes(60)
+    await db.from('sessions').update({ date: w.date, time_start: w.time }).eq('id', sid)
+    await db.from('courses').update({ date_start: w.date, date_end: w.date }).eq('id', course.courseId)
+    // Aktive Buchung (mit Single-Credit) via Admin seeden
+    const exp = new Date(); exp.setFullYear(exp.getFullYear() + 1)
+    const { data: credit } = await db.from('credits').insert({
+      user_id: yogi1Id, course_id: null, model: 'single', total: 3, used: 0, expires_at: exp.toISOString(),
+    }).select('id').single()
+    await db.from('bookings').insert({
+      user_id: yogi1Id, session_id: sid, credit_id: credit!.id, type: 'single', status: 'active',
+    })
+    const { client } = await signInYogi1()
+    try {
+      // Angriff: spät stornieren, aber cancel_late=false behaupten
+      await client.from('bookings').update({
+        status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_late: false, cancelled_by: 'self',
+      }).eq('user_id', yogi1Id).eq('session_id', sid)
+      // Trigger hat cancel_late autoritativ aus der Stundenzeit (< 3h) auf true gesetzt
+      const { data: bk } = await db.from('bookings').select('status, cancel_late')
+        .eq('user_id', yogi1Id).eq('session_id', sid).maybeSingle()
+      expect(bk?.status).toBe('cancelled')
+      expect(bk?.cancel_late, 'Spät-Storno wird autoritativ als cancel_late=true gewertet (kein Credit zurück)').toBe(true)
+    } finally {
+      await client.auth.signOut()
+      await resetYogiAll(yogi1Id)
+    }
+  })
 })
 
 test.describe('[E2E] Security: Einladungs-Einbuchung läuft über server-validierte RPC', () => {
@@ -104,7 +156,7 @@ test.describe('[E2E] Security: Einladungs-Einbuchung läuft über server-validie
     const { data: created, error: cErr } = await service.auth.admin.createUser({ email, password: pass, email_confirm: true })
     if (cErr || !created.user) throw new Error('createUser: ' + cErr?.message)
     const uid = created.user.id
-    await db.from('profiles').upsert({ id: uid, first_name: 'E2E', last_name: 'Rpc', email, is_admin: false }, { onConflict: 'id' })
+    await db.from('profiles').upsert({ id: uid, first_name: 'E2E', last_name: 'Rpc', email }, { onConflict: 'id' })
     const course = await createTestCourse({ name: `${E2E_PREFIX} RPC-Enroll`, sessionCount: 4, startDaysFromNow: 7 })
     const token = `e2e-rpc-${Date.now()}`
     await db.from('invitations').insert({

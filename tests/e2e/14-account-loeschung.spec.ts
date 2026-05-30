@@ -44,7 +44,8 @@ test.describe('DSGVO Account-Löschung', () => {
       first_name: 'E2E',
       last_name: 'Delete',
       email: DELETE_EMAIL,
-      is_admin: false,
+      // is_admin nicht setzen (Security-Lockdown 2026-05-30: Spalte für authenticated
+      // nicht beschreibbar; Default = false). is_dummy bleibt explizit false.
       is_dummy: false,
       legal_accepted_at: new Date().toISOString(),
       legal_version: '2025-12',

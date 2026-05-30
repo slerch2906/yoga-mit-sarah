@@ -167,14 +167,15 @@ test.describe('[E2E] /kurse/[id] Excluded-Detail-Seite', () => {
 
 // ── 8) register/page: Filter beim Self-Enrollment ──────────────────────────
 test.describe('[E2E] /register filtert excluded/cancelled Sessions', () => {
-  test('Source filtert is_cancelled=false beim Booking-Insert', async () => {
-    const p = path.join(ROOT, 'app/register/page.tsx')
-    if (!fs.existsSync(p)) {
-      // Falls Register-Logik wo anders ist
-      return
-    }
-    const src = fs.readFileSync(p, 'utf8')
-    expect(src).toMatch(/is_cancelled|isExcluded|isActive/)
+  test('Auto-Einbuchung filtert is_cancelled=false (jetzt in der server-validierten RPC)', async () => {
+    // Welle-2-Security-Fix (2026-05-30): Die Auto-Einbuchung läuft nicht mehr über
+    // Client-Inserts, sondern über die SECURITY-DEFINER-RPC consume_invitation_enrollment.
+    // Register delegiert nur noch — die RPC filtert excluded/cancelled Sessions serverseitig.
+    const reg = fs.readFileSync(path.join(ROOT, 'app/register/page.tsx'), 'utf8')
+    expect(reg, 'register delegiert an die RPC').toMatch(/consume_invitation_enrollment/)
+    const mig = path.join(ROOT, 'supabase/migrations/20260530_consume_invitation_enrollment.sql')
+    expect(fs.existsSync(mig), 'RPC-Migration vorhanden').toBe(true)
+    expect(fs.readFileSync(mig, 'utf8'), 'RPC filtert is_cancelled=false').toMatch(/is_cancelled\s*=\s*false/)
   })
 
   test('Expires_at-Berechnung nutzt letzte aktive Session (kein "verlängert" durch excluded)', async () => {

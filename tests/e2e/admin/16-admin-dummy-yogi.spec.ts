@@ -43,7 +43,8 @@ test.describe('Dummy-Yogi: Anlage + Einbuchung', () => {
       first_name: 'E2E',
       last_name: 'Dummy',
       email: null,
-      is_admin: false,
+      // is_admin bewusst NICHT setzen: seit dem Security-Lockdown (2026-05-30) ist die
+      // is_admin-Spalte für authenticated nicht beschreibbar (Default = false greift).
       is_dummy: true,
       legal_accepted_at: new Date().toISOString(),
     }, { onConflict: 'id' })

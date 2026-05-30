@@ -905,7 +905,12 @@ export default function AdminYogiDetailPage() {
 
     switch (entry.action) {
       case 'booking_created': {
-        const typeLbl = d.type === 'single' ? ' (Einzelstunde)' : ''
+        // Sarah-Fix 2026-05-30: Events werden technisch mit type='single' gebucht.
+        // Das Label daher am session_type festmachen (Event vs Einzelstunde vs Kursstunde).
+        const effType = d.session_type || sess?.session_type
+        const typeLbl = (effType === 'event_free' || effType === 'event_paid') ? ' (Event)'
+          : (d.type === 'single' || effType === 'single') ? ' (Einzelstunde)'
+          : ''
         return { text: `Yogi hat gebucht${typeLbl}`, subject: termin }
       }
       case 'booking_cancelled': {
@@ -1101,12 +1106,14 @@ export default function AdminYogiDetailPage() {
         return { text: `Yogi hat ${t}`, subject: '' }
       }
       case 'waitlist_joined': {
-        const cn = d.course_name || courseName
-        return { text: `Yogi hat sich auf Warteliste eingetragen${cn ? ` — ${cn}` : ''}`, subject: '' }
+        // Sarah-Fix 2026-05-30: konkrete Stunde (Datum/Zeit · Kurs) als subject zeigen,
+        // statt nur dem Kursnamen im Text — der Admin muss sehen, FÜR WELCHE Stunde.
+        const cn = courseName || d.course_name
+        return { text: `Yogi hat sich auf Warteliste eingetragen`, subject: termin || (cn ? `· ${cn}` : '') }
       }
       case 'waitlist_promoted': {
-        const cn = d.course_name || courseName
-        return { text: `Yogi wurde automatisch von Warteliste nachgerückt${cn ? ` — ${cn}` : ''}`, subject: '' }
+        const cn = courseName || d.course_name
+        return { text: `Yogi wurde automatisch von Warteliste nachgerückt`, subject: termin || (cn ? `· ${cn}` : '') }
       }
       case 'waitlist_auto_removed': {
         const cn = d.course_name || courseName

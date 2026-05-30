@@ -153,27 +153,13 @@ export default function AdminDashboard() {
       }
     }
 
-    // Welle S3/M13 (Sarah 2026-05-27): die drei count-Queries vorher seriell —
-    // 3× Round-Trip. Jetzt parallel via Promise.all. Audit-Log-Counts nutzen
-    // den neuen idx_audit_log_created_at_desc-Index (Welle S3 just added)
-    // durch gte/lte-Filter auf created_at.
-    const weeklyStatsP = Promise.all([
-      supabase.from('audit_log')
-        .select('*', { count: 'exact', head: true })
-        .eq('action', 'booking_created')
-        .gte('created_at', weekStart.toISOString())
-        .lte('created_at', weekEnd.toISOString()),
-      supabase.from('audit_log')
-        .select('*', { count: 'exact', head: true })
-        .eq('action', 'booking_cancelled')
-        .gte('created_at', weekStart.toISOString())
-        .lte('created_at', weekEnd.toISOString()),
-      supabase.from('waitlist')
-        .select('*', { count: 'exact', head: true }),
-    ])
-    const [{ count: bookCount }, { count: cancelCount }, { count: waitCount }] = await weeklyStatsP
-
-    setSessions((sessionData || [])
+    // Bug-Fix (Sarah 2026-05-30, Live-Test): Die 3 Dashboard-Kacheln zeigen jetzt den
+    // STAND DER STUNDEN DIESER WOCHE — nicht mehr Aktionen nach created_at bzw. eine
+    // globale Wartelisten-Zahl. Roll-up über die angezeigten Stunden der Woche:
+    //   Buchungen   = aktive Buchungen in den Stunden dieser Woche
+    //   Abmeldungen = stornierte Buchungen in den Stunden dieser Woche
+    //   Warteliste  = Wartelisten-Einträge für die Stunden dieser Woche
+    const displayed = (sessionData || [])
       .filter((s: any) => s.course?.is_active !== false)
       // Excluded Stunden (Setup-Ausschlüsse beim Kurs-Anlegen) NIE in der Wochenliste
       // anzeigen — die sind nur Platzhalter im Edit-Form, keine echten Termine.
@@ -185,8 +171,21 @@ export default function AdminDashboard() {
         // Ersatzstunden-Info: wenn diese Session als Ersatz für eine andere angelegt wurde
         is_replacement: !!originMap[s.id],
         original_session: originMap[s.id] || null,
-      })))
-    setStats({ bookings: bookCount || 0, cancellations: cancelCount || 0, waitlist: waitCount || 0 })
+      }))
+    setSessions(displayed)
+
+    const weekSessionIds = displayed.map((s: any) => s.id)
+    const bookingsThisWeek = displayed.reduce((sum: number, s: any) => sum + s.active_count, 0)
+    const cancellationsThisWeek = displayed.reduce((sum: number, s: any) => sum + s.cancelled_count, 0)
+    let waitlistThisWeek = 0
+    if (weekSessionIds.length > 0) {
+      const { count: wlCount } = await supabase.from('waitlist')
+        .select('*', { count: 'exact', head: true })
+        .eq('type', 'waitlist')
+        .in('session_id', weekSessionIds)
+      waitlistThisWeek = wlCount || 0
+    }
+    setStats({ bookings: bookingsThisWeek, cancellations: cancellationsThisWeek, waitlist: waitlistThisWeek })
 
     // Ungelesene Benachrichtigungen laden
     const { data: notifs } = await supabase.from('admin_notifications')

@@ -164,60 +164,25 @@ function RegisterInner() {
       } catch (e) { console.error('adminNewYogi email:', e) }
 
     if (invitation?.course_id && invitation?.credits_to_assign) {
-      // 1) Enrollment anlegen
-      await supabase.from('enrollments').insert({
-        user_id: userId,
-        course_id: invitation.course_id,
-      })
-
-      // 2) Credits anlegen
-      // Nur AKTIVE zukünftige Sessions laden (excluded/cancelled raus –
-      // sonst würde der prevent_booking_cancelled_session Trigger feuern
-      // und der Yogi bekäme falsche Anzahl Credits).
-      const { data: sessions } = await supabase
-        .from('sessions')
-        .select('id, date')
-        .eq('course_id', invitation.course_id)
-        .eq('is_cancelled', false)
-        .gte('date', new Date().toISOString().split('T')[0])
-        .order('date', { ascending: false })
-
-      // Ablaufdatum: 8 Tage nach letzter Session des Kurses
-      let expiresAt: Date
-      if (sessions && sessions.length > 0) {
-        const lastSession = new Date(sessions[0].date)
-        expiresAt = new Date(lastSession.getTime() + 8 * 24 * 60 * 60 * 1000)
-      } else {
-        // Fallback: Quartalsende
-        const now = new Date()
-        expiresAt = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3 + 3, 0, 23, 59, 59)
-      }
-
-      const { data: creditData } = await supabase.from('credits').insert({
-        user_id: userId,
-        total: invitation.credits_to_assign,
-        used: 0,
-        expires_at: expiresAt.toISOString(),
-        course_id: invitation.course_id,
-        model: 'course',
-      }).select('id').single()
-
-      // Automatisch in alle zukünftigen Sessions einbuchen
-      if (sessions && sessions.length > 0 && creditData?.id) {
-        const bookings = sessions.map((s: any) => ({
-          user_id: userId,
-          session_id: s.id,
-          credit_id: creditData.id,
-          type: 'course',
-          status: 'active',
-        }))
-        await supabase.from('bookings').insert(bookings)
-        // credit.used wird automatisch durch trg_sync_credit_used aktualisiert
+      // Welle-2-Security-Fix (Sarah 2026-05-30): Enrollment + Kurs-Credit + Buchungen
+      // werden NICHT mehr clientseitig angelegt (das erlaubte Yogis, sich selbst
+      // beliebig Credits gutzuschreiben), sondern serverseitig über die
+      // SECURITY-DEFINER-RPC consume_invitation_enrollment. Die Credit-Menge bestimmt
+      // dort die DB aus invitation.credits_to_assign — nicht der Client.
+      let bookedCount = 0
+      try {
+        const { data: enrollRes, error: enrollErr } = await supabase.rpc('consume_invitation_enrollment', { p_token: token! })
+        if (enrollErr) throw enrollErr
+        bookedCount = (enrollRes as any)?.bookings ?? 0
+      } catch (e) {
+        // Registrierung selbst ist bereits erfolgreich — Einbuchung ist Best-Effort.
+        // Sarah wird über die admin_notification informiert; sie kann manuell nachbuchen.
+        console.error('consume_invitation_enrollment:', e)
       }
 
       await supabase.from('admin_notifications').insert({
         type: 'new_yogi_registered',
-        message: `${firstName.trim()} ${lastName.trim()} hat sich angemeldet und ist jetzt in "${invitation.course?.name}" eingetragen (${invitation.credits_to_assign} Credits, ${sessions?.length || 0} Stunden gebucht).`,
+        message: `${firstName.trim()} ${lastName.trim()} hat sich angemeldet und ist jetzt in "${invitation.course?.name}" eingetragen (${invitation.credits_to_assign} Credits, ${bookedCount} Stunden gebucht).`,
         read: false,
       })
     } else {

@@ -102,6 +102,12 @@ const ALL_ACTIONS: string[] = [
   'admin_illness_credit',
   'admin_bulk_mail',
   'admin_dsgvo_deletion',
+  // Welle 2026-05-30 (Sarah): Buchungs-Fehler-Log + 24-Monats-Inaktivitäts-Löschung
+  'booking_failed_deadline',
+  'inactivity_cleanup_dryrun',
+  'inactivity_cleanup',
+  'yogi_auto_deleted_inactive',
+  'inactivity_cleanup_error',
 ]
 
 // ── Actions ohne user_id-Bezug (System-Actions) ──────────────────────────────
@@ -113,6 +119,12 @@ const SYSTEM_ONLY_ACTIONS = new Set<string>([
   // Welle S2/S3 (Sarah 2026-05-27): 8d-Cleanup-Cron loescht abgelaufene Kurs-
   // Credits + erstellt Audit-Eintrag ohne user_id (System-Bereinigung).
   'course_credits_auto_expired',
+  // Welle 2026-05-30 (Sarah): 24-Monats-Inaktivitäts-Löschung läuft als System-Cron
+  // (user_id NULL, kein einzelner Yogi-Bezug) → kein Yogi-Switch-Case nötig.
+  'inactivity_cleanup_dryrun',
+  'inactivity_cleanup',
+  'yogi_auto_deleted_inactive',
+  'inactivity_cleanup_error',
 ])
 
 // ── Bekannte Drift-Lücken (Stand 2026-05-26) ────────────────────────────────

@@ -18,12 +18,22 @@
  *      delegiert an bookingStatusLabel, das die Session-Absage ZUERST prüft.
  *   U3 (In-App-Banner nur bei Events): unverändert — reiner Regressions-Schutz.
  *
- * Stil: [E2E-Text] Struktur-Guards (lesen den Quelltext, kein Browser/DB). Der
- * echte End-to-End-Lauf gegen die DB bleibt test.fixme bis Sarah "ausführen" sagt.
+ * Stil: [E2E-Text] Struktur-Guards (lesen den Quelltext) PLUS — seit Sarahs
+ * Freigabe "wir starten jetzt" (2026-05-29) — ein echter [E2E] DB-Lauf der
+ * Akteur-Logik (unten, ehemals test.fixme). Der DB-Lauf prüft die geshippten
+ * Helfer gegen echte bookings/sessions-Zeilen inkl. der Spalte cancelled_by;
+ * die UI-Verdrahtung deckt der Struktur-Guard-Teil ab (kein Browser nötig,
+ * daher auch keine Mails). Testdaten: [E2E]-Prefix, Bereinigung im Teardown.
  */
 import { test, expect } from '@playwright/test'
 import * as fs from 'fs'
 import * as path from 'path'
+import * as dotenv from 'dotenv'
+import { cancelledActorLabel, bookingStatusLabel } from '../../lib/session-status'
+import { createTestCourse, E2E_PREFIX } from '../utils/seed'
+import { getAdminClient, getUserIdByEmail, getCancelledBooking, getSession } from '../utils/db'
+
+dotenv.config({ path: '.env.test' })
 
 const read = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8')
 const SRC_MEINE = () => read('app/meine/page.tsx')
@@ -125,14 +135,63 @@ test.describe('[E2E-Text] Finding U — Status-Labels & Akteur-Logik (cancelled_
     expect(src).toContain("type: 'event_cancelled'")
   })
 
-  // ── DB End-to-End — bleibt fixme bis Sarah "ausführen" sagt ────────────────
-  test.fixme('Akteur-Logik end-to-end: self→Abgemeldet, admin→Ausgetragen, Absage→Abgesagt (DB/Browser)', async () => {
-    // Realer Lauf (wenn Sarah freigibt):
-    //  1. Yogi bucht eine Stunde, meldet sich SELBST ab → bookings.cancelled_by='self'
-    //     → /meine + Admin-Yogi-Detail (Liste & Kalender-Grid) zeigen "Abgemeldet".
-    //  2. Admin trägt einen anderen Yogi aus            → cancelled_by='admin'
-    //     → alle vier Screens (/meine des Yogis, Admin-Liste, Grid, Dashboard) "Ausgetragen".
-    //  3. Admin sagt die ganze Stunde ab                → sessions.is_cancelled=true
-    //     → alle Screens zeigen "Abgesagt" (Vorrang vor cancelled_by).
+  // ── DB End-to-End — Akteur-Logik gegen die echte DB (Sarah: "wir starten jetzt", 2026-05-29) ──
+  // Prüft die GESHIPPTE Helfer-Logik (lib/session-status) gegen echte
+  // bookings/sessions-Zeilen inkl. der neuen Spalte cancelled_by. Kein Browser,
+  // keine Server-Action → es werden KEINE Mails versendet. Testdaten tragen den
+  // [E2E]-Prefix und werden vom globalTeardown bereinigt.
+  test('Akteur-Logik end-to-end (DB): self→Abgemeldet, admin→Ausgetragen, Absage/Ausschluss haben Vorrang', async () => {
+    const db = await getAdminClient()
+    const yogi1 = await getUserIdByEmail(process.env.TEST_YOGI1_EMAIL!)
+    const yogi2 = await getUserIdByEmail(process.env.TEST_YOGI2_EMAIL!)
+    expect(yogi1, 'TEST_YOGI1_EMAIL existiert').toBeTruthy()
+    expect(yogi2, 'TEST_YOGI2_EMAIL existiert').toBeTruthy()
+
+    // 4 zukünftige Stunden — je eine pro Fall (in Vorrang-Reihenfolge).
+    const course = await createTestCourse({
+      name: `${E2E_PREFIX} Akteur-Logik`,
+      maxSpots: 5,
+      sessionCount: 4,
+      startDaysFromNow: 10,
+    })
+    const [sSelf, sAdmin, sAbsage, sExcl] = course.sessionIds
+
+    // Aktive Buchung anlegen, dann als (Akteur) stornieren.
+    // WICHTIG: erst buchen, DANN ggf. Session absagen — sonst greift der
+    // BEFORE-INSERT-Trigger trg_prevent_booking_cancelled. credit_id bleibt NULL,
+    // damit trg_sync_credit_used nichts verrechnet.
+    const bookThenCancel = async (userId: string, sessionId: string, actor: 'self' | 'admin') => {
+      await db.from('bookings').insert({ user_id: userId, session_id: sessionId, type: 'course', status: 'active' })
+      await db.from('bookings')
+        .update({ status: 'cancelled', cancelled_by: actor, cancelled_at: new Date().toISOString() })
+        .eq('user_id', userId).eq('session_id', sessionId)
+    }
+
+    // 1) Yogi meldet sich SELBST ab → cancelled_by='self' → "Abgemeldet"
+    await bookThenCancel(yogi1!, sSelf, 'self')
+    const bSelf = await getCancelledBooking(yogi1!, sSelf)
+    expect(bSelf?.cancelled_by).toBe('self')
+    expect(cancelledActorLabel(bSelf)).toBe('Abgemeldet')
+    expect(bookingStatusLabel(await getSession(sSelf), bSelf)).toBe('Abgemeldet')
+
+    // 2) Admin trägt den Yogi aus → cancelled_by='admin' → "Ausgetragen"
+    await bookThenCancel(yogi2!, sAdmin, 'admin')
+    const bAdmin = await getCancelledBooking(yogi2!, sAdmin)
+    expect(bAdmin?.cancelled_by).toBe('admin')
+    expect(cancelledActorLabel(bAdmin)).toBe('Ausgetragen')
+    expect(bookingStatusLabel(await getSession(sAdmin), bAdmin)).toBe('Ausgetragen')
+
+    // 3) Ganze Stunde abgesagt → "Abgesagt" hat VORRANG vor dem Akteur-Wort,
+    //    selbst wenn die Buchung als admin-storniert markiert ist.
+    await bookThenCancel(yogi1!, sAbsage, 'admin')
+    await db.from('sessions').update({ is_cancelled: true, cancel_reason: 'Abgesagt' }).eq('id', sAbsage)
+    const bAbsage = await getCancelledBooking(yogi1!, sAbsage)
+    expect(bookingStatusLabel(await getSession(sAbsage), bAbsage)).toBe('Abgesagt')
+
+    // 4) Ausgeschlossene Stunde → "Ausgeschlossen" hat den HÖCHSTEN Vorrang.
+    await bookThenCancel(yogi2!, sExcl, 'self')
+    await db.from('sessions').update({ is_cancelled: true, cancel_reason: 'excluded' }).eq('id', sExcl)
+    const bExcl = await getCancelledBooking(yogi2!, sExcl)
+    expect(bookingStatusLabel(await getSession(sExcl), bExcl)).toBe('Ausgeschlossen')
   })
 })

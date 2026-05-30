@@ -36,6 +36,15 @@ test.describe('[E2E-Text] Fall 2 — cancelCourse Guthaben-Schutz', () => {
     // Delete NUR der nicht-Guthaben-Credits
     expect(src).toMatch(/credits'\)\.delete\(\)\s*\.eq\('user_id', prof\.id\)\.eq\('course_id', cancellingCourse\.id\)\.neq\('model', 'guthaben'\)/)
   })
+
+  test('deleteCourse entkoppelt Guthaben ebenfalls (course_id=null) und löscht nur model<>guthaben', () => {
+    const src = SRC_ADMIN_KURSE()
+    // deleteCourse (app/admin/kurse/page.tsx:1287-1290): gleiches Detach-then-Delete
+    // wie cancelCourse, nur kurs-weit (ohne user-Filter). Sichert Sarahs #1-Garantie:
+    // 10-Mon-/2-Jahres-Guthaben überlebt die Kurs-Löschung.
+    expect(src).toMatch(/from\('credits'\)\.update\(\{ course_id: null \}\)\s*\.eq\('course_id', courseId\)\.eq\('model', 'guthaben'\)/)
+    expect(src).toMatch(/from\('credits'\)\.delete\(\)\s*\.eq\('course_id', courseId\)\.neq\('model', 'guthaben'\)/)
+  })
 })
 
 test.describe('[E2E-Text] Fall 3 — Warteliste-Protokoll vollständig', () => {

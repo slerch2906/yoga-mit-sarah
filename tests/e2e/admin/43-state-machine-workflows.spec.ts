@@ -959,8 +959,10 @@ test.describe('[E2E] State-Machine 14 — Course-CRUD-Kette', () => {
 test.describe('[E2E] State-Machine 15 — Waitlist-Promote-Kette', () => {
   test('Workflow Source: waitlist-promote-Helper + Email waitlistPromoted', () => {
     const helper = read('lib/waitlist-promote.ts')
-    expect(helper).toMatch(/tryAutoPromoteOne/)
-    expect(helper).toMatch(/notifyAllSubscribers/)
+    // RLS-Kontext-Fix 2026-05-29: Helper exportiert promoteWaitlistOrOfferLate und
+    // delegiert die privilegierte Arbeit an die RPC process_cancellation_full.
+    expect(helper).toMatch(/promoteWaitlistOrOfferLate/)
+    expect(helper).toMatch(/process_cancellation_full/)
     // Email-Helper
     expect(EMAIL_SRC).toMatch(/waitlistPromoted:\s*\(data:/)
     expect(EMAIL_SRC).toMatch(/waitlistPromoted[\s\S]{0,400}sessionType\?:\s*string/)

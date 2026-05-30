@@ -212,12 +212,16 @@ test.describe('[E2E] Auto-Nachrücken funktioniert auch für Events', () => {
 
   test('waitlist-promote routet event_free/event_paid in den No-Credit-Promote', () => {
     const src = fs.readFileSync(path.join(process.cwd(), 'lib/waitlist-promote.ts'), 'utf8')
-    // session_type wird geladen + isEvent erkannt
+    // Der TS-Helper reicht den session_type weiter (für Event-spezifische Mail-Texte).
     expect(src).toMatch(/session_type/)
-    expect(src).toMatch(/sessType\s*===\s*'event_free'\s*\|\|\s*sessType\s*===\s*'event_paid'/)
-    // Events werden ohne Credit nachgerückt (wie Charity)
-    expect(src).toMatch(/promoteWithoutCredit\s*=\s*isFreeCourse\s*\|\|\s*isEvent/)
-    expect(src).toMatch(/promoteWithoutCredit[\s\S]{0,120}tryAutoPromoteOneFree/)
+    // RLS-Kontext-Fix 2026-05-29: Event-Erkennung + credit-loses Nachrücken laufen jetzt
+    // server-seitig in der Migration process_cancellation_full (SECURITY DEFINER).
+    const mig = fs.readFileSync(path.join(process.cwd(), 'supabase/migrations/20260529_process_cancellation_full.sql'), 'utf8')
+    // event_free/event_paid werden als Event erkannt …
+    expect(mig).toMatch(/v_is_event\s*:?=\s*[\s\S]{0,80}IN\s*\(\s*'event_free',\s*'event_paid'\s*\)/)
+    // … und Events/Charity rücken OHNE Credit nach (credit_id NULL).
+    expect(mig).toMatch(/v_promote_without_credit\s*:?=\s*v_is_event\s*OR\s*v_session\.is_free/)
+    expect(mig).toMatch(/credit_id\s*=\s*NULL/)
   })
 
   test('Dashboard-Event-Austrag ruft promoteWaitlistOrOfferLate auf', () => {

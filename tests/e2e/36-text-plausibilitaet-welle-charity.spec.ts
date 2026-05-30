@@ -148,9 +148,15 @@ test.describe('[E2E-Text] Email-Helper — Charity-Path verwendet Standard-waitl
 
   test('Charity-Auto-Promote in lib/waitlist-promote.ts sendet Email.waitlistPromoted (selber Template)', async () => {
     const src = read('lib/waitlist-promote.ts')
-    // tryAutoPromoteOneFree sendet die gleiche Email wie der Standard-Pfad
-    // Sarah 2026-05-28: Fenster erweitert (promoted_at-Logik im Upsert ergänzt).
-    expect(src).toMatch(/tryAutoPromoteOneFree[\s\S]{0,900}Email\.waitlistPromoted/)
+    // RLS-Kontext-Fix 2026-05-29: Der credit-lose Charity-/Event-Nachrücker läuft jetzt
+    // server-seitig (process_cancellation_full, v_promote_without_credit). Im Client gibt
+    // es nur EINEN Promote-Pfad: mode 'auto-promoted' → dieselbe Email.waitlistPromoted
+    // wie der Standard-Pfad (gemeinsames Template).
+    expect(src).toMatch(/mode === 'auto-promoted'[\s\S]{0,400}Email\.waitlistPromoted/)
+    // Der credit-lose Pfad (Charity/Event, credit_id NULL) ist in der Migration verankert.
+    const mig = read('supabase/migrations/20260529_process_cancellation_full.sql')
+    expect(mig).toMatch(/v_promote_without_credit/)
+    expect(mig).toMatch(/credit_id\s*=\s*NULL/)
   })
 })
 

@@ -97,7 +97,9 @@ test.describe('[E2E] Notifications: Email-Versand respektiert Toggle', () => {
   test('Notify-Place-Free läuft IMMER (nicht durch waitlist-Toggle gefiltert)', async () => {
     // Notify-Subscriber haben sich extra eingetragen → Toggle gilt nicht
     const src = read('lib/waitlist-promote.ts')
-    expect(src).toMatch(/notifyAllSubscribers/)
+    // RLS-Kontext-Fix 2026-05-29: der 'notify-only'-Zweig verschickt notifyPlaceFree.
+    expect(src).toMatch(/mode === 'notify-only'/)
+    expect(src).toMatch(/Email\.notifyPlaceFree/)
     // Helper hat keinen notify-Toggle-Check
     expect(src).not.toMatch(/notify_booking_confirmations|notify_waitlist_joined/)
   })
@@ -194,28 +196,30 @@ test.describe('[E2E] Wartelisten-Konflikt: Credit anderweitig verwendet', () => 
     expect(src).toMatch(/waitlistRemovedCreditUsedElsewhere:/)
   })
 
-  test('lib/waitlist-promote.ts: tryAutoPromoteOne überspringt yogi ohne Credit', async () => {
-    const src = read('lib/waitlist-promote.ts')
-    // free.length === 0 → return false (skip)
-    expect(src).toMatch(/free\.length\s*===?\s*0|return false/)
+  test('Migration process_cancellation_full: überspringt Yogi ohne Credit (CONTINUE)', async () => {
+    // RLS-Kontext-Fix 2026-05-29: Auto-Promote-Logik liegt jetzt server-seitig.
+    // Yogi ohne freien Credit wird übersprungen (bleibt auf Warteliste).
+    const mig = read('supabase/migrations/20260529_process_cancellation_full.sql')
+    expect(mig).toMatch(/IF v_credit\.id IS NULL THEN\s+CONTINUE/)
   })
 
   // Sarah-Wunsch 2026-05-24: Nach Auto-Promote muss der yogi auch von allen
   // anderen Wartelisten entfernt werden, wenn das sein letzter freier Credit war.
-  test('lib/waitlist-promote.ts: Re-Check nach Promote (creditsAfter / stillFree)', async () => {
-    const src = read('lib/waitlist-promote.ts')
-    expect(src).toMatch(/creditsAfter/)
-    expect(src).toMatch(/stillFree/)
+  test('Migration: Re-Check nach Promote (v_still_free → andere Wartelisten entfernen)', async () => {
+    const mig = read('supabase/migrations/20260529_process_cancellation_full.sql')
+    expect(mig).toMatch(/SELECT count\(\*\) INTO v_still_free/)
+    expect(mig).toMatch(/IF v_still_free = 0 THEN/)
   })
 
-  test('lib/waitlist-promote.ts: löscht andere Wartelisten + sendet Email pro Eintrag', async () => {
+  test('Migration löscht andere Wartelisten (type=waitlist) + TS mailt pro Eintrag', async () => {
+    // TS: pro server-seitig entferntem Eintrag eine Hinweis-Mail
     const src = read('lib/waitlist-promote.ts')
-    expect(src).toMatch(/otherWaitlists/)
-    // Lädt andere waitlist-Einträge (nur type=waitlist, nicht notify)
-    expect(src).toMatch(/\.eq\(['"]type['"],\s*['"]waitlist['"]\)/)
-    // Pro entfernter Warteliste eine Email
-    expect(src).toMatch(/for\s*\(\s*const\s+w\s+of\s+otherWaitlists/)
+    expect(src).toMatch(/removed_elsewhere/)
     expect(src).toMatch(/Email\.waitlistRemovedCreditUsedElsewhere/)
+    // Migration: löscht NUR type='waitlist' (nicht notify) wenn letzter Credit weg
+    const mig = read('supabase/migrations/20260529_process_cancellation_full.sql')
+    expect(mig).toMatch(/DELETE FROM waitlist WHERE user_id = v_waitlist\.user_id AND type = 'waitlist'/)
+    expect(mig).toMatch(/v_removed_elsewhere := v_removed_elsewhere \|\| jsonb_build_object/)
   })
 })
 
@@ -273,12 +277,12 @@ test.describe('[E2E] Charity-Feature: is_free + image_url', () => {
     expect(src).toMatch(/if\s*\(\s*!skipCreditCheck\s*\)/)
   })
 
-  test('lib/waitlist-promote.ts: tryAutoPromoteOneFree existiert + skip Credit', async () => {
-    const src = read('lib/waitlist-promote.ts')
-    expect(src).toMatch(/tryAutoPromoteOneFree/)
-    expect(src).toMatch(/isFreeCourse/)
-    // Kein credit_id wird gesetzt
-    expect(src).toMatch(/credit_id:\s*null/)
+  test('Migration: Charity/Event rückt OHNE Credit nach (v_promote_without_credit + credit_id NULL)', async () => {
+    // RLS-Kontext-Fix 2026-05-29: No-Credit-Promote (Events + is_free-Kurse) server-seitig.
+    const mig = read('supabase/migrations/20260529_process_cancellation_full.sql')
+    expect(mig).toMatch(/v_promote_without_credit\s*:?=\s*v_is_event\s*OR\s*v_session\.is_free/)
+    expect(mig).toMatch(/IF v_promote_without_credit THEN/)
+    expect(mig).toMatch(/credit_id\s*=\s*NULL/)
   })
 
   test('app/kurse: Wochenübersicht zeigt Foto + Kostenlos-Pille', async () => {
@@ -572,14 +576,15 @@ test.describe('[E2E] Credit nach letzter Stunde: Sichtbarkeit + Verfall', () => 
 
 // ── 12) Warteliste vs Notify-Logik ─────────────────────────────────────────
 test.describe('[E2E] Warteliste füllt Platz → Notify-Info-Logik', () => {
-  test('Helper notifyAllSubscribers wird NUR NACH erfolglosem Auto-Promote aufgerufen', async () => {
+  test('notify-only-Zweig steht NACH dem auto-promoted-Zweig (zuerst nachrücken, dann notify)', async () => {
     // Sarah-Regel 2026-05-28: zuerst Warteliste nachrücken, Notify nur wenn danach
-    // noch ein Platz frei ist → notify steht NACH der 90-min-Verzweigung.
+    // noch ein Platz frei ist. Im RLS-Fix-Helper bedeutet das: der 'notify-only'-
+    // Branch wird NACH dem 'auto-promoted'-Branch behandelt.
     const src = read('lib/waitlist-promote.ts')
-    const idxNotify = src.indexOf('notifyAllSubscribers(supabase, sessionId')
-    const idxIf = src.indexOf('sessionStart - now > NINETY_MIN_MS')
-    expect(idxNotify).toBeGreaterThan(-1)
-    expect(idxNotify).toBeGreaterThan(idxIf)
+    const idxPromote = src.indexOf("mode === 'auto-promoted'")
+    const idxNotify = src.indexOf("mode === 'notify-only'")
+    expect(idxPromote).toBeGreaterThan(-1)
+    expect(idxNotify).toBeGreaterThan(idxPromote)
   })
 
   test('Auto-eingebuchter Wartelisten-Yogi hat 1h Abmeldefrist (UI-Text)', async () => {

@@ -64,7 +64,9 @@ test.describe('[AUDIT] Email Template — course_cancelled', () => {
   })
 
   test('💡 vor "X Stunden entfallen"', async () => {
-    expect(edgeFunctionSource).toMatch(/💡\s*\$\{[^}]*remainingSessions\}\s*Stunden entfallen/u)
+    // v(esc-Wrapper, Welle S1): remainingSessions wird als ${esc(data.remainingSessions)}
+    // gerendert → das schließende ) zwischen Feld und } zulassen.
+    expect(edgeFunctionSource).toMatch(/💡\s*\$\{[^}]*remainingSessions[^}]*\}\s*Stunden entfallen/u)
   })
 })
 
@@ -72,7 +74,10 @@ test.describe('[AUDIT] Email Template — session_cancelled', () => {
   test.skip(() => !edgeFunctionSource, 'Edge Function Source nicht lokal verfügbar')
 
   test('Ersatztermin-Box nur wenn replacement vorhanden', async () => {
-    expect(edgeFunctionSource).toMatch(/hasRep\s*\?[^:]+:/i)
+    // v(session_cancelled): aus dem Ternary wurde ein if-Statement (Snapshot L251/253).
+    // Wir prüfen beide Teile: die hasRep-Ableitung + die bedingte afterBlock-Zuweisung.
+    expect(edgeFunctionSource).toMatch(/const hasRep\s*=\s*!!data\.replacementDate/)
+    expect(edgeFunctionSource).toMatch(/if\s*\(hasRep\)\s*afterBlock\s*=/)
   })
 
   test('reason mit Sprechblase nur wenn vorhanden', async () => {
@@ -144,8 +149,9 @@ test.describe('[AUDIT] Email Template — illness_credit (Welle G, v55)', () => 
   })
 
   test('Body zeigt hoursCredited + expiresAt + 10-Mon-Frist-Hinweis', async () => {
-    expect(edgeFunctionSource).toMatch(/\$\{data\.hoursCredited\}\s*Stunden Guthaben/)
-    expect(edgeFunctionSource).toMatch(/\$\{expiryStr\}/)
+    // v(esc-Wrapper, Welle S1): ${esc(data.hoursCredited)} / ${esc(expiryStr)}.
+    expect(edgeFunctionSource).toMatch(/\$\{[^}]*hoursCredited[^}]*\}\s*Stunden Guthaben/)
+    expect(edgeFunctionSource).toMatch(/\$\{[^}]*expiryStr[^}]*\}/)
     expect(edgeFunctionSource).toMatch(/Vorhol-\s*und Nachholbuchungen ersatzlos beendet/i)
     expect(edgeFunctionSource).toMatch(/Auszahlung in Geld ist ausgeschlossen/i)
   })
@@ -179,9 +185,11 @@ test.describe('[AUDIT] Email Template — admin_guthaben_2y_expiry (v59)', () =>
     expect(edgeFunctionSource).toMatch(/bitte erstatten/i)
   })
 
-  test('Body verweist auf AGB § 1.2 + unusedCredits + Admin-Dashboard-Link', async () => {
-    expect(edgeFunctionSource).toMatch(/AGB\s*§\s*1\.2/)
-    expect(edgeFunctionSource).toMatch(/\$\{data\.unusedCredits\}\s*ungenutzte Credits/)
+  test('Body verweist auf "Gemäß AGB" + unusedCredits + Admin-Dashboard-Link', async () => {
+    // Ist-Text (Sarah-Entscheidung 2026-05-29): die Mail sagt "Gemäß AGB" ohne
+    // Paragraphen-Nummer. Test an den Ist-Stand angepasst (Mail bleibt unverändert).
+    expect(edgeFunctionSource).toMatch(/[Gg]emäß AGB/)
+    expect(edgeFunctionSource).toMatch(/\$\{[^}]*unusedCredits[^}]*\}\s*ungenutzte Credits/)
     expect(edgeFunctionSource).toMatch(/Zum Admin-Dashboard/)
   })
 })
@@ -196,8 +204,9 @@ test.describe('[AUDIT] Email Template — account_deleted_yogi (v61)', () => {
     expect(re.test(edgeFunctionSource)).toBe(true)
   })
 
-  test('Subject: "Dein Account ... geloescht"', async () => {
-    expect(edgeFunctionSource).toMatch(/Dein Account bei Yoga mit Sarah wurde geloescht/i)
+  test('Subject: "Dein Account ... gelöscht"', async () => {
+    // v62/#190 Umlaut-Fix: geloescht → gelöscht.
+    expect(edgeFunctionSource).toMatch(/Dein Account bei Yoga mit Sarah wurde gelöscht/i)
   })
 
   test('Body listet 5 ✅-Punkte (Stammdaten + Buchungen + Historie + Audit + Email-Loesch)', async () => {
@@ -206,18 +215,18 @@ test.describe('[AUDIT] Email Template — account_deleted_yogi (v61)', () => {
     expect(re.test(edgeFunctionSource), 'Mindestens 5 ✅-Bullets erwartet').toBe(true)
     // Inhalts-Spot-Checks
     expect(edgeFunctionSource).toMatch(/Stammdaten.*entfernt/i)
-    expect(edgeFunctionSource).toMatch(/zukuenftigen Buchungen.*storniert/i)
-    expect(edgeFunctionSource).toMatch(/Buchungshistorie.*geloescht/i)
+    expect(edgeFunctionSource).toMatch(/zukünftigen Buchungen.*storniert/i)
+    expect(edgeFunctionSource).toMatch(/Buchungshistorie.*gelöscht/i)
     expect(edgeFunctionSource).toMatch(/anonymisiert/i)
   })
 
   test('Hinweis "letzte Nachricht" (DSGVO Art. 12 — Empfangsbestaetigung)', async () => {
-    expect(edgeFunctionSource).toMatch(/letzte Nachricht, die du von mir erhaeltst/i)
+    expect(edgeFunctionSource).toMatch(/letzte Nachricht, die du von mir erhältst/i)
   })
 
   test('Credit/Guthaben-Verfall-Hinweis (AGB § 1.0)', async () => {
     expect(edgeFunctionSource).toMatch(/AGB\s*§\s*1\.0/)
-    expect(edgeFunctionSource).toMatch(/Rueckerstattung erfolgt nicht/i)
+    expect(edgeFunctionSource).toMatch(/Rückerstattung erfolgt nicht/i)
   })
 })
 
@@ -238,7 +247,8 @@ test.describe('[AUDIT] Globale Regeln (Email-Templates v46)', () => {
 
   test('Welcome-Email enthält Herz 💛 und "in den Kurs"', async () => {
     expect(edgeFunctionSource).toMatch(/Schön, dass du dabei bist!\s*💛/u)
-    expect(edgeFunctionSource).toMatch(/in den Kurs\s*<strong>\$\{data\.courseName\}/i)
+    // v(esc-Wrapper, Welle S1): courseName wird über den Alias ${cn} gerendert.
+    expect(edgeFunctionSource).toMatch(/in den Kurs\s*<strong>\$\{cn\}/i)
     expect(edgeFunctionSource).toMatch(/Ich freue mich, dich bald auf der Matte zu sehen/i)
   })
 })

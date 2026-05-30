@@ -187,13 +187,20 @@ test.describe('[E2E-Logic] Charity-Waitlist — Auto-Promote ohne Credit', () =>
     expect((wlAfter || []).length).toBe(0)
   })
 
-  test('lib/waitlist-promote.ts: Charity-Pfad existiert (tryAutoPromoteOneFree)', async () => {
+  test('Charity-Pfad rückt OHNE Credit nach (auto-promoted → waitlistPromoted)', async () => {
+    // RLS-Kontext-Fix 2026-05-29: Die privilegierte DB-Arbeit (auch der Charity-
+    // No-Credit-Pfad) wurde aus dem Client in die SECURITY-DEFINER-RPC
+    // process_cancellation_full verschoben. Der TS-Helper verschickt im
+    // 'auto-promoted'-Zweig die waitlistPromoted-Email (keine separate Charity-Mail).
     const fs = require('fs') as typeof import('fs')
     const path = require('path') as typeof import('path')
     const src = fs.readFileSync(path.join(process.cwd(), 'lib/waitlist-promote.ts'), 'utf8')
-    expect(src).toMatch(/tryAutoPromoteOneFree[\s\S]{0,600}credit_id:\s*null/)
-    // Beim Promote wird Email.waitlistPromoted gesendet (nicht eine separate Charity-Email)
-    expect(src).toMatch(/tryAutoPromoteOneFree[\s\S]{0,900}Email\.waitlistPromoted/)
+    expect(src).toMatch(/mode === 'auto-promoted'[\s\S]{0,400}Email\.waitlistPromoted/)
+    // Die "ohne Credit nachrücken"-Logik (Events + Charity/is_free) steckt in der Migration:
+    const mig = fs.readFileSync(
+      path.join(process.cwd(), 'supabase/migrations/20260529_process_cancellation_full.sql'), 'utf8')
+    expect(mig).toMatch(/v_promote_without_credit\s*:?=\s*v_is_event\s*OR\s*v_session\.is_free/)
+    expect(mig).toMatch(/credit_id\s*=\s*NULL/)
   })
 })
 
@@ -544,13 +551,18 @@ test.describe('[E2E-Logic] Waitlist-Multi-Conflict — Cleanup nach Auto-Promote
     expect((wlAfter || []).length).toBe(0)
   })
 
-  test('lib/waitlist-promote.ts hat die Multi-Cleanup-Logik (creditsAfter + stillFree + delete)', async () => {
+  test('Multi-Cleanup nach Promote: Migration entfernt andere Wartelisten + TS mailt pro Eintrag', async () => {
     const fs = require('fs') as typeof import('fs')
     const path = require('path') as typeof import('path')
     const src = fs.readFileSync(path.join(process.cwd(), 'lib/waitlist-promote.ts'), 'utf8')
-    expect(src).toMatch(/creditsAfter[\s\S]{0,200}stillFree/)
-    expect(src).toMatch(/otherWaitlists[\s\S]{0,400}waitlist['"]\)\.delete/)
-    // Pro entfernter Warteliste eine Email
-    expect(src).toMatch(/for\s*\(\s*const\s+w\s+of\s+otherWaitlists[\s\S]{0,400}waitlistRemovedCreditUsedElsewhere/)
+    // TS verschickt pro server-seitig entferntem Warteliste-Eintrag eine Hinweis-Mail.
+    expect(src).toMatch(/removed_elsewhere[\s\S]{0,400}Email\.waitlistRemovedCreditUsedElsewhere/)
+    // Die eigentliche Cleanup-Logik (letzter Credit weg → andere Wartelisten löschen)
+    // liegt in der RPC-Migration:
+    const mig = fs.readFileSync(
+      path.join(process.cwd(), 'supabase/migrations/20260529_process_cancellation_full.sql'), 'utf8')
+    expect(mig).toMatch(/SELECT count\(\*\) INTO v_still_free/)
+    expect(mig).toMatch(/IF v_still_free = 0 THEN/)
+    expect(mig).toMatch(/DELETE FROM waitlist WHERE user_id = v_waitlist\.user_id AND type = 'waitlist'/)
   })
 })

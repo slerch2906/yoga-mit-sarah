@@ -5,6 +5,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { LoginPage } from '../page-objects/LoginPage'
+import { getServiceClient, getUserIdByEmail } from '../utils/db'
 
 const YOGI1 = {
   email: process.env.TEST_YOGI1_EMAIL!,
@@ -44,23 +45,37 @@ test.describe('Authentifizierung', () => {
   })
 
   test('Passwort ändern → direkte Änderung ohne Reset-Link', async ({ page }) => {
+    // Sarah-Freigabe 2026-05-29: Der Test ändert das Test-Yogi-Passwort kurz auf einen
+    // NEUEN Wert (Supabase lehnt "neu == alt" ab — daher schlug der Test bisher fehl) und
+    // setzt es im finally sofort wieder zurück. Sarahs echter Account ist nie betroffen.
+    const NEW_PW = `${YOGI1.password}_Neu9`
     const login = new LoginPage(page)
-    await login.goto()
-    await login.login(YOGI1.email, YOGI1.password)
+    try {
+      await login.goto()
+      await login.login(YOGI1.email, YOGI1.password)
 
-    // Direkt zur Passwort-Seite navigieren (vermeidet Button-Auswahl auf Profilseite)
-    await page.goto('/profil/passwort')
-    await page.waitForLoadState('networkidle')
+      // Direkt zur Passwort-Seite navigieren (vermeidet Button-Auswahl auf Profilseite)
+      await page.goto('/profil/passwort')
+      await page.waitForLoadState('networkidle')
 
-    await page.locator('input[type="password"]').first().fill(YOGI1.password)
-    await page.locator('input[type="password"]').nth(1).fill(YOGI1.password)
-    await page.getByRole('button', { name: /speichern/i }).click()
+      await page.locator('input[type="password"]').first().fill(NEW_PW)
+      await page.locator('input[type="password"]').nth(1).fill(NEW_PW)
+      await page.getByRole('button', { name: /speichern/i }).click()
 
-    await expect(page.getByText(/passwort.*geändert|gespeichert|erfolgreich/i)).toBeVisible({ timeout: 10_000 })
-    // Welle 5: Bestätigung muss eindeutig auf Passwort-Aktion zeigen, nicht generisch
-    await expect(
-      page.getByText(/passwort|kennwort/i).first()
-    ).toBeVisible()
+      await expect(page.getByText(/passwort.*geändert|gespeichert|erfolgreich/i)).toBeVisible({ timeout: 10_000 })
+      // Welle 5: Bestätigung muss eindeutig auf Passwort-Aktion zeigen, nicht generisch
+      await expect(
+        page.getByText(/passwort|kennwort/i).first()
+      ).toBeVisible()
+    } finally {
+      // Sicherheitsnetz: Test-Yogi-Passwort sofort wieder auf den .env.test-Wert setzen,
+      // damit Logout-Test, Session-Erneuerung und alle folgenden Test-Dateien weiter
+      // mit YOGI1.password einloggen können. Der Admin-Pfad (updateUserById) kennt die
+      // "neu != alt"-Regel nicht, akzeptiert das Zurücksetzen also problemlos.
+      const svc = getServiceClient()
+      const uid = await getUserIdByEmail(YOGI1.email)
+      if (uid) await svc.auth.admin.updateUserById(uid, { password: YOGI1.password })
+    }
   })
 
   test('Logout → Weiterleitung zu /login', async ({ page }) => {

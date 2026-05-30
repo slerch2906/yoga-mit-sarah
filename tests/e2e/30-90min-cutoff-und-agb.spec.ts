@@ -130,8 +130,14 @@ test.describe('[E2E] 90-Min-Cutoff: zentrale Logik in lib/waitlist-promote', () 
     expect(fs.existsSync(helperPath), 'lib/waitlist-promote.ts muss existieren').toBe(true)
     const helperSrc = fs.readFileSync(helperPath, 'utf8')
     expect(helperSrc).toMatch(/export\s+async\s+function\s+promoteWaitlistOrOfferLate/)
-    // NINETY_MIN_MS Konstante
-    expect(helperSrc).toMatch(/90\s*\*\s*60\s*\*\s*1000/)
+    // RLS-Kontext-Fix 2026-05-29: Die 90-Min-Entscheidung liegt jetzt server-seitig in
+    // der SECURITY-DEFINER-RPC process_cancellation_full (umgeht RLS) statt in einer
+    // NINETY_MIN_MS-Konstante im Client. Der Helper ruft also nur noch die RPC auf …
+    expect(helperSrc).toMatch(/supabase\.rpc\(\s*['"]process_cancellation_full['"]/)
+    // … und die 90-Minuten-Schwelle steht als SQL-Intervall in der Migration.
+    const migPath = path.join(root, 'supabase', 'migrations', '20260529_process_cancellation_full.sql')
+    expect(fs.existsSync(migPath), 'Migration process_cancellation_full.sql muss existieren').toBe(true)
+    expect(fs.readFileSync(migPath, 'utf8')).toMatch(/interval\s*'90 minutes'/)
 
     // Alle 4 Auslöse-Stellen müssen den Helper importieren/aufrufen
     const callers = [
@@ -380,26 +386,28 @@ test.describe('[E2E] waitlist-offer API: Race + Edge Cases', () => {
 test.describe('[E2E] Notify-Subscribers immer', () => {
   test.use({ storageState: { cookies: [], origins: [] } })
 
-  test('Helper-Source: notifyAllSubscribers wird NUR NACH erfolglosem Promote aufgerufen', async () => {
+  test('Helper-Source: Notify-Branch (notify-only) steht NACH dem Auto-Promote-Branch', async () => {
     const helperSrc = fs.readFileSync(path.join(process.cwd(), 'lib/waitlist-promote.ts'), 'utf8')
-    // Sarah-Regel 2026-05-28: ZUERST Warteliste nachrücken, Benachrichtigungen
-    // NUR wenn danach noch ein Platz frei ist (sonst lockt man notify-Yogis an,
-    // obwohl die Warteliste den Platz schon gefüllt hat). → notifyAllSubscribers
-    // steht NACH der 90-min-Verzweigung, nicht davor.
-    const idxNotify = helperSrc.indexOf('notifyAllSubscribers(supabase, sessionId')
-    const idxIf = helperSrc.indexOf('sessionStart - now > NINETY_MIN_MS')
-    expect(idxNotify, 'notifyAllSubscribers muss aufgerufen werden').toBeGreaterThan(-1)
-    expect(idxIf, '90-min-Branch muss existieren').toBeGreaterThan(-1)
-    expect(idxNotify, 'Notify wird erst NACH dem Promote-Versuch gemacht').toBeGreaterThan(idxIf)
+    // Sarah-Regel 2026-05-28 (RLS-Kontext-Fix 2026-05-29): ZUERST Warteliste nachrücken,
+    // Notify-Subscriber NUR wenn der Platz frei BLEIBT. Die RPC liefert 'notify-only'
+    // bewusst erst, wenn niemand nachgerückt ist (v_promoted IS NULL); im Client steht
+    // der notify-only-Branch hinter dem auto-promoted-Branch.
+    const idxPromoted = helperSrc.indexOf("mode === 'auto-promoted'")
+    const idxNotify = helperSrc.indexOf("mode === 'notify-only'")
+    expect(idxPromoted, 'auto-promoted-Branch muss existieren').toBeGreaterThan(-1)
+    expect(idxNotify, 'notify-only-Branch muss existieren').toBeGreaterThan(-1)
+    expect(idxNotify, 'Notify-Branch steht NACH dem Auto-Promote-Branch').toBeGreaterThan(idxPromoted)
   })
 
-  test('Helper notifyAllSubscribers triggert notify_place_free Email + löscht notify-Einträge', async () => {
+  test('Helper notify-only triggert notify_place_free Email + löscht notify-Einträge via RPC', async () => {
     const helperSrc = fs.readFileSync(path.join(process.cwd(), 'lib/waitlist-promote.ts'), 'utf8')
     expect(helperSrc).toMatch(/Email\.notifyPlaceFree/)
-    // Welle S2/M4 (Sarah 2026-05-27): Multiline-Delete-Pattern erlauben.
-    // Code-Form: .delete()\n      .eq('session_id', sessionId).eq('type', 'notify')\n      .in('user_id', succeededUserIds)
-    // Wir matchen \s* zwischen .delete() und .eq, damit Mehrzeiler ok ist.
-    expect(helperSrc).toMatch(/\.delete\(\)\s*\.eq\(\s*['"]session_id['"]\s*,\s*sessionId\s*\)\s*\.eq\(\s*['"]type['"]\s*,\s*['"]notify['"]\s*\)/)
+    // RLS-Kontext-Fix 2026-05-29: Das Löschen der erfolgreich benachrichtigten notify-
+    // Einträge läuft jetzt server-seitig über die RPC delete_notify_subscribers (statt
+    // direktem .delete().eq(...) im Client). Welle-S2/M4-Garantie bleibt erhalten:
+    // gelöscht wird nur, was per Mail erfolgreich rausging (succeededUserIds).
+    expect(helperSrc).toMatch(/supabase\.rpc\(\s*['"]delete_notify_subscribers['"]/)
+    expect(helperSrc).toMatch(/succeededUserIds/)
   })
 })
 

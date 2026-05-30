@@ -51,11 +51,12 @@ export default async function globalSetup(config: FullConfig) {
   // .auth-Verzeichnis anlegen
   if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true })
 
-  // Alte Testdaten bereinigen
-  console.log('\n🧹 Alte Testdaten bereinigen...')
-  await cleanupAllE2EData()
-
-  // Test-Nutzer anlegen
+  // Test-Nutzer anlegen — MUSS vor dem Cleanup laufen!
+  // cleanupAllE2EData() meldet sich als Test-Admin an. Existiert der Admin nicht
+  // (z.B. nach einem DB-Reset, der nur den echten Account behält), bricht der
+  // Cleanup sonst mit "Invalid login credentials" ab und das Setup schlägt fehl,
+  // BEVOR die Nutzer überhaupt angelegt werden. Reihenfolge 2026-05-29 getauscht
+  // (Test-Tag): erst anlegen → dann bereinigen → dann Browser-Sessions speichern.
   console.log('\n👥 Test-Nutzer anlegen...')
 
   const adminEmail = process.env.TEST_ADMIN_EMAIL!
@@ -73,6 +74,10 @@ export default async function globalSetup(config: FullConfig) {
 
   await ensureTestUser(yogi2Email, yogi2Pass, false)
   console.log(`  ✓ Yogi2: ${yogi2Email}`)
+
+  // Alte Testdaten bereinigen (jetzt kann sich der Admin sicher anmelden)
+  console.log('\n🧹 Alte Testdaten bereinigen...')
+  await cleanupAllE2EData()
 
   // Browser-Sessions (eingeloggte Zustände) speichern
   console.log('\n🔐 Browser-Sessions einloggen und speichern...')

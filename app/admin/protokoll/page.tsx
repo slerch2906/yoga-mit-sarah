@@ -15,6 +15,8 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   booking_cancelled:              { label: 'Stunde storniert',               color: 'text-yoga-amber-text' },
   // Welle 5 (Sarah 2026-05-26): Admin-Storno einer Yogi-Buchung — wird in dashboard/kurse/sessions geschrieben
   booking_cancelled_by_admin:     { label: 'Yogi-Buchung storniert (Admin)', color: 'text-yoga-red-text' },
+  // Welle 2026-05-30 (Sarah): Fehlgeschlagene Buchung (Frist/Fenster/kein Credit)
+  booking_failed_deadline:        { label: 'Buchung blockiert (Frist)',      color: 'text-yoga-red-text' },
   credit_assigned:                { label: 'Credits vergeben',               color: 'text-yoga-green-text' },
   credit_adjusted:                { label: 'Credit angepasst',               color: 'text-yoga-amber-text' },
   credit_deleted:                 { label: 'Credit gelöscht',                color: 'text-yoga-red-text' },
@@ -66,6 +68,11 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   profile_email_update_failed:    { label: 'Profil-Email-Update fehlgeschlagen', color: 'text-yoga-red-text' },
   waitlist_offer_rollback:        { label: 'Warteliste-Angebot zurückgerollt', color: 'text-yoga-amber-text' },
   course_credits_auto_expired:    { label: '8d-Cleanup: Kurs + Credits gelöscht', color: 'text-yoga-amber-text' },
+  // ── Welle 2026-05-30 (Sarah): 24-Monats-Inaktivitäts-Löschung (System-Cron) ──
+  inactivity_cleanup_dryrun:      { label: 'Inaktivitäts-Check (Trockenlauf)', color: 'text-yoga-amber-text' },
+  inactivity_cleanup:             { label: 'Inaktive Konten gelöscht',        color: 'text-yoga-red-text' },
+  yogi_auto_deleted_inactive:     { label: 'Konto autom. gelöscht (24 Mon. inaktiv)', color: 'text-yoga-red-text' },
+  inactivity_cleanup_error:       { label: 'Inaktivitäts-Löschung: Fehler',   color: 'text-yoga-red-text' },
 }
 
 const SESSION_TYPE_LABEL: Record<string, string> = {

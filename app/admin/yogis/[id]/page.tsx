@@ -937,6 +937,12 @@ export default function AdminYogiDetailPage() {
           : (d.credit_returned === false ? ' — Credit verfallen' : ' — Credit zurück')
         return { text: `Admin hat Yogi abgemeldet${fristStr}${cStr}`, subject: termin }
       }
+      case 'booking_failed_deadline': {
+        const grund = d.reason === 'window_blocked'
+          ? 'Frist/Fenster überschritten'
+          : (d.reason === 'no_credit' ? 'kein freier Credit' : 'blockiert')
+        return { text: `Buchung fehlgeschlagen — ${grund}`, subject: termin }
+      }
       case 'admin_added_yogi_to_session': {
         const oStr = d.origin_session_id ? ' (als Vorhol-/Nachholbuchung)' : ''
         return { text: `Admin hat Yogi in Stunde eingetragen${oStr}`, subject: termin }

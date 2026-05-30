@@ -232,6 +232,26 @@ export default function SessionDetailPage() {
       //   3. Falls weder noch → Fehlermeldung
       const pick = await selectCreditForBooking(supabase, user!.id, id as string, session!.date, session!.time_start)
       if (!pick.ok) {
+        // Welle 2026-05-30 (Sarah): Fehlgeschlagene Buchung (Frist-/Fenster-Block
+        // oder kein freier Credit) im Audit-Log protokollieren → auf der Admin-
+        // Protokollseite sichtbar (Event-Key 'booking_failed_deadline').
+        try {
+          await supabase.from('audit_log').insert({
+            user_id: user!.id,
+            action: 'booking_failed_deadline',
+            details: {
+              session_id: id,
+              session_date: session?.date,
+              session_time: session?.time_start,
+              course_name: (session as any)?.course?.name || (session as any)?.name || null,
+              session_type: (session as any)?.session_type || 'course_session',
+              reason: pick.reason,            // 'window_blocked' | 'no_credit'
+              error_message: pick.message,
+            },
+          })
+        } catch (auditErr) {
+          console.error('Audit booking_failed_deadline failed:', auditErr)
+        }
         alert(pick.message)
         setActionLoading(false)
         return
@@ -879,7 +899,7 @@ export default function SessionDetailPage() {
                 {course?.is_free || isEventFree
                   ? 'Du bist angemeldet. Abmeldung jederzeit möglich.'
                   : showPromoteGrace
-                  ? <>Du bist gerade von der Warteliste nachgerückt. Du hast <strong>noch etwa 1 Stunde</strong> Zeit, dich kostenlos wieder abzumelden{isEventPaid ? '.' : <> – dein Credit kommt dann zurück.</>}</>
+                  ? <>Du bist gerade von der Warteliste nachgerückt. Du hast <strong>noch etwa 1 Stunde</strong> Zeit, dich kostenlos wieder abzumelden{isEventPaid ? '.' : <> – dein Credit kommt dann zurück.</>}<br /><strong>Kostenlose Stornierung nur bis zum Stundenanfang möglich!</strong></>
                   : isEventPaid
                   ? 'Du bist angemeldet. Diese Buchung ist verbindlich. Stornofrist: 7 Tage vor dem Event.'
                   : <>Du bist angemeldet. Abmeldung kostenlos bis <strong>{deadline}</strong> – danach gilt die Stunde als wahrgenommen.</>}

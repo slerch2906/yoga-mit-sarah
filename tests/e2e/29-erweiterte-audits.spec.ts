@@ -285,6 +285,7 @@ test.describe('Late-Cancel: Konsistenz DB + Email', () => {
     const path = require('path')
     const snapshot = path.join(__dirname, '..', 'fixtures', 'send-email-snapshot.txt')
     const src = fs.existsSync(snapshot) ? fs.readFileSync(snapshot, 'utf-8') : ''
-    expect(src).toMatch(/creditReturned\?[^:]+:[^,)]*Credit nicht zur/i)
+    // v(Snapshot): Code-Form ist "data.creditReturned ? … : …" MIT Leerzeichen vor '?'.
+    expect(src).toMatch(/creditReturned\s*\?[^:]+:[^,)]*Credit nicht zur/i)
   })
 })

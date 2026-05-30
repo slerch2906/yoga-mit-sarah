@@ -172,7 +172,7 @@ Formel und denselben `lib/session-status`-Zählern. Die Zahlen stimmen **per Kon
 | Frist | Konstante / Ort | Gilt für | Verhalten an der Grenze |
 |---|---|---|---|
 | **90 Minuten** | `v_within90 := (v_start - v_now) <= interval '90 minutes'` (`process_cancellation_full`) | Warteliste bei Absage | **> 90 Min:** automatisches Nachrücken (Auto-Promote) des ersten passenden Wartelisten-Yogis. **≤ 90 Min:** Spät-Angebot (Late-Offer) an **alle** Wartelisten-Yogis gleichzeitig (Magic-Token, „first-click wins"). |
-| **60 Minuten** | `bookings.promoted_at`; Prüfung `now() - NEW.promoted_at < interval '60 minutes'` | Frisch nachgerückte Yogis | „Promote-Gnadenfrist": Ein automatisch nachgerückter Yogi darf sich innerhalb von 60 Min nach dem Nachrücken **kostenlos** wieder abmelden — auch innerhalb des sonst gesperrten Fensters. |
+| **60 Minuten** | `bookings.promoted_at`; Prüfung `now() - NEW.promoted_at < interval '60 minutes'` | Frisch nachgerückte Yogis | „Promote-Gnadenfrist": Ein automatisch nachgerückter Yogi darf sich innerhalb von 60 Min nach dem Nachrücken **kostenlos** wieder abmelden — auch innerhalb des sonst gesperrten Fensters. **Hard Cut-Off:** Diese Gnadenfrist endet spätestens zum **Stundenanfang** — ab Kursbeginn ist keine kostenlose Stornierung mehr möglich (UI-Gate `!past` blendet die Abmelde-Sektion aus). App + Mail zeigen „Kostenlose Stornierung nur bis zum Stundenanfang möglich!". |
 | **3 Stunden** | `isPastDeadline(...)` mit `hoursBeforeAllowed = 3` (`lib/server-time.ts`) | Normale Selbst-Abmeldung (Kursstunden & Einzelstunden) | Bis 3 Std vor Beginn frei abmeldbar (Credit kommt zurück). Danach „spät storniert" (`cancel_late = true`, kein Credit zurück). |
 | **7 Tage** | `enforce_event_paid_7d_cancel_block()` (DB-Trigger) | Bezahlte Events (`event_paid`) | Innerhalb von 7 Tagen vor Beginn ist die **Selbst-Abmeldung gesperrt** (harter DB-Block). **Ausnahmen:** Admin; sowie Yogis innerhalb der 60-Min-Promote-Gnadenfrist. |
 | **8 Tage** | `EIGHT_DAYS_MS = 8*24*60*60*1000` (`lib/credit-selector.ts`); `expiresAt.setDate(getDate()+8)` | Kurs-Credits nach Kursende | Kurs-Credits bleiben bis 8 Tage **nach** `date_end` nutzbar (Nachhol-Fenster). Danach 8d-Cleanup. |
@@ -198,6 +198,10 @@ Formel und denselben `lib/session-status`-Zählern. Die Zahlen stimmen **per Kon
   stornierten Session** erfolgt eine Reaktivierung ohne erneute Fensterprüfung.
 - Liegt eine Buchung außerhalb des Fensters, liefert die Funktion deutsche Block-Meldungen
   (8d-/10d-Fenster).
+- **Fehler-Protokollierung:** Schlägt eine Buchung an einer Frist / einem Fenster fehl
+  (`ok:false`), schreibt `handleBook` (`app/kurse/[id]/page.tsx`) zusätzlich einen Audit-Eintrag
+  `booking_failed_deadline` (mit `reason` = `window_blocked`/`no_credit` + `error_message`) —
+  auf der Admin-Protokollseite sichtbar (siehe Sektion 6).
 
 > **⚠️ Maßgeblich ist die STUNDE, nicht der Buchungszeitpunkt.**
 > Eine Stunde (auch beim Vorholen/Nachholen) ist **nur** buchbar, wenn die **Stunde selbst**
@@ -245,7 +249,7 @@ Ohne Credit nachrücken?  v_promote_without_credit = is_event OR is_free   (z. B
 | Modus | Auslöser | Aktion + E-Mails |
 |---|---|---|
 | **`auto-promoted`** | Platz frei, **> 90 Min** vor Beginn | Ersten passenden Wartelisten-Yogi automatisch nachrücken (eigener Kurs-Credit bevorzugt). Mails: `Email.waitlistPromoted` + ggf. `Email.waitlistRemovedCreditUsedElsewhere`. Audit: `waitlist_promoted`, evtl. `waitlist_auto_removed`. |
-| **`late-offer`** | Platz frei, **≤ 90 Min** vor Beginn | Spät-Angebot an **alle** Wartelisten-Yogis (Token in `waitlist_offers`, „first-click wins"). Mail je Angebot: `Email.waitlistOfferLate`. |
+| **`late-offer`** | Platz frei, **≤ 90 Min** vor Beginn | Spät-Angebot an **alle** Wartelisten-Yogis (Token in `waitlist_offers`, „first-click wins"). **Überbuchungsschutz:** atomarer Guard `UPDATE … WHERE resolved_winner_user_id IS NULL` (`app/api/waitlist-offer/[token]/route.ts`) → **nur ein** Gewinner, kein DB-Fehler; zweiter Klicker bekommt `409 too_late` + „Schade, ein anderer Yogi war schneller!". Mail je Angebot: `Email.waitlistOfferLate`. |
 | **`notify-only`** | Platz bleibt frei (kein passender Yogi) | Mail `Email.notifyPlaceFree` an Abonnenten, danach `delete_notify_subscribers`-RPC (nur bei Erfolg). |
 | **`noop`** | nichts zu tun | keine Aktion |
 
@@ -278,12 +282,16 @@ Ohne Credit nachrücken?  v_promote_without_credit = is_event OR is_free   (z. B
    Kurs-Credit des eigenen Kurses. Mail `Email.waitlistPromoted`. Wird dadurch Yogi Bs letzter
    freier Credit verbraucht, wird er automatisch von **anderen** Wartelisten entfernt
    (Mail `Email.waitlistRemovedCreditUsedElsewhere`, Audit `waitlist_auto_removed`).
-   → **60-Min-Gnadenfrist:** Yogi B kann sich innerhalb 60 Min nach dem Nachrücken kostenlos
-   wieder abmelden (`bookings.promoted_at`).
+   → **60-Min-Gnadenfrist (mit Hard Cut-Off):** Yogi B kann sich innerhalb 60 Min nach dem
+   Nachrücken kostenlos wieder abmelden (`bookings.promoted_at`) — **längstens jedoch bis zum
+   Stundenanfang**. App + Mail zeigen „Kostenlose Stornierung nur bis zum Stundenanfang möglich!".
 4. **Fall „≤ 90 Min vorher" (`late-offer`):** **Alle** Wartelisten-Yogis erhalten gleichzeitig ein
    Spät-Angebot per Magic-Link (`Email.waitlistOfferLate`, Seite `/warteliste/angebot/[token]`).
-   Der **erste Klick gewinnt** (`waitlist_offers.resolved_winner_user_id`), die übrigen Tokens
-   verfallen.
+   Der **erste Klick gewinnt** über einen **atomaren Guard**
+   (`UPDATE waitlist_offers … WHERE resolved_winner_user_id IS NULL`): es kann **nur genau einen
+   Gewinner** geben → keine Überbuchung, kein DB-Fehler. Der zweite Klicker erhält `409 too_late`
+   und sieht „**Schade, ein anderer Yogi war schneller!**". Schlägt ein Folgeschritt fehl, rollt
+   `rollbackOffer` den Platz zurück (Audit `waitlist_offer_rollback`).
 5. **Fall „Platz bleibt frei" (`notify-only`):** Interessenten werden via `Email.notifyPlaceFree`
    informiert, danach werden die Notify-Abonnenten gelöscht.
 
@@ -434,7 +442,7 @@ Zentrale Tabelle **`audit_log`** mit den Spalten `action` (Schlüssel), `details
 |---|---|
 | **[Name vor Anonymisierung]** | Snapshot in `details.full_name` / `details.email` zum Schreibzeitpunkt (überlebt die Anonymisierung der Live-`profiles`-Zeile, bis `anonymize_user_audit_logs` scrubt) |
 | **[Titel]** | `details.course_name` (Kurs) bzw. `details.name` (Einzelstunde/Event) + `details.session_type` |
-| **[Aktion]** | `action`-Schlüssel → lesbares Label über `ACTION_LABELS` (47 Schlüssel) |
+| **[Aktion]** | `action`-Schlüssel → lesbares Label über `ACTION_LABELS` (52 Schlüssel) |
 | **[Datum/Uhrzeit]** | `created_at` (Zeitstempel des Logs) + `details.session_date` / `details.session_time` (betroffener Termin) |
 
 Häufige `details`-Schlüssel: `target_user_id`, `user_id`, `course_id`, `course_name`, `session_id`,
@@ -453,14 +461,15 @@ Häufige `details`-Schlüssel: `target_user_id`, `user_id`, `course_id`, `course
 
 > Es gibt **keine** Yogi-seitige (Nicht-Admin) Protokoll-Ansicht — alle drei Leser sind Admin-gated.
 
-### 6.3 Aktions-Katalog (`ACTION_LABELS`, 47 Schlüssel)
+### 6.3 Aktions-Katalog (`ACTION_LABELS`, 52 Schlüssel)
 
 Quelle: `app/admin/protokoll/page.tsx`, Zeilen 13–69. Jeder Schlüssel hat Label **und** Farbe
 (grün = positiv, amber = Änderung/Warnung, rot = Löschung/Fehler).
 
 **Buchungen & Credits:** `booking_created` „Stunde gebucht" · `booking_cancelled` „Stunde storniert" ·
 `booking_cancelled_by_admin` „Yogi-Buchung storniert (Admin)" · `credit_assigned` „Credits vergeben" ·
-`credit_adjusted` „Credit angepasst" · `credit_deleted` „Credit gelöscht"
+`credit_adjusted` „Credit angepasst" · `credit_deleted` „Credit gelöscht" · `booking_failed_deadline`
+„Buchung blockiert (Frist)" — fehlgeschlagene Buchung (Silent-Failure-Logging)
 
 **Kurs-Teilnahme:** `yogi_enrolled_by_admin` „In Kurs eingetragen" · `yogi_removed_from_course`
 „Aus Kurs ausgetragen" · `session_cancelled` „Stunde abgesagt (Admin)"
@@ -497,6 +506,10 @@ Quelle: `app/admin/protokoll/page.tsx`, Zeilen 13–69. Jeder Schlüssel hat Lab
 „Bulk-Mail versendet" · `admin_dsgvo_deletion` „DSGVO-Löschung durch Admin" · `yogi_deleted`
 „User gelöscht" · `yogi_anonymized_dsgvo` „Yogi anonymisiert (DSGVO)" · `legal_accepted`
 „AGB bestätigt" · `profile_email_update_failed` „Profil-Email-Update fehlgeschlagen"
+
+**System / Inaktivität (24-Monats-Cron):** `inactivity_cleanup_dryrun` „Inaktivitäts-Check (Trockenlauf)" ·
+`inactivity_cleanup` „Inaktive Konten gelöscht" · `yogi_auto_deleted_inactive`
+„Konto autom. gelöscht (24 Mon. inaktiv)" · `inactivity_cleanup_error` „Inaktivitäts-Löschung: Fehler"
 
 > Detail-Hinweis: `course_credits_auto_expired` hat ein `ACTION_LABELS`-Label, aber **keinen**
 > eigenen `formatAuditEntry`-Fall (fällt auf die Default-Beschreibung zurück).

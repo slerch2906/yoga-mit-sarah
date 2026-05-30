@@ -70,9 +70,9 @@ export default function WaitlistOfferPage() {
         {status === 'too_late' && (
           <div className="card text-center">
             <div className="text-3xl mb-3">😔</div>
-            <p className="font-semibold mb-2">Leider zu spät</p>
+            <p className="font-semibold mb-2">Schade!</p>
             <p className="text-sm text-yoga-text/60">
-              Jemand anderes war schneller — der Platz wurde bereits vergeben.
+              Schade, ein anderer Yogi war schneller! Der Platz wurde bereits vergeben.
             </p>
           </div>
         )}

@@ -69,4 +69,16 @@ test.describe('[E2E] Live-Bugfixes 2026-05-30', () => {
     expect(src.includes('bookingsThisWeek')).toBe(true)
     expect(src.includes('cancellationsThisWeek')).toBe(true)
   })
+
+  test('[E2E] Bug4: Kachel-Detail (/admin/stats) zeigt echten Titel statt SYS-Container', () => {
+    const src = fs.readFileSync(path.join(process.cwd(), 'app/admin/stats/[type]/page.tsx'), 'utf8')
+    // Echte Titel-Auflösung statt SYS-Name: sessionDisplayName + Session-Nachladen via session_id
+    expect(src.includes('sessionDisplayName'), 'nutzt sessionDisplayName').toBe(true)
+    expect(src.includes('session_type'), 'lädt session_type für Event/Einzelstunde').toBe(true)
+    expect(src.includes('details?.session_id') || src.includes('details.session_id'), 'löst über details.session_id auf').toBe(true)
+    // Der SYS-Container-Name darf NICHT mehr als primäres Label gerendert werden:
+    // weder {details.course_name} · ... noch {course?.name} · ... als Hauptzeile.
+    expect(src.includes('{details.course_name} ·'), 'kein details.course_name als Label').toBe(false)
+    expect(src.includes('{course?.name} ·'), 'kein course?.name als Label').toBe(false)
+  })
 })

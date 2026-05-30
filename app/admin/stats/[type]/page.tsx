@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { sessionDisplayName } from '@/lib/session-display'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -17,6 +18,7 @@ export default function AdminStatsPage() {
   const router = useRouter()
   const supabase = createClient()
   const [items, setItems] = useState<any[]>([])
+  const [sessionMap, setSessionMap] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { loadData() }, [type])
@@ -26,10 +28,12 @@ export default function AdminStatsPage() {
     if (type === 'warteliste') {
       const { data } = await supabase
         .from('waitlist')
-        .select('*, profile:profiles(first_name, last_name, email), session:sessions(date, time_start, course:courses(name))')
+        // session_type + name mitladen → echter Event-/Einzelstunden-Titel statt SYS-Container.
+        .select('*, profile:profiles(first_name, last_name, email), session:sessions(date, time_start, session_type, name, course:courses(name))')
         .order('created_at', { ascending: false })
         .limit(100)
       setItems(data || [])
+      setSessionMap({})
     } else {
       const action = type === 'buchungen' ? 'booking_created' : 'booking_cancelled'
       // Diese Woche: ab Montag 00:00 Lokalzeit
@@ -43,7 +47,25 @@ export default function AdminStatsPage() {
         .gte('created_at', monday.toISOString())
         .order('created_at', { ascending: false })
         .limit(100)
-      setItems(data || [])
+      const rows = data || []
+      setItems(rows)
+      // Bug-Fix (Sarah 2026-05-30, Live-Test): Das Audit-Detail speichert für Events/
+      // Einzelstunden den SYS-Container-Namen (z.B. „SYS · Events (kostenlos)") bzw. bei
+      // Alt-Einträgen gar keinen Namen. Statt details.course_name laden wir die Session
+      // über details.session_id nach und lösen den echten Titel via sessionDisplayName auf
+      // → lückenlos nachvollziehbar, kein SYS-Name in der UI.
+      const ids = Array.from(new Set(rows.map((r: any) => r.details?.session_id).filter(Boolean)))
+      if (ids.length > 0) {
+        const { data: sess } = await supabase
+          .from('sessions')
+          .select('id, date, time_start, session_type, name, course:courses(name)')
+          .in('id', ids as string[])
+        const map: Record<string, any> = {}
+        for (const s of sess || []) map[(s as any).id] = s
+        setSessionMap(map)
+      } else {
+        setSessionMap({})
+      }
     }
     setLoading(false)
   }
@@ -87,7 +109,6 @@ export default function AdminStatsPage() {
             {items.map((item, i) => {
               if (type === 'warteliste') {
                 const sess = item.session
-                const course = sess?.course
                 return (
                   /* Sarah-Wunsch: Yogi-Zeile klickbar → Yogi-Profil */
                   <button key={item.id}
@@ -100,7 +121,7 @@ export default function AdminStatsPage() {
                         </div>
                         <div className="text-xs text-yoga-text/50 truncate">{item.profile?.email}</div>
                         <div className="text-xs text-yoga-text/60 mt-0.5">
-                          {course?.name} · {formatDate(sess?.date)} {formatTime(sess?.time_start)}
+                          {sessionDisplayName(sess)} · {formatDate(sess?.date)} {formatTime(sess?.time_start)}
                         </div>
                       </div>
                       <span className={`badge flex-shrink-0 text-xs ${item.type === 'waitlist' ? 'badge-wait' : 'badge-mine'}`}>
@@ -113,6 +134,13 @@ export default function AdminStatsPage() {
 
               // buchungen / abmeldungen
               const details = item.details || {}
+              // Echten Titel über die Session auflösen (kein SYS-Container-Name, keine
+              // leeren Zeilen). Fallback auf das alte Audit-Detail, falls die Session
+              // bereits gelöscht wurde.
+              const sess = details.session_id ? sessionMap[details.session_id] : null
+              const sessLabel = sess ? sessionDisplayName(sess) : (details.course_name || '—')
+              const sessDate = sess?.date || details.session_date
+              const sessTime = sess?.time_start || details.session_time
               return (
                 /* Sarah-Wunsch: Yogi-Zeile klickbar → Yogi-Profil */
                 <button key={item.id}
@@ -125,7 +153,7 @@ export default function AdminStatsPage() {
                       </div>
                       <div className="text-xs text-yoga-text/50 truncate">{item.profile?.email}</div>
                       <div className="text-xs text-yoga-text/60 mt-0.5">
-                        {details.course_name} · {details.session_date ? formatDate(details.session_date) : ''} {details.session_time ? formatTime(details.session_time) : ''}
+                        {sessLabel}{(sessDate || sessTime) ? ' · ' : ''}{sessDate ? formatDate(sessDate) : ''} {sessTime ? formatTime(sessTime) : ''}
                       </div>
                     </div>
                     <div className="flex-shrink-0 text-xs text-yoga-text/40">

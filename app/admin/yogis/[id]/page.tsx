@@ -937,6 +937,9 @@ export default function AdminYogiDetailPage() {
           : (d.credit_returned === false ? ' — Credit verfallen' : ' — Credit zurück')
         return { text: `Admin hat Yogi abgemeldet${fristStr}${cStr}`, subject: termin }
       }
+      case 'illness_credit_expired': {
+        return { text: `Krankheits-Guthaben nach 10 Monaten abgelaufen und gelöscht${d.unused_credits ? ` (${d.unused_credits} ungenutzt)` : ''}`, subject: '' }
+      }
       case 'booking_failed_deadline': {
         const grund = d.reason === 'window_blocked'
           ? 'Frist/Fenster überschritten'

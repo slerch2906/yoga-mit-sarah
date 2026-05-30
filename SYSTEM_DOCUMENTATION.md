@@ -5,7 +5,7 @@
 > Datei-, Funktions- und Variablennamen. Sie wurde durch systematisches Scannen der Codebase
 > erstellt (nicht aus Annahmen).
 >
-> **Stand:** 2026-05-29 · **Projekt-Verzeichnis:** `C:\Users\Sarah\Desktop\yoga-app`
+> **Stand:** 2026-05-30 · **Projekt-Verzeichnis:** `C:\Users\Sarah\Desktop\yoga-app`
 
 ---
 
@@ -177,8 +177,8 @@ Formel und denselben `lib/session-status`-Zählern. Die Zahlen stimmen **per Kon
 | **7 Tage** | `enforce_event_paid_7d_cancel_block()` (DB-Trigger) | Bezahlte Events (`event_paid`) | Innerhalb von 7 Tagen vor Beginn ist die **Selbst-Abmeldung gesperrt** (harter DB-Block). **Ausnahmen:** Admin; sowie Yogis innerhalb der 60-Min-Promote-Gnadenfrist. |
 | **8 Tage** | `EIGHT_DAYS_MS = 8*24*60*60*1000` (`lib/credit-selector.ts`); `expiresAt.setDate(getDate()+8)` | Kurs-Credits nach Kursende | Kurs-Credits bleiben bis 8 Tage **nach** `date_end` nutzbar (Nachhol-Fenster). Danach 8d-Cleanup. |
 | **10 Tage** | `TEN_DAYS_MS = 10*24*60*60*1000` (`lib/credit-selector.ts`) | „Vorhol"-Fenster | Origin-Fenster eines Kurs-Credits: `[originDt - 10d, courseEnd + 8d]`. Innerhalb dieses Fensters ist eine Buchung mit dem gebundenen Kurs-Credit erlaubt. |
-| **2 Jahre** | `expiry2y.setFullYear(getFullYear()+2)`, `source: 'cancellation_choice'` (`app/admin/kurse/page.tsx`) | Guthaben aus Kursabbruch | Wählt der Yogi bei einem Kursabbruch „Guthaben behalten", entsteht ein Guthaben, das **2 Jahre** gültig ist und nur für ganze Kurse (nicht Einzelstunden) verwendbar ist. |
-| **10 Monate** | Krankheits-Credit (`Email.illnessCredit`, `cancelEnrollmentDueToIllness`) | Krankheits-Guthaben | Bei krankheitsbedingter Austragung gutgeschriebener Credit mit 10-Monats-Gültigkeit. |
+| **2 Jahre** | `expiry2y.setFullYear(getFullYear()+2)`, `source: 'cancellation_choice'` (`app/admin/kurse/page.tsx`); Ablauf-Cron `fn_check_guthaben_2y_expiry()` | Guthaben aus **Kursabbruch** | Wählt der Yogi bei einem Kursabbruch „Guthaben behalten", entsteht ein Guthaben, das **2 Jahre** gültig ist und nur für ganze Kurse (nicht Einzelstunden) verwendbar ist. **Bei Ablauf wird das Guthaben NICHT gelöscht**, sondern als verbraucht markiert (`used = total`) und eine **Auszahlung** angestoßen: Admin-Notification `refund_pending_auto_2y` (dedupliziert pro `credit_id`) + Brevo-Mail `admin_guthaben_2y_expiry` an Sarah + Audit `guthaben_2y_auto_refund`. |
+| **10 Monate** | Krankheits-Credit `source: 'illness'` (`cancelEnrollmentDueToIllness`); Lösch-Cron `fn_check_illness_credit_expiry(p_dry_run)` (täglich 05:00) | Krankheits-Guthaben | Bei krankheitsbedingter Austragung gutgeschriebener Credit mit **10-Monats**-Gültigkeit. **Strikt getrennt vom Kursabbruch-Guthaben.** Bei Ablauf wird der Credit **hart & ersatzlos GELÖSCHT** (`DELETE FROM credits`) + Audit `illness_credit_expired`. **4 Wochen (28 Tage) vorher** warnt der Kalender-Banner den Yogi („Dein Krankheits-Guthaben läuft in … ab und wird danach gelöscht.", `components/YogiCreditExpiryBanner.tsx`). Der Cron läuft standardmäßig als **Trockenlauf** (`p_dry_run = true` → nur Zähl-Notification); echte Löschung erst bei `fn_check_illness_credit_expiry(false)`. |
 | **14 Tage** | Einladungs-Ablauf (`Email.invitationReminder`/`invitationSent`) | Einladungen | Einladungslink läuft nach 14 Tagen ab. |
 
 ### 3.2 Credit-Modelle & Auswahl-Priorität
@@ -217,7 +217,13 @@ Formel und denselben `lib/session-status`-Zählern. Die Zahlen stimmen **per Kon
 > problemlos buchen — eine Stunde **in 2 Wochen** (also nach Ablauf des 8-Tage-Fensters)
 > wird aber **blockiert**, weil die Stunde außerhalb liegt. Verifiziert durch den dedizierten
 > E2E-Test `tests/e2e/53-vorholfrist-stunde-im-fenster.spec.ts` (Block-Fall + Kontroll-Fall
-> „im Fenster → erlaubt" + modellübergreifender Fall).
+> „im Fenster → erlaubt" + modellübergreifender Fall + **origin-bezogene Grenzfälle**:
+> VORHOLEN genau `origin − 10 Tage` → erlaubt / `> 10 Tage` davor → blockiert; NACHHOLEN
+> `≤ Kursende + 8 Tage` → erlaubt / `> 8 Tage` → blockiert).
+>
+> **Wichtig — VORHOLEN ist origin-bezogen, nicht buchungstag-bezogen:** Das 10-Tage-Fenster
+> wird ab dem **Termin der abgesagten (Origin-)Stunde** gerechnet (`sessionDt ≥ originDt − 10d`),
+> nicht ab dem Tag der Buchung.
 
 ### 3.3 Status-Modell
 
@@ -314,8 +320,31 @@ Ohne Credit nachrücken?  v_promote_without_credit = is_event OR is_free   (z. B
    (Betreff „Guthaben gutgeschrieben:" bzw. „Erstattungsanfrage bestätigt:").
    Audit: `yogi_course_cancellation_choice`.
 4. **Frist abgelaufen:** Reagiert der Yogi nicht innerhalb der Frist, wird **automatisch Geld
-   erstattet** (Audit `token_expired_auto_refund`). Läuft das 2-Jahre-Guthaben ungenutzt ab:
-   `guthaben_2y_auto_refund` (Mail „Guthaben nach 2 Jahren abgelaufen … bitte erstatten").
+   erstattet** (Audit `token_expired_auto_refund`).
+5. **2-Jahre-Guthaben läuft ungenutzt ab (`fn_check_guthaben_2y_expiry`):** Das Guthaben wird
+   **NICHT gelöscht**, sondern als verbraucht markiert (`used = total`) und eine **Auszahlung**
+   angestoßen — Admin-Notification `refund_pending_auto_2y` (dedupliziert pro `credit_id`),
+   Brevo-Mail `admin_guthaben_2y_expiry` an Sarah, Audit `guthaben_2y_auto_refund`. (Bewusste
+   Trennung: Geld-Anspruch des Yogi bleibt erhalten, daher kein ersatzloses Löschen.)
+
+### Story 3b — Krankheits-Guthaben (10 Monate, strikt getrennt vom Kursabbruch)
+
+Bei krankheitsbedingter Austragung (`cancelEnrollmentDueToIllness`) entsteht ein Guthaben mit
+`source: 'illness'` und **10-Monats**-Gültigkeit (Mail `Email.illnessCredit`). Dieses ist **strikt
+getrennt** vom Kursabbruch-Guthaben (`cancellation_choice`, 2 Jahre):
+
+1. **4 Wochen (28 Tage) vor Ablauf** warnt der Yogi-Kalender (`YogiCreditExpiryBanner`):
+   „Dein Krankheits-Guthaben läuft in … ab (gültig bis …) und wird danach gelöscht."; am Verfallstag
+   „Dein Krankheits-Guthaben verfällt heute und wird gelöscht.".
+2. **Bei Ablauf** löscht der Lösch-Cron `fn_check_illness_credit_expiry` den Credit **hart &
+   ersatzlos** (`DELETE FROM credits`) + Audit `illness_credit_expired` (Yogi-Protokoll:
+   „Krankheits-Guthaben nach 10 Monaten abgelaufen und gelöscht"). Der Cron läuft täglich um 05:00
+   standardmäßig als **Trockenlauf** (`p_dry_run = true` → nur Zähl-Notification
+   `illness_cleanup_dryrun`); die echte Löschung erfolgt erst mit `p_dry_run = false`.
+
+> **Warum unterschiedlich?** Krankheits-Guthaben ist eine **Kulanz** (kein Geld-Anspruch) → es
+> verfällt ersatzlos. Kursabbruch-Guthaben repräsentiert **bezahlte, nicht erbrachte Leistung** →
+> bei Ablauf wird ausgezahlt, nicht gelöscht.
 
 ### Story 4 — Benachrichtigungs-Flow (In-App + Mail, Einzelstunde vs. Kurs)
 
@@ -427,6 +456,26 @@ alle personenbezogenen Identifikatoren entfernt werden.
 - AGB-Versionierung: `agb_versions` (`sort_order`); erneute Zustimmung nötig, wenn
   `profiles.agb_version < aktuelle sort_order` (`lib/agb-version.ts`).
 
+### 5.4 Automatische Daten-Lebensdauer (Aufbewahrung & Verfall)
+
+Die Lebensdauer zeitgebundener Datensätze wird durch geplante Jobs (`pg_cron` / RPC) gesteuert.
+Übersicht der **automatischen Verfalls-/Löschpfade**:
+
+| Datensatz | Frist | Job / Ort | Verhalten bei Ablauf | Audit / Notification |
+|---|---|---|---|---|
+| **Krankheits-Guthaben** (`source='illness'`) | **10 Monate** | `fn_check_illness_credit_expiry(p_dry_run)` — täglich 05:00, default Trockenlauf | **Hart & ersatzlos gelöscht** (`DELETE FROM credits`); Yogi 4 Wochen vorher im Kalender gewarnt | Audit `illness_credit_expired`; Trockenlauf: `illness_cleanup_dryrun` |
+| **Kursabbruch-Guthaben** (`source='cancellation_choice'`) | **2 Jahre** | `fn_check_guthaben_2y_expiry()` | **Nicht gelöscht** → `used = total` + **Auszahlung** angestoßen | Audit `guthaben_2y_auto_refund`; Notification `refund_pending_auto_2y` (dedup) + Mail `admin_guthaben_2y_expiry` |
+| **Kurs-Credits** | **8 Tage** nach Kursende | `lib/credit-selector.ts` (Gültigkeits-Filter) | Nicht mehr buchbar (Nachhol-Fenster zu) | — |
+| **Kursabbruch-Wahl-Token** | **7 Tage** | `course_cancellation_responses.expires_at` | Auto-Erstattung des vorläufigen Guthabens | Audit `token_expired_auto_refund` |
+| **Wartelisten-Spätangebot-Token** | bis Stundenbeginn | `waitlist_offers.expires_at` | Angebot verfällt; „first-click wins" | — |
+| **Audit-Trail (PII)** | bei Konto-Löschung | `anonymize_user_audit_logs(user_id)` | PII aus `details` gescrubbt, **Zeile bleibt** | `yogi_anonymized_dsgvo` |
+| **Inaktive Konten** (Konzept) | **24 Monate** | siehe Abschnitt 7 (Trockenlauf-Cron) | geplant: Anonymisierung/Löschung nach Vorwarnung | — |
+
+**Strikte Trennung Krankheit ↔ Kursabbruch** (über `credits.source`): Krankheits-Guthaben ist
+Kulanz und verfällt ersatzlos; Kursabbruch-Guthaben repräsentiert bezahlte, nicht erbrachte
+Leistung und wird bei Ablauf ausgezahlt (nicht gelöscht). Beide Pfade sind durch
+`tests/e2e/55-fristen-audit.spec.ts` E2E-abgesichert.
+
 ---
 
 ## 6. Audit-Logging & Protokollierungs-Standard
@@ -442,7 +491,7 @@ Zentrale Tabelle **`audit_log`** mit den Spalten `action` (Schlüssel), `details
 |---|---|
 | **[Name vor Anonymisierung]** | Snapshot in `details.full_name` / `details.email` zum Schreibzeitpunkt (überlebt die Anonymisierung der Live-`profiles`-Zeile, bis `anonymize_user_audit_logs` scrubt) |
 | **[Titel]** | `details.course_name` (Kurs) bzw. `details.name` (Einzelstunde/Event) + `details.session_type` |
-| **[Aktion]** | `action`-Schlüssel → lesbares Label über `ACTION_LABELS` (52 Schlüssel) |
+| **[Aktion]** | `action`-Schlüssel → lesbares Label über `ACTION_LABELS` (53 Schlüssel) |
 | **[Datum/Uhrzeit]** | `created_at` (Zeitstempel des Logs) + `details.session_date` / `details.session_time` (betroffener Termin) |
 
 Häufige `details`-Schlüssel: `target_user_id`, `user_id`, `course_id`, `course_name`, `session_id`,

@@ -53,6 +53,7 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   token_expired_auto_refund:      { label: 'Token abgelaufen — Auto-Refund', color: 'text-yoga-amber-text' },
   guthaben_2y_auto_refund:        { label: 'Guthaben 2J abgelaufen — Refund',color: 'text-yoga-amber-text' },
   admin_illness_credit:           { label: 'Krankheits-Guthaben vergeben',   color: 'text-yoga-green-text' },
+  illness_credit_expired:         { label: 'Krankheits-Guthaben abgelaufen (gelöscht)', color: 'text-yoga-red-text' },
   admin_bulk_mail:                { label: 'Bulk-Mail versendet',            color: 'text-yoga-amber-text' },
   admin_dsgvo_deletion:           { label: 'DSGVO-Löschung durch Admin',     color: 'text-yoga-red-text' },
   // ── Welle 4.7 (2026-05-26): Kurs-Mutationen Audit-Trail ─────────────

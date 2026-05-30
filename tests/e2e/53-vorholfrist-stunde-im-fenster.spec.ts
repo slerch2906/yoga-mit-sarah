@@ -170,3 +170,55 @@ test.describe('Vorholfrist: die STUNDE muss im Fenster liegen (nicht der Buchung
     }
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Harte Grenzen (Sarah-Entscheidung 2026-05-30): VORHOLEN = max. 10 Tage VOR der
+// abgesagten Stunde (origin-bezogen, NICHT buchungstag-bezogen); NACHHOLEN = max.
+// 8 Tage NACH Kursende des Ursprungskurses.
+// ─────────────────────────────────────────────────────────────────────────────
+test.describe('Vorhol-/Nachhol-Grenzen (origin-bezogen): 10 Tage vor / 8 Tage nach', () => {
+  let yogi1Id: string
+  test.beforeAll(async () => { yogi1Id = (await getUserIdByEmail(process.env.TEST_YOGI1_EMAIL!))! })
+  test.beforeEach(async () => { await resetYogi(yogi1Id) })
+  test.afterAll(async () => { await resetYogi(yogi1Id) })
+
+  test('[E2E] VORHOLEN: Stunde genau 10 Tage vor Origin → erlaubt, >10 Tage vorher → blockiert', async () => {
+    const db = await getAdminClient()
+    // Abgesagte Stunde (Origin) in 12 Tagen → Vorhol-Fenster ab Origin - 10 Tage (= in 2 Tagen).
+    const origin = await createTestCourse({ name: `${E2E_PREFIX} Vorhol-Grenze`, sessionCount: 1, startDaysFromNow: 12 })
+    await db.from('courses').update({ date_end: dateStr(12) }).eq('id', origin.courseId)
+    const exp = new Date(); exp.setDate(exp.getDate() + 200)
+    await enrollFreeCourseCredit(yogi1Id, origin.courseId, origin.sessionIds[0], exp)
+    const supa = makeServiceClient()
+
+    // Genau an der Grenze (Origin − 10 Tage = +2 Tage) → erlaubt
+    const atEdge = await createTestCourse({ name: `${E2E_PREFIX} Vorhol-Edge`, sessionCount: 1, startDaysFromNow: 2 })
+    const pickEdge = await selectCreditForBooking(supa, yogi1Id, atEdge.sessionIds[0], dateStr(2), '18:30:00')
+    expect(pickEdge.ok, 'Stunde genau 10 Tage vor Origin → erlaubt').toBe(true)
+
+    // Zu früh (Origin − 11 Tage = +1 Tag) → blockiert
+    const tooEarly = await createTestCourse({ name: `${E2E_PREFIX} Vorhol-Zufrueh`, sessionCount: 1, startDaysFromNow: 1 })
+    const pickEarly = await selectCreditForBooking(supa, yogi1Id, tooEarly.sessionIds[0], dateStr(1), '18:30:00')
+    expect(pickEarly.ok, 'Stunde >10 Tage vor Origin → blockiert').toBe(false)
+  })
+
+  test('[E2E] NACHHOLEN: Stunde bis 8 Tage nach Kursende → erlaubt, >8 Tage → blockiert', async () => {
+    const db = await getAdminClient()
+    // Kurs endete gestern (date_end = −1) → Nachhol-Fenster bis Kursende + 8 Tage (= +7).
+    const past = await createTestCourse({ name: `${E2E_PREFIX} Nachhol-Grenze`, sessionCount: 1, startDaysFromNow: -1 })
+    await db.from('courses').update({ date_end: dateStr(-1) }).eq('id', past.courseId)
+    const exp = new Date(); exp.setDate(exp.getDate() + 8) // Credit gültig bis Kursende+8
+    await enrollFreeCourseCredit(yogi1Id, past.courseId, past.sessionIds[0], exp)
+    const supa = makeServiceClient()
+
+    // 5 Tage nach Kursende → innerhalb 8 Tage → erlaubt
+    const inWin = await createTestCourse({ name: `${E2E_PREFIX} Nachhol-In`, sessionCount: 1, startDaysFromNow: 5 })
+    const pickIn = await selectCreditForBooking(supa, yogi1Id, inWin.sessionIds[0], dateStr(5), '18:30:00')
+    expect(pickIn.ok, 'Stunde 5 Tage nach Kursende → erlaubt').toBe(true)
+
+    // 9 Tage nach Kursende → außerhalb 8 Tage → blockiert
+    const outWin = await createTestCourse({ name: `${E2E_PREFIX} Nachhol-Out`, sessionCount: 1, startDaysFromNow: 9 })
+    const pickOut = await selectCreditForBooking(supa, yogi1Id, outWin.sessionIds[0], dateStr(9), '18:30:00')
+    expect(pickOut.ok, 'Stunde >8 Tage nach Kursende → blockiert').toBe(false)
+  })
+})

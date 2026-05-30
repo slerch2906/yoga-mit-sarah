@@ -520,8 +520,8 @@ test.describe('[E2E] /warteliste/angebot/[token] UI-States', () => {
     }).select('token').single()
 
     await page.goto(`/warteliste/angebot/${off!.token}`)
-    await expect(page.getByText(/Leider zu spät/i)).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByText(/Jemand anderes war schneller/i)).toBeVisible()
+    await expect(page.getByText(/Schade/i).first()).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText(/ein anderer Yogi war schneller/i)).toBeVisible()
 
     await db.from('waitlist_offers').delete().eq('session_id', sess!.id)
     await db.from('sessions').delete().eq('id', sess!.id)

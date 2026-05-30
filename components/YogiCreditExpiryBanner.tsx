@@ -91,6 +91,26 @@ export default function YogiCreditExpiryBanner() {
               text: `Deine Credits aus Kurs „${c.course.name}" verfallen heute.`,
             })
           }
+        } else if (c.model === 'guthaben' && c.source === 'illness') {
+          // Sarah 2026-05-30: Krankheits-Guthaben läuft nach 10 Monaten HART ab und
+          // wird danach gelöscht — 4 Wochen (28 Tage) vorher den Yogi warnen.
+          if (daysToExpire === 0) {
+            list.push({
+              id: `ill-alert-${c.id}`,
+              kind: 'alert',
+              text: `Dein Krankheits-Guthaben verfällt heute und wird gelöscht.`,
+            })
+          } else if (daysToExpire <= 28 && daysToExpire > 0) {
+            const wochen = Math.ceil(daysToExpire / 7)
+            const frist = daysToExpire <= 7
+              ? `${daysToExpire} ${daysToExpire === 1 ? 'Tag' : 'Tagen'}`
+              : `${wochen} Wochen`
+            list.push({
+              id: `ill-warn-${c.id}`,
+              kind: 'warn',
+              text: `Dein Krankheits-Guthaben läuft in ${frist} ab (gültig bis ${fmtDay(expDate)}) und wird danach gelöscht.`,
+            })
+          }
         } else if (c.model === 'quarterly') {
           // Sarah-Regel 2026-05-25: Quartal = 14 Tage Vorwarnung
           if (daysToExpire === 0) {

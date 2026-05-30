@@ -104,6 +104,7 @@ const ALL_ACTIONS: string[] = [
   'admin_dsgvo_deletion',
   // Welle 2026-05-30 (Sarah): Buchungs-Fehler-Log + 24-Monats-Inaktivitäts-Löschung
   'booking_failed_deadline',
+  'illness_credit_expired',
   'inactivity_cleanup_dryrun',
   'inactivity_cleanup',
   'yogi_auto_deleted_inactive',

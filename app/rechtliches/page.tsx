@@ -286,6 +286,8 @@ export default function RechtlichesPage() {
             <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• Bitte sei pünktlich auf der Matte. Bei Verspätung — kein Eintritt während der Anfangsentspannung.</p>
             <p className="text-sm text-yoga-text/80 leading-relaxed mb-2">• Schalte dein Handy immer stumm oder aus.</p>
             <p className="text-sm text-yoga-text/80 leading-relaxed mb-4">• Aus Rücksicht auf die Gruppe bitte bei ansteckenden Erkrankungen / Erkältungssymptomen nicht am Unterricht teilnehmen.</p>
+            <h3 className="text-sm font-bold mb-2">Inaktive Konten</h3>
+            <p className="text-sm text-yoga-text/80 leading-relaxed mb-4">• Konten, die <strong>länger als 24 Monate</strong> nicht genutzt werden, werden aus Datenschutzgründen automatisch gelöscht. Du bekommst vorher eine Warn-E-Mail und kannst die Löschung jederzeit verhindern, indem du dich wieder anmeldest.</p>
             <a href="https://www.yogamitsarah.me/agb" target="_blank" rel="noopener noreferrer"
               className="text-sm font-bold underline text-yoga-text">
               Vollständige AGB lesen →

@@ -240,6 +240,10 @@ const doc = new Document({
       h1('6. Datenschutz'),
       p('Die Verarbeitung deiner personenbezogenen Daten erfolgt gemäß meiner Datenschutzerklärung. Mit deiner Anmeldung erklärst du dich damit einverstanden, dass deine Daten im Rahmen der Erfüllung des Vertrages und für organisatorische Informationen zum gebuchten Angebot verarbeitet werden. Für Newsletter oder werbliche Informationen ist eine separate Einwilligung erforderlich. Du kannst der Nutzung deiner Daten für Werbezwecke jederzeit unter Mail@yogamitsarah.me widersprechen.'),
       p('Insbesondere werden Daten zur Verwaltung deines App-Accounts (z. B. Buchungshistorie, Credits, Notfallkontakt) bei den von mir genutzten Auftragsverarbeitern (Vercel, Supabase, Brevo) verarbeitet — Details siehe Datenschutzerklärung.'),
+      pRich([
+        { text: 'Löschung bei langer Inaktivität: ', bold: true },
+        { text: 'Aus Gründen der Datensparsamkeit (Art. 5 Abs. 1 lit. e DSGVO) werden App-Accounts, die länger als 24 Monate nicht mehr genutzt wurden, automatisch gelöscht bzw. anonymisiert. Maßgeblich ist dein letzter Login in der App. Bevor dein Account gelöscht wird, erhältst du rechtzeitig eine Vorwarnung per E-Mail an deine hinterlegte Adresse, und du kannst die Löschung jederzeit verhindern, indem du dich einfach wieder in der App anmeldest. Accounts mit noch offenen Credits, Guthaben oder zukünftigen Buchungen sind von der automatischen Löschung ausgenommen, solange ein gültiger Anspruch besteht. Bei der Löschung werden dein Name und deine E-Mail-Adresse entfernt; eine anonymisierte Buchungshistorie kann aus rechtlichen Gründen erhalten bleiben. Bereits verfallene Credits oder Guthaben werden nicht erstattet.' },
+      ]),
 
       // § 7
       h1('7. Salvatorische Klausel'),

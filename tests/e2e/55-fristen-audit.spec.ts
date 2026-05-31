@@ -291,3 +291,90 @@ test.describe('[E2E] Late-Offer-Annahme: keine Gnadenfrist, Storno gilt sofort a
     expect(route).toMatch(/promoted_at:\s*null/)
   })
 })
+
+// ════════════════════════════════════════════════════════════════════════════
+// 4) Trockenlauf-Cronjobs: Dashboard-Meldung NUR bei Treffer (Sarah 2026-05-31)
+//    Vorher meldeten beide Trockenläufe IMMER ins Admin-Dashboard, auch bei 0
+//    Kandidaten ("0 abgelaufene Guthaben ..."). Sarah will nur informiert werden,
+//    wenn wirklich etwas anliegt. Invariante: #neue Dashboard-Meldungen ==
+//    (candidates > 0 ? 1 : 0). Der Inaktivitäts-Protokoll-Heartbeat bleibt immer.
+// ════════════════════════════════════════════════════════════════════════════
+test.describe('[E2E] Trockenlauf-Cronjobs melden nur bei Treffer', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+
+  async function idSnapshot(table: string, col: string, value: string): Promise<Set<string>> {
+    const { data } = await svc().from(table).select('id').eq(col, value)
+    return new Set((data || []).map((r: any) => r.id))
+  }
+  async function deleteNew(table: string, col: string, value: string, before: Set<string>) {
+    const { data } = await svc().from(table).select('id').eq(col, value)
+    const created = (data || []).map((r: any) => r.id).filter((id: string) => !before.has(id))
+    if (created.length) await svc().from(table).delete().in('id', created)
+  }
+  async function countNotifs(type: string): Promise<number> {
+    const { count } = await svc()
+      .from('admin_notifications').select('id', { count: 'exact', head: true }).eq('type', type)
+    return count || 0
+  }
+
+  test('[E2E] Krankheits-Trockenlauf: +1 Meldung bei Treffer, KEINE bei 0', async () => {
+    const s = svc()
+    const db = await getAdminClient()
+    const notifsBefore = await idSnapshot('admin_notifications', 'type', 'illness_cleanup_dryrun')
+
+    // Wegwerf-Yogi + abgelaufenes Krankheits-Guthaben → garantiert ≥1 Kandidat
+    const email = `e2e.illness.${Date.now()}@test.yogamitsarah.me`
+    const { data: created, error: cErr } = await s.auth.admin.createUser({
+      email, password: 'TestIllness!2026', email_confirm: true,
+    })
+    if (cErr || !created.user) throw new Error('createUser: ' + cErr?.message)
+    const uid = created.user.id
+    await db.from('profiles').upsert({ id: uid, first_name: 'E2E', last_name: 'Illness', email }, { onConflict: 'id' })
+    const past = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    const { data: cred } = await db.from('credits').insert({
+      user_id: uid, course_id: null, model: 'guthaben', source: 'illness',
+      total: 2, used: 0, expires_at: past.toISOString(),
+    }).select('id').single()
+
+    try {
+      // (a) MIT Treffer → genau +1 Dashboard-Meldung
+      const before = await countNotifs('illness_cleanup_dryrun')
+      const { data: res } = await s.rpc('fn_check_illness_credit_expiry', { p_dry_run: true })
+      const after = await countNotifs('illness_cleanup_dryrun')
+      expect((res as any)?.candidates, 'mind. 1 Kandidat').toBeGreaterThanOrEqual(1)
+      expect(after - before, 'genau eine neue Meldung bei Treffer').toBe(1)
+
+      // (b) OHNE diesen Treffer (Kandidat gelöscht) → Invariante greift
+      await s.from('credits').delete().eq('id', cred!.id)
+      const before0 = await countNotifs('illness_cleanup_dryrun')
+      const { data: res0 } = await s.rpc('fn_check_illness_credit_expiry', { p_dry_run: true })
+      const after0 = await countNotifs('illness_cleanup_dryrun')
+      expect(after0 - before0, 'Meldung nur wenn candidates>0').toBe(((res0 as any)?.candidates > 0) ? 1 : 0)
+    } finally {
+      await s.from('credits').delete().eq('id', cred!.id)
+      await deleteNew('admin_notifications', 'type', 'illness_cleanup_dryrun', notifsBefore)
+      await db.from('profiles').delete().eq('id', uid)
+      try { await s.auth.admin.deleteUser(uid) } catch {}
+    }
+  })
+
+  test('[E2E] Inaktivitäts-Trockenlauf: Meldung==Treffer, Protokoll-Heartbeat bleibt', async () => {
+    const s = svc()
+    const notifsBefore = await idSnapshot('admin_notifications', 'type', 'inactivity_cleanup_dryrun')
+    const auditBefore = await idSnapshot('audit_log', 'action', 'inactivity_cleanup_dryrun')
+
+    const beforeN = notifsBefore.size
+    const beforeA = auditBefore.size
+    const { data: res } = await s.rpc('cleanup_inactive_accounts', { p_dry_run: true, p_limit: 50, p_months: 24 })
+    const afterN = await countNotifs('inactivity_cleanup_dryrun')
+    const auditAfter = await idSnapshot('audit_log', 'action', 'inactivity_cleanup_dryrun')
+
+    try {
+      expect(afterN - beforeN, 'Dashboard-Meldung nur bei Treffer').toBe(((res as any)?.candidates > 0) ? 1 : 0)
+      expect(auditAfter.size - beforeA, 'Protokoll-Heartbeat immer genau +1').toBe(1)
+    } finally {
+      await deleteNew('admin_notifications', 'type', 'inactivity_cleanup_dryrun', notifsBefore)
+      await deleteNew('audit_log', 'action', 'inactivity_cleanup_dryrun', auditBefore)
+    }
+  })
+})

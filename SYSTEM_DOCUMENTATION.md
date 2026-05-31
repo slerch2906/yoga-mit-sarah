@@ -354,8 +354,11 @@ getrennt** vom Kursabbruch-Guthaben (`cancellation_choice`, 2 Jahre):
 2. **Bei Ablauf** löscht der Lösch-Cron `fn_check_illness_credit_expiry` den Credit **hart &
    ersatzlos** (`DELETE FROM credits`) + Audit `illness_credit_expired` (Yogi-Protokoll:
    „Krankheits-Guthaben nach 10 Monaten abgelaufen und gelöscht"). Der Cron läuft täglich um 05:00
-   standardmäßig als **Trockenlauf** (`p_dry_run = true` → nur Zähl-Notification
+   standardmäßig als **Trockenlauf** (`p_dry_run = true` → Zähl-Notification
    `illness_cleanup_dryrun`); die echte Löschung erfolgt erst mit `p_dry_run = false`.
+   **Seit 2026-05-31 (Migration `20260531_quiet_dryrun_notifications.sql`):** Die Dashboard-Meldung
+   wird **nur noch bei Treffer** geschrieben (`candidates > 0`) — bei 0 läuft der Trockenlauf still
+   durch, damit Sarah nicht täglich „0 abgelaufene Guthaben" sieht.
 
 > **Warum unterschiedlich?** Krankheits-Guthaben ist eine **Kulanz** (kein Geld-Anspruch) → es
 > verfällt ersatzlos. Kursabbruch-Guthaben repräsentiert **bezahlte, nicht erbrachte Leistung** →
@@ -512,7 +515,7 @@ Die Lebensdauer zeitgebundener Datensätze wird durch geplante Jobs (`pg_cron` /
 
 | Datensatz | Frist | Job / Ort | Verhalten bei Ablauf | Audit / Notification |
 |---|---|---|---|---|
-| **Krankheits-Guthaben** (`source='illness'`) | **10 Monate** | `fn_check_illness_credit_expiry(p_dry_run)` — täglich 05:00, default Trockenlauf | **Hart & ersatzlos gelöscht** (`DELETE FROM credits`); Yogi 4 Wochen vorher im Kalender gewarnt | Audit `illness_credit_expired`; Trockenlauf: `illness_cleanup_dryrun` |
+| **Krankheits-Guthaben** (`source='illness'`) | **10 Monate** | `fn_check_illness_credit_expiry(p_dry_run)` — täglich 05:00, default Trockenlauf | **Hart & ersatzlos gelöscht** (`DELETE FROM credits`); Yogi 4 Wochen vorher im Kalender gewarnt | Audit `illness_credit_expired`; Trockenlauf-Notification `illness_cleanup_dryrun` **nur bei Treffer (>0)** |
 | **Kursabbruch-Guthaben** (`source='cancellation_choice'`) | **2 Jahre** | `fn_check_guthaben_2y_expiry()` | **Nicht gelöscht** → `used = total` + **Auszahlung** angestoßen | Audit `guthaben_2y_auto_refund`; Notification `refund_pending_auto_2y` (dedup) + Mail `admin_guthaben_2y_expiry` |
 | **Kurs-Credits** | **8 Tage** nach Kursende | `lib/credit-selector.ts` (Gültigkeits-Filter) | Nicht mehr buchbar (Nachhol-Fenster zu) | — |
 | **Kursabbruch-Wahl-Token** | **7 Tage** | `course_cancellation_responses.expires_at` | Auto-Erstattung des vorläufigen Guthabens | Audit `token_expired_auto_refund` |
@@ -620,8 +623,11 @@ Quelle: `app/admin/protokoll/page.tsx`, Zeilen 13–69. Jeder Schlüssel hat Lab
 > die RPCs `find_inactive_accounts()` + `cleanup_inactive_accounts()` und ein wöchentlicher
 > `pg_cron`-Job (`cleanup-inactive-accounts`, Mo 03:00 UTC) sind angelegt
 > (Migration `supabase/migrations/20260530_cleanup_inactive_accounts.sql`). Der Cron ruft
-> `cleanup_inactive_accounts(true, …)` — also **Trockenlauf**: es wird **nichts gelöscht**, nur
-> eine Admin-Meldung („… N Konto(en) wären löschbar …") geschrieben. **Scharfschalten** = den
+> `cleanup_inactive_accounts(true, …)` — also **Trockenlauf**: es wird **nichts gelöscht**.
+> **Seit 2026-05-31 (Migration `20260531_quiet_dryrun_notifications.sql`):** Die Dashboard-Meldung
+> („… N Konto(en) wären löschbar …") wird **nur bei Treffer** (`candidates > 0`) geschrieben; bei 0
+> bleibt das Dashboard still. Ein **audit_log-Eintrag** `inactivity_cleanup_dryrun` wird weiterhin
+> **bei jedem Lauf** geschrieben (stiller „Cron lief"-Nachweis im Protokoll). **Scharfschalten** = den
 > Cron-Aufruf auf `cleanup_inactive_accounts(false, 50, 24)` ändern, sobald Sarah eine
 > Trockenlauf-Meldung gesichtet hat. Aktuell qualifizieren sich **0 Konten** (App zu jung).
 > Die folgende Beschreibung entspricht der umgesetzten Logik.

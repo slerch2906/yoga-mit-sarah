@@ -52,11 +52,12 @@ test.describe('[E2E] Click-Wrap Rechtliches — Source-Smoke', () => {
     expect(src).toMatch(/ansteckend|Erkältung/i)
   })
 
-  test('Stornofrist-Regeln 14d / 13-7d=30€ / ab 6d=voll', async () => {
+  test('Stornofrist-Regeln 14d kostenfrei / danach gebucht ist gebucht (volle Kursgebühr)', async () => {
     const src = read('app/rechtliches/page.tsx')
     expect(src).toMatch(/14 Tage.*kostenfrei/)
-    expect(src).toMatch(/13.+7 Tage.*30/)
-    expect(src).toMatch(/Ab 6 Tagen.*volle/i)
+    expect(src).toMatch(/gebucht ist gebucht/i)
+    // alte 30-€-Zwischenstufe ist entfernt (Sarah 2026-05-31)
+    expect(src).not.toMatch(/Bearbeitungsgebühr/i)
   })
 
   test('AGB-Versionierung: ladet getCurrentAgbVersion und vergleicht agb_version', async () => {

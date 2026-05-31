@@ -39,9 +39,9 @@ test.describe('[E2E] Stornofrist Kursrücktritt — AGB-Generator', () => {
     expect(countOf(read('scripts/generate-agb.js'), DANKE)).toBeGreaterThanOrEqual(2)
   })
 
-  test('Stand-Hinweis "Mai 2026" + 14 Tage im Generator-Header', () => {
+  test('Stand-Hinweis "Juni 2026" + 14 Tage im Generator-Header', () => {
     const src = read('scripts/generate-agb.js')
-    expect(src).toMatch(/Stand:|Mai 2026/i)
+    expect(src).toMatch(/Stand: Juni 2026/i)
     expect(src).toMatch(/14 Tag/i)
   })
 })

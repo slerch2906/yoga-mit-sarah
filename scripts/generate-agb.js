@@ -2,7 +2,7 @@
 /**
  * Generiert "Yoga-mit-Sarah-AGB.docx" — Allgemeine Geschaeftsbedingungen.
  *
- * Stand: Mai 2026 — neue Stornofrist (14 Tage), App-Pflicht-Klausel,
+ * Stand: Juni 2026 — Stornofrist (14 Tage, danach volle Kursgebuehr), App-Pflicht-Klausel,
  * Kursabbruch-Wahloption, Wartelisten-Regelung, Vorholfrist, Account-Loeschung.
  *
  * Aufruf: node scripts/generate-agb.js
@@ -116,7 +116,7 @@ const doc = new Document({
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { after: 360 },
-        children: [new TextRun({ text: 'Stand: Mai 2026', font: FONT, size: 22, italics: true, color: '666666' })],
+        children: [new TextRun({ text: 'Stand: Juni 2026', font: FONT, size: 22, italics: true, color: '666666' })],
       }),
 
       // Praeambel
@@ -260,7 +260,7 @@ const doc = new Document({
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { before: 240 },
-        children: [new TextRun({ text: 'Stand: Mai 2026', font: FONT, size: 22, italics: true, color: '666666' })],
+        children: [new TextRun({ text: 'Stand: Juni 2026', font: FONT, size: 22, italics: true, color: '666666' })],
       }),
     ],
   }],

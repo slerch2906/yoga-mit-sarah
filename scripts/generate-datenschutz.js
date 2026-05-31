@@ -2,7 +2,7 @@
 /**
  * Generiert "Yoga-mit-Sarah-Datenschutzerklaerung.docx" als fertiges Word-Dokument.
  *
- * Stand: Mai 2026 — komplette Datenschutzerklaerung mit allen App-bezogenen
+ * Stand: Juni 2026 — komplette Datenschutzerklaerung mit allen App-bezogenen
  * Ergaenzungen (Vercel, Supabase, App-Hosting, Audit-Log, Cookies in der App).
  *
  * Aufruf: node scripts/generate-datenschutz.js
@@ -124,7 +124,7 @@ const doc = new Document({
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { after: 360 },
-        children: [new TextRun({ text: 'Stand: Mai 2026', font: FONT, size: 22, italics: true, color: '666666' })],
+        children: [new TextRun({ text: 'Stand: Juni 2026', font: FONT, size: 22, italics: true, color: '666666' })],
       }),
 
       // ─────── § 1 Verantwortlicher ───────
@@ -471,7 +471,7 @@ const doc = new Document({
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { before: 240 },
-        children: [new TextRun({ text: 'Stand: Mai 2026', font: FONT, size: 22, italics: true, color: '666666' })],
+        children: [new TextRun({ text: 'Stand: Juni 2026', font: FONT, size: 22, italics: true, color: '666666' })],
       }),
     ],
   }],

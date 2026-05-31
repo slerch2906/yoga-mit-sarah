@@ -16,6 +16,34 @@ dotenv.config({ path: '.env.test' })
 
 const AUTH_DIR = path.join(__dirname, '../.auth')
 
+// ════════════════════════════════════════════════════════════════════════════
+// PROD-SCHUTZSPERRE (Sarah 2026-05-31, Pre-Go-Live)
+// Die E2E-Suite legt Test-Nutzer an UND löscht Daten (cleanupAllE2EData).
+// Das darf NIEMALS gegen die Produktiv-Umgebung laufen. Diese Sperre bricht den
+// Lauf hart ab, sobald Ziel-App ODER Test-DB auf Prod zeigen — egal was in
+// .env.test steht. Nur mit explizitem Notnagel ALLOW_PROD_E2E überstimmbar.
+// ════════════════════════════════════════════════════════════════════════════
+const PROD_DB_REF = 'jcczvyablgdijeiyymhc'       // Produktiv-Supabase-Projekt
+const PROD_APP_DOMAIN = 'kurse.yogamitsarah.me'  // Produktiv-App-Domain
+
+function assertNotProduction(baseURL: string): void {
+  const supaUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const hitsProdDb = supaUrl.includes(PROD_DB_REF)
+  const hitsProdApp = (baseURL || '').includes(PROD_APP_DOMAIN)
+  const override = process.env.ALLOW_PROD_E2E === 'JA-ICH-WEISS-WAS-ICH-TUE'
+  if ((hitsProdDb || hitsProdApp) && !override) {
+    throw new Error(
+      '\n\n⛔ ABBRUCH — E2E-Tests zeigen auf die PRODUKTIV-Umgebung!\n' +
+      (hitsProdApp ? `   • Ziel-App: ${PROD_APP_DOMAIN}\n` : '') +
+      (hitsProdDb ? `   • Test-DB:  Produktiv-Projekt ${PROD_DB_REF}\n` : '') +
+      '   Tests legen Test-Nutzer an und löschen Daten — das ist gegen Prod verboten.\n' +
+      '   → Bitte .env.test auf die STAGING-Umgebung zeigen lassen.\n\n'
+    )
+  }
+}
+
+export { assertNotProduction }
+
 async function saveAuthState(
   baseURL: string,
   email: string,
@@ -44,6 +72,9 @@ async function saveAuthState(
 
 export default async function globalSetup(config: FullConfig) {
   const baseURL = process.env.BASE_URL ?? 'http://localhost:3000'
+
+  // Harte Prod-Schutzsperre — MUSS als allererstes laufen (vor jeder DB-Operation).
+  assertNotProduction(baseURL)
 
   console.log('\n🚀 E2E Test-Setup startet...')
   console.log(`   Ziel-URL: ${baseURL}`)

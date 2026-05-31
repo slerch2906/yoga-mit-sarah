@@ -472,6 +472,13 @@ die **anonymisierte Buchungshistorie bleibt aus rechtlichen Gründen erhalten**.
 darf nur sich selbst löschen (außer `is_admin`). Löscht den Supabase-Auth-User via Admin-API. Bei
 Fehler **502** (kein vorgetäuschter Erfolg) + `admin_notifications`-Eintrag `type:'auth_delete_failed'`.
 
+> **Bugfix 2026-05-31 (Sarah):** Beide Aufrufer — Self-Service (`app/profil/page.tsx`) **und**
+> Admin-Löschung (`app/admin/yogis/[id]/page.tsx`) — müssen den **`Authorization: Bearer`-Token**
+> mitsenden. Der Admin-Pfad tat das nach dem Security-Umbau (Welle S1/H1) **nicht** → Route antwortete
+> **401**, der Auth-User blieb bestehen, die E-Mail blieb belegt und ließ sich **nie wieder
+> registrieren** (Profil war anonymisiert, Login aber aktiv). Zusätzlich wertet der Admin-Pfad das
+> Ergebnis jetzt aus (`authDeleted`) und **warnt** den Admin bei Fehlschlag statt „erfolgreich" zu melden.
+
 > **Wichtig — keine Wiederherstellung:** Es gibt **keinen** Recovery-/Backup-Mechanismus
 > (kein `recovery_backup`, kein 30-Tage-Grace, keine „Reaktivieren"-Funktion). Dieses Feature wurde
 > bewusst zurückgebaut (v5). Die Löschung ist **sofort und unumkehrbar**. Die einzige „Recovery"-

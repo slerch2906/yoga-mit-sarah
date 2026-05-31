@@ -94,4 +94,30 @@ test.describe('[E2E] DSGVO Account-Löschung — Source-Smoke', () => {
     expect(src).toMatch(/method:\s*['"]DELETE['"]/)
     expect(src).toMatch(/SUPABASE_SERVICE_ROLE_KEY/)
   })
+
+  // ── Sarah-Bug 2026-05-31: Die Route verlangt seit Welle S1/H1 einen Bearer-Token.
+  //    Der Admin-Loeschpfad schickte ihn NICHT → 401 → Auth-User + E-Mail blieben
+  //    bestehen (Adresse nicht mehr registrierbar), Fehler wurde verschluckt.
+  //    BEIDE Pfade MUESSEN den Token senden; der Admin-Pfad MUSS Fehlschlag melden. ──
+  function deleteAccountCallBlock(src: string): string {
+    const idx = src.indexOf('/api/delete-account')
+    expect(idx, '/api/delete-account-Aufruf gefunden').toBeGreaterThan(-1)
+    return src.slice(idx, idx + 320)
+  }
+
+  test('Profil-Pfad sendet Authorization-Bearer an /api/delete-account', async () => {
+    const block = deleteAccountCallBlock(read('app/profil/page.tsx'))
+    expect(block, 'Profil-Pfad muss Bearer-Token senden').toMatch(/Authorization[\s\S]*Bearer/)
+  })
+
+  test('Admin-Yogi-Pfad sendet Authorization-Bearer an /api/delete-account (Regress 2026-05-31)', async () => {
+    const block = deleteAccountCallBlock(read('app/admin/yogis/[id]/page.tsx'))
+    expect(block, 'Admin-Pfad muss Bearer-Token senden — sonst 401 und E-Mail bleibt belegt').toMatch(/Authorization[\s\S]*Bearer/)
+  })
+
+  test('Admin-Yogi-Pfad meldet fehlgeschlagenen Auth-Delete (kein stilles "erfolgreich")', async () => {
+    const src = read('app/admin/yogis/[id]/page.tsx')
+    expect(src, 'Ergebnis des Auth-Delete wird ausgewertet').toMatch(/authDeleted/)
+    expect(src, 'Admin wird bei Fehlschlag gewarnt').toMatch(/!authDeleted/)
+  })
 })

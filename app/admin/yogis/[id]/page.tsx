@@ -255,15 +255,29 @@ export default function AdminYogiDetailPage() {
 
     // 4. Auth-User löschen → Sessions invalidiert, profile cascadet weg
     //    (audit_log user_id wird SET NULL — Compliance-Spur bleibt erhalten)
+    // Sarah-Bug 2026-05-31: Die Route verlangt seit Welle S1/H1 einen Bearer-Token
+    // (Caller-Authentifizierung). Ohne ihn → 401 → Auth-User + E-Mail bleiben bestehen,
+    // die Adresse liesse sich NIE wieder registrieren. Token also mitschicken und das
+    // Ergebnis NICHT mehr verschlucken, sondern den Admin bei Fehlschlag warnen.
+    let authDeleted = false
     try {
+      let accessToken = ''
+      try {
+        const { data: { session: sess } } = await supabase.auth.getSession()
+        accessToken = sess?.access_token || ''
+      } catch {}
       const deleteRes = await fetch('/api/delete-account', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({ userId: id })
       })
+      authDeleted = deleteRes.ok
       if (!deleteRes.ok) {
         const err = await deleteRes.json().catch(() => ({}))
-        console.error('Delete account failed (non-critical):', err)
+        console.error('Delete account failed:', err)
       }
     } catch (e) {
       console.error('Delete account error:', e)
@@ -279,6 +293,17 @@ export default function AdminYogiDetailPage() {
     // Sarah-Fix 2026-05-25: zentraler Helper statt direkter fetch — sonst fehlt
     // x-function-secret-Header und die Edge Function antwortet 401.
     await Email.adminDsgvoDeletion({ fullName, email })
+
+    // Ehrliche Rueckmeldung: Wenn der Auth-Login NICHT entfernt werden konnte,
+    // bleibt die E-Mail-Adresse belegt → Admin klar warnen statt "erfolgreich".
+    if (!authDeleted) {
+      alert(
+        'Achtung: Die persönlichen Daten wurden anonymisiert, aber der Login bzw. die ' +
+        'E-Mail-Adresse konnte NICHT entfernt werden.\n\n' +
+        'Die Adresse lässt sich dadurch evtl. nicht sofort neu registrieren. Bitte gib ' +
+        'kurz Bescheid, damit der Auth-Login manuell entfernt wird.'
+      )
+    }
 
     router.push('/admin/yogis')
   }

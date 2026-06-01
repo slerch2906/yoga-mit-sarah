@@ -470,21 +470,10 @@ export default function AdminYogiDetailPage() {
       newCourseCreditId = cc?.id || null
     }
 
-    // Guthaben in den Kurs-Credit umwandeln: verbrauchten Anteil als used markieren
-    // (FIFO nach Ablaufdatum), Eintrag bleibt mit total erhalten → 0 frei. Es zeigt
-    // KEINE Buchung mehr aufs Guthaben, daher fasst der Recalc-Trigger es nicht an,
-    // das manuell gesetzte used bleibt bestehen. (Vertrag siehe Test 08.)
-    let toConvert = guthabenUsable
-    for (const g of availableGuthaben) {
-      if (toConvert <= 0) break
-      const free = g.total - g.used
-      const conv = Math.min(free, toConvert)
-      await supabase.from('credits').update({ used: g.used + conv }).eq('id', g.id)
-      toConvert -= conv
-    }
-
     // Bookings reaktivieren / anlegen — ALLE an den EINEN Kurs-Credit haengen,
     // damit der Trigger used = #aktive Buchungen korrekt auf den Kurs-Credit rechnet.
+    // (Erst hier verlinken, DANN Guthaben loeschen — so zeigt keine Buchung mehr
+    // aufs Guthaben und das Loeschen kann nicht an einer FK scheitern.)
     for (let i = 0; i < sessionList.length; i++) {
       const s = sessionList[i]
       const { data: existing } = await supabase.from('bookings')
@@ -500,6 +489,28 @@ export default function AdminYogiDetailPage() {
           credit_id: newCourseCreditId, type: 'course', status: 'active',
         })
       }
+    }
+
+    // Guthaben VOLLSTAENDIG in Kurs-Credits umwandeln (Sarah-Regel 2026-06-01):
+    // 1 Guthaben = 1 Kurs-Credit. Der umgewandelte Anteil wird vom Guthaben abgezogen;
+    // ist ein Guthaben komplett umgewandelt, wird es GELOESCHT → es verschwindet
+    // spurlos. Ab dann gelten ausschliesslich die Kurs-Credit-Regeln (Ablauf am
+    // Kursende, Rueckbuchung bei Stunden-Absage als Kurs-Credit, usw.), weil die
+    // Stunden am model='course'-Credit haengen. Gilt fuer BEIDE Guthaben-Quellen
+    // (Krankheit 'illness' UND Admin-Kursabbruch 'cancellation_choice') — gefiltert
+    // wird nur nach model='guthaben', nicht nach source.
+    let toConvert = guthabenUsable
+    for (const g of availableGuthaben) {
+      if (toConvert <= 0) break
+      const free = g.total - g.used
+      const conv = Math.min(free, toConvert)
+      const newTotal = g.total - conv
+      if (newTotal <= 0) {
+        await supabase.from('credits').delete().eq('id', g.id)
+      } else {
+        await supabase.from('credits').update({ total: newTotal }).eq('id', g.id)
+      }
+      toConvert -= conv
     }
 
     // Email: Kurs-Einbuchung an Yogi

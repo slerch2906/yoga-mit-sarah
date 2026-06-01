@@ -30,7 +30,7 @@ function EinladenInner() {
   async function loadCourses() {
     // Welle 1 (Sarah 2026-05-26): SYS-Container-Kurse sind nicht einladbar.
     const { data } = await supabase.from('courses')
-      .select('id, name, weekday, total_units, date_start, date_end, is_single, max_spots, sessions(id, date, is_cancelled, external_participants_count, bookings(status))')
+      .select('id, name, weekday, total_units, date_start, date_end, is_single, max_spots, sessions(id, date, is_cancelled, external_participants_count, bookings!bookings_session_id_fkey(status))')
       .eq('is_active', true)
       .eq('is_system_container', false)
       .order('name')

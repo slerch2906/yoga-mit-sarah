@@ -349,8 +349,9 @@ export default function AdminDashboard() {
     // Sarah-Regel 2026-05-23: zentraler Helper mit 90-Min-Cutoff.
     try { await promoteWaitlistOrOfferLate(supabase, sessionId) } catch(e) { console.error('promote:', e) }
 
-    // Reload session detail
+    // Reload session detail + Wochenliste (Sarah 2026-06-01: Sofort-Refresh der Karten)
     if (selectedSession) loadSessionDetail(selectedSession)
+    loadData()
   }
 
   // Welle 6 (Sarah 2026-05-27, Item 10/11): Waitlist-Yogi aus Dashboard-Modal
@@ -506,6 +507,7 @@ export default function AdminDashboard() {
       setDashYogiSearch('')
       setDashYogiResults([])
       loadSessionDetail(selectedSession)
+      loadData()
       return
     }
 
@@ -569,6 +571,7 @@ export default function AdminDashboard() {
     setDashYogiSearch('')
     setDashYogiResults([])
     loadSessionDetail(selectedSession)
+    loadData()
   }
 
   async function cancelSession() {

@@ -1415,6 +1415,7 @@ export default function AdminKursePage() {
       setAddYogiSearch('')
       setAddYogiResults([])
       loadParticipants(course)
+      loadData()
       return
     }
 
@@ -1563,6 +1564,7 @@ export default function AdminKursePage() {
       alert(`✓ Einbuchung erfolgt.\n${guthabenUsable} Stunde${guthabenUsable === 1 ? '' : 'n'} mit Guthaben verrechnet.${newCreditsNeeded > 0 ? `\n${newCreditsNeeded} neue Credits angelegt.` : ''}`)
     }
     loadParticipants(course)
+    loadData()
   }
 
   async function loadParticipants(course: any) {

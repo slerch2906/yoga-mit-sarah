@@ -2252,15 +2252,17 @@ export default function AdminKursePage() {
         {(!showForm && !showSingleForm && !showEventForm) ? (
           <>
             {/* Welle 2 (Sarah 2026-05-26): 3 Buttons nebeneinander — Kurs, Einzelstunde, Event.
-                Auf kleinen Screens als Stack. Icons: ti-school / ti-yoga / ti-confetti. */}
-            <div className="grid grid-cols-3 max-md:grid-cols-1 gap-2 mb-4">
-              <button onClick={() => setShowForm(true)} className="btn-primary text-sm">
+                Sarah-Wunsch 2026-06-01: AUCH in der Handy-Ansicht nebeneinander (3 Spalten),
+                wie in der Laptop-Ansicht — kein Stack mehr. Etwas engeres Padding + nowrap,
+                damit die drei Buttons auch auf schmalen Screens in eine Reihe passen. */}
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              <button onClick={() => setShowForm(true)} className="btn-primary text-sm px-1 whitespace-nowrap">
                 Neuer Kurs
               </button>
-              <button onClick={() => setShowSingleForm(true)} className="btn-primary text-sm">
+              <button onClick={() => setShowSingleForm(true)} className="btn-primary text-sm px-1 whitespace-nowrap">
                 Neue Stunde
               </button>
-              <button onClick={() => setShowEventForm(true)} className="btn-primary text-sm">
+              <button onClick={() => setShowEventForm(true)} className="btn-primary text-sm px-1 whitespace-nowrap">
                 Neues Event
               </button>
             </div>

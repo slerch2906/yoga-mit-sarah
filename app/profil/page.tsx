@@ -1158,6 +1158,9 @@ export default function ProfilPage() {
             <p className="text-xs text-yoga-red-text/60 leading-relaxed mb-3">
               Dein Konto wird DSGVO-konform anonymisiert: Name und E-Mail werden entfernt, die anonymisierte Buchungshistorie bleibt aus rechtlichen Gründen erhalten.
             </p>
+            <p className="text-sm font-semibold text-yoga-red-text leading-relaxed mb-3">
+              Wenn du noch Guthaben hast, kontaktiere Sarah bitte vor dem Löschen für eine Abwicklung — nach dem Löschen kann keine Rückzahlung mehr erfolgen.
+            </p>
             <label className="flex items-start gap-3 cursor-pointer mb-4">
               <input type="checkbox" checked={deleteConfirmed}
                 onChange={e => setDeleteConfirmed(e.target.checked)}

@@ -226,7 +226,8 @@ test.describe('[AUDIT] Email Template — account_deleted_yogi (v61)', () => {
 
   test('Credit/Guthaben-Verfall-Hinweis (AGB § 1.0)', async () => {
     expect(edgeFunctionSource).toMatch(/AGB\s*§\s*1\.0/)
-    expect(edgeFunctionSource).toMatch(/Rückerstattung erfolgt nicht/i)
+    // Sarah 2026-06-01: Satz "Eine Rückerstattung erfolgt nicht." entfernt.
+    expect(edgeFunctionSource).not.toMatch(/Rückerstattung erfolgt nicht/i)
   })
 })
 

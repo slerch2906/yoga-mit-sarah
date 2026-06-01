@@ -30,7 +30,7 @@ function EinladenInner() {
   async function loadCourses() {
     // Welle 1 (Sarah 2026-05-26): SYS-Container-Kurse sind nicht einladbar.
     const { data } = await supabase.from('courses')
-      .select('id, name, weekday, total_units, date_start, date_end, is_single, sessions(id, date, is_cancelled)')
+      .select('id, name, weekday, total_units, date_start, date_end, is_single, max_spots, sessions(id, date, is_cancelled, external_participants_count, bookings(status))')
       .eq('is_active', true)
       .eq('is_system_container', false)
       .order('name')
@@ -87,6 +87,20 @@ function EinladenInner() {
       (s: any) => s.date >= today && !s.is_cancelled
     )
     return Math.max(1, futureSessions.length)
+  }
+
+  // Sarah 2026-06-01: Hinweis im Dropdown, wenn der Kurs schon voll ist (Einladung
+  // ueberbucht dann bewusst). Voll = die am staerksten belegte zukuenftige Stunde
+  // hat >= max_spots (aktive Buchungen + externe Teilnehmer), wie der Buchungs-Trigger.
+  function isCourseFull(course: any) {
+    if (!course.max_spots || course.max_spots === 0) return false
+    const today = new Date().toISOString().split('T')[0]
+    const future = (course.sessions || []).filter((s: any) => s.date >= today && !s.is_cancelled)
+    if (future.length === 0) return false
+    const maxOcc = Math.max(0, ...future.map((s: any) =>
+      (s.bookings || []).filter((b: any) => b.status === 'active').length + (s.external_participants_count || 0)
+    ))
+    return maxOcc >= course.max_spots
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -238,7 +252,7 @@ function EinladenInner() {
               <option value="">Nur Registrierung – kein Kurs</option>
               {courses.map(c => (
                 <option key={c.id} value={c.id}>
-                  {c.name}{c.weekday ? ` · ${c.weekday}` : ''}{c.date_start ? `, ab ${new Date(c.date_start).toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''} – {getRemainingUnits(c)} Credits
+                  {c.name}{c.weekday ? ` · ${c.weekday}` : ''}{c.date_start ? `, ab ${new Date(c.date_start).toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''} – {getRemainingUnits(c)} Credits{isCourseFull(c) ? ' (voll – überbuchen?)' : ''}
                 </option>
               ))}
             </select>

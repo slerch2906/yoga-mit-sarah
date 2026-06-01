@@ -125,20 +125,23 @@ export default function AdminYogisPage() {
           <p className="text-center text-yoga-text/40 text-sm py-6">Keine Yogis gefunden</p>
         ) : filtered.map(yogi => (
           <button key={yogi.id} onClick={() => router.push(`/admin/yogis/${yogi.id}`)}
-            className="w-full card mb-2 text-left hover:border-yoga-border2 transition-colors">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-base font-semibold flex items-center gap-2">
+            className="w-full bg-white rounded-yoga border border-yoga-border p-3 mb-2 text-left hover:border-yoga-border2 transition-colors">
+            {/* Sarah-Wunsch 2026-06-01: Karten-Formatierung wie die Kurs-Kacheln im
+                Yogi-Dashboard (/kurse) — Name fett oben, Rest klein normal darunter,
+                kompaktere Schrift + Abstand, damit die Karten kleiner werden. */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-sm font-bold flex items-center gap-1.5 truncate">
                   {getDisplayName(yogi)}
                   {yogi.is_dummy && (
-                    <span className="text-xs bg-yoga-text text-white rounded-full px-2 py-0.5 font-normal">
+                    <span className="text-[10px] bg-yoga-text text-white rounded-full px-1.5 py-0.5 font-normal flex-shrink-0">
                       Dummy
                     </span>
                   )}
                 </div>
                 {/* Sarah-Wunsch 2026-06-01: E-Mail aus der Uebersicht raus (Karte kleiner).
                     Suche nach E-Mail bleibt erhalten; Adresse steht weiter im Yogi-Detail. */}
-                <div className="text-sm text-yoga-text/40 mt-0.5">
+                <div className="text-xs text-yoga-text/50 mt-0.5 truncate">
                   {(() => {
                     const credits = getFreeCredits(yogi)
                     const guthaben = getGuthaben(yogi)
@@ -150,7 +153,7 @@ export default function AdminYogisPage() {
                   })()}
                 </div>
               </div>
-              <i className="ti ti-chevron-right text-base text-yoga-text/30" />
+              <i className="ti ti-chevron-right text-sm text-yoga-text/30 flex-shrink-0" />
             </div>
           </button>
         ))}

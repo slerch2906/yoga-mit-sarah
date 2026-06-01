@@ -136,9 +136,8 @@ export default function AdminYogisPage() {
                     </span>
                   )}
                 </div>
-                <div className="text-sm text-yoga-text/50 mt-0.5">
-                  {yogi.email || 'Kein Login'}
-                </div>
+                {/* Sarah-Wunsch 2026-06-01: E-Mail aus der Uebersicht raus (Karte kleiner).
+                    Suche nach E-Mail bleibt erhalten; Adresse steht weiter im Yogi-Detail. */}
                 <div className="text-sm text-yoga-text/40 mt-0.5">
                   {(() => {
                     const credits = getFreeCredits(yogi)

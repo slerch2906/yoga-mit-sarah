@@ -79,20 +79,26 @@ test.describe('[E2E-Text] Finding U — Status-Labels & Akteur-Logik (cancelled_
     expect(iStarted).toBeGreaterThan(iActor)
   })
 
-  // ── U2 GEFIXT: admin Buchungs-Badge zeigt "Abgesagt" via zentralem Helfer ──
-  test('FINDING U2 [gefixt]: admin getStatusBadge delegiert an bookingStatusLabel (Absage-Präzedenz)', () => {
-    const fn = sliceFrom(SRC_YOGI_DETAIL(), 'function getStatusBadge(b: any)')
-    expect(fn).toContain('bookingStatusLabel(b.session, b)')
-    // Wenn das Label "Abgesagt" ist, wird auch "Abgesagt" gerendert.
-    expect(fn).toMatch(/label === 'Abgesagt'\) return <span[^>]*>Abgesagt</)
+  // ── U2 GEFIXT: admin Stunden-Grid gibt "Abgesagt" Vorrang ─────────────────
+  // Sarah 2026-06-01: Der redundante Bereich "Letzte Buchungen" (mit getStatusBadge)
+  // wurde entfernt. Der Per-Stunden-Status kommt jetzt NUR aus dem Stunden-Grid unter
+  // "Eingebuchte Kurse". Dort wird die Session-Absage (is_cancelled) ZUERST geprüft.
+  test('FINDING U2 [gefixt]: admin Stunden-Grid prüft is_cancelled (Abgesagt) mit Vorrang', () => {
+    const src = SRC_YOGI_DETAIL()
+    // Session-Absage zuerst → "Abgesagt"
+    expect(src).toMatch(/if \(s\.is_cancelled\) \{[\s\S]{0,120}label: 'Abgesagt'/)
+    // …und VOR dem Buchungs-Status (active/cancelled)
+    const iCancelledSession = src.indexOf('if (s.is_cancelled) {')
+    const iActive = src.indexOf("myBooking?.status === 'active'")
+    expect(iCancelledSession).toBeGreaterThan(-1)
+    expect(iActive).toBeGreaterThan(-1)
+    expect(iCancelledSession).toBeLessThan(iActive)
   })
 
-  // ── U1 GEFIXT: cancelled-Wort kommt überall aus dem Akteur-Helfer ──────────
-  test('FINDING U1 [gefixt]: Liste & Kalender-Grid leiten cancelled-Label aus cancelled_by ab', () => {
+  // ── U1 GEFIXT: cancelled-Wort kommt aus dem Akteur-Helfer ─────────────────
+  test('FINDING U1 [gefixt]: Stunden-Grid leitet cancelled-Label aus cancelled_by ab', () => {
     const src = SRC_YOGI_DETAIL()
-    // Buchungsliste: über bookingStatusLabel (liefert Ausgetragen|Abgemeldet aus cancelled_by)
-    expect(sliceFrom(src, 'function getStatusBadge(b: any)')).toContain('bookingStatusLabel(b.session, b)')
-    // Kalender-Grid: cancelled-Zweig nutzt cancelledActorLabel(myBooking)
+    // Stunden-Grid: cancelled-Zweig nutzt cancelledActorLabel(myBooking)
     expect(src).toMatch(/myBooking\?\.status === 'cancelled'\) \{[\s\S]{0,260}cancelledActorLabel\(myBooking\)/)
     // Kein hartkodiertes, divergierendes Wort mehr im Grid-cancelled-Zweig
     expect(src).not.toMatch(/myBooking\?\.status === 'cancelled'\) \{\s*badge = \{ label: '(Abgemeldet|Ausgetragen)'/)

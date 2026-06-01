@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Email } from '@/lib/email'
-import { isActive, isStarted, countActiveFutureUnits, isExcluded, bookingStatusLabel, cancelledActorLabel } from '@/lib/session-status'
+import { isActive, isStarted, countActiveFutureUnits, isExcluded, cancelledActorLabel } from '@/lib/session-status'
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
@@ -879,18 +879,9 @@ export default function AdminYogiDetailPage() {
     loadData()
   }
 
-  // "Teilgenommen" ab Stundenstart — Logik aus lib/session-status.ts
-  function getStatusBadge(b: any) {
-    // Welle Akteur-Logik (Sarah 2026-05-29): zentrales Status-Wort.
-    // Fix U2: Session-Absage (Abgesagt/Ausgeschlossen) hat jetzt Vorrang.
-    // Fix U1: Storno-Akteur unterscheidet Ausgetragen (Admin) vs. Abgemeldet (selbst).
-    const label = bookingStatusLabel(b.session, b)
-    if (label === 'Ausgeschlossen') return <span className="badge badge-left">Ausgeschlossen</span>
-    if (label === 'Abgesagt') return <span className="badge" style={{background:'var(--yoga-red-bg)',color:'var(--yoga-red-text)'}}>Abgesagt</span>
-    if (label === 'Ausgetragen' || label === 'Abgemeldet') return <span className="badge badge-left">{label}</span>
-    if (label === 'Teilgenommen') return <span className="badge badge-done">Teilgenommen </span>
-    return <span className="badge badge-enrolled">Angemeldet</span>
-  }
+  // getStatusBadge entfernt (Sarah 2026-06-01) — wurde nur vom entfernten
+  // Bereich "Letzte Buchungen" genutzt. Status-Anzeige laeuft jetzt zentral
+  // ueber die Stunden-Aufstellung unter "Eingebuchte Kurse".
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" /></div>
   if (!yogi) return null
@@ -1831,49 +1822,10 @@ export default function AdminYogiDetailPage() {
         {/* Yogi-Account-Loesch-Button ist Sarah-Wunsch 2026-05-26 ans ENDE der
             Seite gewandert (nach Letzte Buchungen + Protokoll). */}
 
-        {/* Buchungshistorie */}
-        {bookings.length > 0 && (
-          <>
-            <p className="section-label mt-2">Letzte Buchungen</p>
-            {/* Sarah-Wunsch 2026-05-25: ZULETZT passiertes Event ganz oben — also
-                sortieren nach "last activity": cancelled_at falls vorhanden, sonst
-                created_at. So steht eine Abmeldung über einer früheren Einbuchung. */}
-            {[...bookings].sort((a: any, b: any) => {
-              const ta = new Date(a.cancelled_at || a.created_at || 0).getTime()
-              const tb = new Date(b.cancelled_at || b.created_at || 0).getTime()
-              return tb - ta
-            }).slice(0, 10).map(b => (
-              <div key={b.id} className="card mb-2 flex items-center gap-2.5">
-                {/* Sarah-Wunsch 2026-05-24: Wochentag vorne groß (analog Yogi-Ansicht) */}
-                <div className="text-center flex-shrink-0 w-12">
-                  <div className="text-base font-bold">
-                    {b.session?.date ? new Date(b.session.date).toLocaleDateString('de-DE', { weekday: 'short' }) : '—'}
-                  </div>
-                  <div className="text-xs text-yoga-text/50 mt-0.5">
-                    {b.session?.date ? new Date(b.session.date).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' }) : ''}
-                  </div>
-                </div>
-                <div className="w-px h-8 bg-yoga-border2 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  {/* Welle 2.6: SYS-Container-Name unterdrücken */}
-                  <div className="text-sm font-semibold truncate">
-                    {sessionDisplayName(b.session)}
-                  </div>
-                  <div className="text-xs text-yoga-text/40">{b.session?.time_start?.slice(0,5)} · {(() => {
-                    // Welle 3 (Sarah 2026-05-26): differenziert nach session.session_type,
-                    // damit event_free/event_paid Buchungen nicht als "Einzelstunde" erscheinen.
-                    const st = b.session?.session_type
-                    if (st === 'event_free') return 'Event · Kostenlos'
-                    if (st === 'event_paid') return `Event${b.session?.price_eur ? ` · ${b.session.price_eur} €` : ''}`
-                    if (st === 'single' || b.type === 'single') return 'Einzelstunde'
-                    return 'Kursstunde'
-                  })()}</div>
-                </div>
-                {getStatusBadge(b)}
-              </div>
-            ))}
-          </>
-        )}
+        {/* Sarah-Wunsch 2026-06-01: Bereich "Letzte Buchungen" entfernt — er war
+            redundant: der Per-Stunden-Status steht bereits unter "Eingebuchte Kurse"
+            (Stunden des Kurses) und die vollständige, genauere Historie liefert das
+            aufklappbare Protokoll (audit_log) direkt darunter. */}
 
         {/* Yogi-Protokoll — Sarah-Wunsch 2026-05-26: yogi-bezogene Historie als
             aufklappbares Element. Lädt audit_log gefiltert auf 24 Monate

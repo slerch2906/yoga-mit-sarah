@@ -85,11 +85,15 @@ function hl(content: string, bg = '#f5f2f0'): string {
   return `<div style="background:${bg};border-radius:12px;padding:15px 18px;margin:14px 0">${content}</div>`
 }
 function fmtDate(d: string, t?: string): string {
-  const date = new Date(`${d}T12:00:00Z`).toLocaleDateString('de-DE', { weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone: TZ })
+  // Sarah-Fix 2026-06-01: tolerant gegen Datum-Only ('2027-04-01') UND volle ISO-
+  // Strings ('2027-04-01T00:00:00.000Z'). Vorher fuehrte ein ISO-String zu
+  // 'Invalid Date' (z.B. "Gültig bis Invalid Date" in der Krankheits-Mail).
+  const dOnly = (d || '').slice(0, 10)
+  const date = new Date(`${dOnly}T12:00:00Z`).toLocaleDateString('de-DE', { weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone: TZ })
   return t ? `${date} um ${t.slice(0,5)} Uhr` : date
 }
 function fmtDateShort(d: string): string {
-  return new Date(`${d}T12:00:00Z`).toLocaleDateString('de-DE', { day:'numeric', month:'long', timeZone: TZ })
+  return new Date(`${(d || '').slice(0, 10)}T12:00:00Z`).toLocaleDateString('de-DE', { day:'numeric', month:'long', timeZone: TZ })
 }
 function cancelDeadlineStr(timeStart: string): string {
   const [hStr, mStr] = (timeStart || '00:00').split(':')

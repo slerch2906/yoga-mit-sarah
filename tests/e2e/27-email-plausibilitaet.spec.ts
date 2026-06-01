@@ -155,6 +155,16 @@ test.describe('[AUDIT] Email Template — illness_credit (Welle G, v55)', () => 
     expect(edgeFunctionSource).toMatch(/Vorhol-\s*und Nachholbuchungen ersatzlos beendet/i)
     expect(edgeFunctionSource).toMatch(/Auszahlung in Geld ist ausgeschlossen/i)
   })
+
+  // Sarah-Fix 2026-06-01: "Gültig bis Invalid Date" entstand, weil fmtDate einen
+  // vollen ISO-String ('2027-04-01T00:00:00.000Z') bekam. Jetzt schneidet fmtDate
+  // auf Datum-Only. Zusätzlich steht "(10 Monate)" zur Klarstellung der Frist.
+  test('Krankheits-Frist: "(10 Monate)"-Hinweis + fmtDate ist ISO-tolerant', async () => {
+    expect(edgeFunctionSource, '10-Monate-Hinweis in der Krankheits-Mail').toMatch(/Gültig bis <strong>\$\{esc\(expiryStr\)\}<\/strong> \(10 Monate\)/)
+    // fmtDate/fmtDateShort schneiden auf die ersten 10 Zeichen (YYYY-MM-DD),
+    // damit volle ISO-Timestamps nicht zu "Invalid Date" werden.
+    expect(edgeFunctionSource, 'fmtDate schneidet auf Datum-Only').toMatch(/\(d \|\| ''\)\.slice\(0, 10\)/)
+  })
 })
 
 test.describe('[AUDIT] Email Template — course_cancelled "Geldbetrag erstattet" (v58)', () => {

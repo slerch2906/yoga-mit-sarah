@@ -456,48 +456,48 @@ export default function AdminYogiDetailPage() {
     // Enrollment upserten
     await supabase.from('enrollments').upsert({ user_id: id, course_id: selectedCourseId, enrolled_from_unit: 1 })
 
-    // Falls neue Credits nötig: Course-Credit anlegen (used=0, Trigger setzt auf #aktive)
+    // Sarah-Regel 2026-06-01: Guthaben werden in EINEN Kurs-Credit UMGEWANDELT.
+    // Der Kurs-Credit deckt ALLE Stunden (total = actualCount) — egal ob durch
+    // Guthaben gedeckt oder neu bezahlt. So zeigt der Kurs immer die volle
+    // Stundenzahl als Credits. (Frueher: total = nur bezahlter Rest → Kurs zeigte
+    // faelschlich zu wenige Credits, weil Guthaben separat an Buchungen hingen.)
     let newCourseCreditId: string | null = null
-    if (newCreditsNeeded > 0) {
+    if (actualCount > 0) {
       const { data: cc } = await supabase.from('credits').insert({
         user_id: id, course_id: selectedCourseId, model: 'course',
-        total: newCreditsNeeded, used: 0, expires_at: expiry.toISOString(),
+        total: actualCount, used: 0, expires_at: expiry.toISOString(),
       }).select().single()
       newCourseCreditId = cc?.id || null
     }
 
-    // Credit-IDs pro Session: erst Guthaben aufbrauchen, dann Course-Credit
-    const creditPerSession: (string | null)[] = []
-    const guthabenRemaining = availableGuthaben.map((g: any) => ({
-      id: g.id, free: g.total - g.used,
-    }))
-    for (let i = 0; i < sessionList.length; i++) {
-      let assigned: string | null = null
-      for (const g of guthabenRemaining) {
-        if (g.free > 0) {
-          assigned = g.id
-          g.free -= 1
-          break
-        }
-      }
-      creditPerSession.push(assigned || newCourseCreditId)
+    // Guthaben in den Kurs-Credit umwandeln: verbrauchten Anteil als used markieren
+    // (FIFO nach Ablaufdatum), Eintrag bleibt mit total erhalten → 0 frei. Es zeigt
+    // KEINE Buchung mehr aufs Guthaben, daher fasst der Recalc-Trigger es nicht an,
+    // das manuell gesetzte used bleibt bestehen. (Vertrag siehe Test 08.)
+    let toConvert = guthabenUsable
+    for (const g of availableGuthaben) {
+      if (toConvert <= 0) break
+      const free = g.total - g.used
+      const conv = Math.min(free, toConvert)
+      await supabase.from('credits').update({ used: g.used + conv }).eq('id', g.id)
+      toConvert -= conv
     }
 
-    // Bookings reaktivieren / anlegen (mit credit_id-Link, damit Trigger korrekt recalct)
+    // Bookings reaktivieren / anlegen — ALLE an den EINEN Kurs-Credit haengen,
+    // damit der Trigger used = #aktive Buchungen korrekt auf den Kurs-Credit rechnet.
     for (let i = 0; i < sessionList.length; i++) {
       const s = sessionList[i]
-      const creditId = creditPerSession[i]
       const { data: existing } = await supabase.from('bookings')
         .select('id').eq('session_id', s.id).eq('user_id', id).maybeSingle()
       if (existing) {
         await supabase.from('bookings').update({
-          status: 'active', credit_id: creditId,
+          status: 'active', credit_id: newCourseCreditId,
           cancelled_at: null, cancel_late: false, type: 'course',
         }).eq('id', existing.id)
       } else {
         await supabase.from('bookings').insert({
           user_id: id, session_id: s.id,
-          credit_id: creditId, type: 'course', status: 'active',
+          credit_id: newCourseCreditId, type: 'course', status: 'active',
         })
       }
     }

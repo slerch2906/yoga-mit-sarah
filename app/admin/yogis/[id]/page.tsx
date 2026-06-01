@@ -175,6 +175,26 @@ export default function AdminYogiDetailPage() {
   }
 
   async function handleDeleteYogi() {
+    // Sarah 2026-06-01: Dummies sind reine Platzhalter (kein echter Personenbezug).
+    // -> keine DSGVO-Anonymisierung, keine Mails, keine "Auth konnte nicht entfernt
+    //    werden"-Warnung. Einfach Daten weg + Profil HART löschen; der Trigger
+    //    delete_auth_user_on_profile_delete entfernt dabei auch den Auth-Login.
+    //    RLS erlaubt Admins das Hart-Löschen ("Profil löschen"-Policy = is_admin()).
+    if (yogi?.is_dummy) {
+      if (!confirm(`Dummy "${yogi.first_name || ''} ${yogi.last_name || ''}" löschen?\n\n• Belegte Plätze werden sofort frei\n• Der Dummy wird vollständig entfernt`)) return
+      await supabase.from('bookings').delete().eq('user_id', id)
+      await supabase.from('enrollments').delete().eq('user_id', id)
+      await supabase.from('credits').delete().eq('user_id', id)
+      await supabase.from('waitlist').delete().eq('user_id', id)
+      await supabase.from('waitlist_offers').delete().eq('user_id', id)
+      await supabase.from('notification_log').delete().eq('user_id', id)
+      await supabase.from('course_cancellation_responses').delete().eq('user_id', id)
+      const { error: delErr } = await supabase.from('profiles').delete().eq('id', id)
+      if (delErr) { alert('Fehler beim Löschen des Dummys: ' + delErr.message); return }
+      router.push('/admin/yogis')
+      return
+    }
+
     // Sarah-Wunsch 2026-05-23 v6: Yogi-Account DSGVO-konform löschen UND
     // Plätze SOFORT freigeben. Reihenfolge:
     //  1. Aktive Buchungen, Enrollments, Credits, Waitlist, Notification-Log
@@ -1878,7 +1898,7 @@ export default function AdminYogiDetailPage() {
         <div className="mt-6 pt-4 border-t border-yoga-border">
           <button onClick={handleDeleteYogi}
             className="w-full text-sm text-yoga-red-text py-3 border border-yoga-red-bg rounded-yoga cursor-pointer hover:opacity-80 font-semibold">
-            <i className="ti ti-trash mr-1" /> Yogi-Account löschen (DSGVO-konform)
+            <i className="ti ti-trash mr-1" /> {yogi?.is_dummy ? 'Dummy löschen' : 'Yogi-Account löschen (DSGVO-konform)'}
           </button>
         </div>
       </div>

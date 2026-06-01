@@ -1570,9 +1570,29 @@ export default function AdminYogiDetailPage() {
                 ? yogiBookingsForCourse.map(b => b.session?.date).filter(Boolean).sort()[0]
                 : null
               const courseStartStr = e.course?.date_start
-              const isMidCourse = !!(firstSessionDateStr && courseStartStr && firstSessionDateStr > courseStartStr)
               const yogiCourseCredit = credits.find((c: any) => c.model === 'course' && c.course_id === e.course_id)
               const yogiUnits = yogiCourseCredit?.total ?? 0
+              // Sarah-Wunsch 2026-06-01: zeitlich begrenzte Teilnahme (Range-Einbuchung) klar zeigen.
+              // Der ECHTE Teilnahme-Zeitraum ergibt sich aus den credit-verknuepften (bzw. aktiven)
+              // Buchungen. Stornierte Buchungen OHNE credit_id sind Reste einer frueheren Einbuchung,
+              // die durch die Range-Einbuchung ersetzt wurde — sie zaehlen NICHT zum Zeitraum (wuerden
+              // ihn sonst faelschlich verlaengern und faelschlich "Ausgetragen" statt "—" zeigen).
+              const genuineDates = (yogiBookingsForCourse
+                .filter((b: any) => b.credit_id || b.status === 'active')
+                .map((b: any) => b.session?.date)
+                .filter(Boolean) as string[]).sort()
+              const partStartStr = genuineDates.length ? genuineDates[0] : firstSessionDateStr
+              const partEndStr = genuineDates.length ? genuineDates[genuineDates.length - 1] : null
+              // Letzte reale (nicht ausgeschlossene, nicht abgesagte) Kursstunde
+              const courseRealDates = (((e.course?.sessions || []) as any[])
+                .filter((s: any) => !isExcluded(s) && !s.is_cancelled)
+                .map((s: any) => s.date)
+                .filter(Boolean) as string[]).sort()
+              const lastCourseDateStr = courseRealDates.length ? courseRealDates[courseRealDates.length - 1] : null
+              // Zeitlich begrenzt: letzte Teilnahme-Stunde liegt VOR der letzten Kursstunde
+              const isLimitedRange = !!(partEndStr && lastCourseDateStr && partEndStr < lastCourseDateStr)
+              const isMidCourse = !!(partStartStr && courseStartStr && partStartStr > courseStartStr)
+              const showRangePill = isMidCourse || isLimitedRange
               return (
               <div key={e.id} className="card mb-3">
                 <div className="text-base font-bold mb-1">{e.course?.name}</div>
@@ -1582,17 +1602,21 @@ export default function AdminYogiDetailPage() {
                     <i className="ti ti-calendar text-sm" />{dateLabel}
                   </div>
                 )}
-                {isMidCourse && firstSessionDateStr && (
+                {showRangePill && partStartStr && (
                   <div className="text-xs text-yoga-amber-text bg-yoga-amber-bg/60 border border-yoga-amber-text/20 rounded-yoga px-2 py-1.5 mt-2 mb-3 flex items-center gap-1.5">
                     <i className="ti ti-arrow-narrow-right text-sm flex-shrink-0" />
                     <span>
-                      Eingestiegen ab <strong>{new Date(firstSessionDateStr).toLocaleDateString('de-DE', { day:'numeric', month:'short', year:'numeric' })}</strong>
+                      {isLimitedRange && partEndStr ? (
+                        <>Teilnahme nur vom <strong>{fmtFull(new Date(partStartStr))}</strong> bis <strong>{fmtFull(new Date(partEndStr))}</strong></>
+                      ) : (
+                        <>Eingestiegen ab <strong>{fmtFull(new Date(partStartStr))}</strong></>
+                      )}
                       {yogiUnits > 0 && <> · {yogiUnits} {yogiUnits === 1 ? 'Credit' : 'Credits'}</>}
                     </span>
                   </div>
                 )}
-                {!isMidCourse && !dateLabel && <div className="mb-3" />}
-                {!isMidCourse && dateLabel && <div className="mb-3" />}
+                {!showRangePill && !dateLabel && <div className="mb-3" />}
+                {!showRangePill && dateLabel && <div className="mb-3" />}
 
                 {/* Sarah-Wunsch 2026-05-23: Stunden-Aufstellung des Kurses mit
                     Status pro Session (Teilgenommen/Abgemeldet/Abgesagt/Eingebucht).
@@ -1629,9 +1653,18 @@ export default function AdminYogiDetailPage() {
                           const sessDt = new Date(`${s.date}T${s.time_start||'00:00'}`).getTime()
                           const isPast = sessDt < nowMs
                           const myBooking = bookingsBySession.get(s.id)
+                          // Sarah-Wunsch 2026-06-01: Bei zeitlich begrenzter Teilnahme zeigen
+                          // Stunden AUSSERHALB des Zeitraums "—" (Yogi war hierfuer nie angemeldet) —
+                          // NICHT "Ausgetragen" (das waeren nur Reste einer ersetzten Einbuchung).
+                          // In-Range-Stunden behalten ihren echten Status. Greift nur bei echter
+                          // Begrenzung (isLimitedRange) — fuer alle anderen Yogis unveraendert.
+                          const sessInRange = !isLimitedRange
+                            || ((!partStartStr || s.date >= partStartStr) && (!partEndStr || s.date <= partEndStr))
                           let badge: { label: string; bg: string; fg: string } | null = null
                           if (s.is_cancelled) {
                             badge = { label: 'Abgesagt', bg: 'var(--yoga-red-bg)', fg: 'var(--yoga-red-text)' }
+                          } else if (!sessInRange) {
+                            badge = { label: '—', bg: '#f5f2f0', fg: '#999' }
                           } else if (myBooking?.status === 'active') {
                             badge = isPast
                               ? { label: 'Teilgenommen', bg: '#e8ede6', fg: '#3a5a30' }

@@ -56,33 +56,41 @@
 
 ---
 
-## Setup-Status (Stand: 31.05.2026)
+## Setup-Status (Stand: 31.05.2026 — ABGESCHLOSSEN ✅)
 
 - [x] **Prod-Schutzsperre** für E2E-Tests (live, verifiziert).
 - [x] **Staging-Supabase-Projekt** `yoga-staging` angelegt (Free-Tier, 0 €).
-- [ ] **Staging-Schema** = Prod-Schema (per `supabase db dump`, siehe unten).
-- [ ] **`.env.staging`** + `.env.test` auf Staging zeigen lassen.
-- [ ] **Vercel Preview-Env-Variablen** auf Staging zeigen lassen (macht Sarah, 1×).
+- [x] **Staging-Schema** = Prod-Schema — verifiziert identisch:
+      17 Tabellen · 49 Funktionen · 14 Trigger · 43 RLS-Policies · 25 FKs.
+- [x] **`.env.test`** zeigt auf Staging (alte Prod-Version → `.env.test.prod-backup`).
+- [x] **Smoke-Test grün**: `01-auth.spec.ts` 6/6 gegen Staging bestanden (31.05.).
+- [ ] **Vercel Preview-Env-Variablen** — OPTIONAL (nur fürs manuelle Durchklicken
+      einer Preview-URL; für automatische E2E NICHT nötig, siehe unten).
 
-### Staging-Schema sauber befüllen (einmalig)
-
-Das vollständige Prod-Schema (Tabellen, Funktionen, Trigger, RLS) wird am
-zuverlässigsten per Supabase-CLI übertragen:
+### So testest du eine Änderung auf Staging (der normale Ablauf)
 
 ```bash
-# 1) CLI + Login (einmalig) — Access-Token aus supabase.com/dashboard/account/tokens
-npx supabase login
+# Terminal 1 — App gegen Staging starten (erzwingt Staging, sperrt Prod):
+npm run dev:staging
 
-# 2) Schema von Prod ziehen
-npx supabase link --project-ref jcczvyablgdijeiyymhc
-npx supabase db dump --schema public -f supabase/baseline-schema.sql
-
-# 3) Schema auf Staging einspielen
-npx supabase link --project-ref bbzfcidmyyiodirtbowq
-npx supabase db push   # bzw. baseline-schema.sql + alle migrations anwenden
+# Terminal 2 — sobald "Ready" steht: E2E-Suite gegen Staging:
+npx playwright test                         # alles
+npx playwright test tests/e2e/02-booking.spec.ts   # einzelne Datei
 ```
 
-### Vercel Preview-Variablen (macht Sarah im Vercel-Dashboard)
+`npm run dev:staging` liest die Staging-Verbindung aus `.env.test` und startet den
+Server damit (statt der Prod-Werte aus `.env.local`). Die Tests selbst nutzen
+ebenfalls `.env.test` (Staging) — beide Seiten zeigen also auf die Test-DB.
+
+### Wie das Staging-Schema befüllt wurde (einmalig, erledigt)
+
+Das vollständige Prod-Schema liegt als `supabase/baseline-schema.sql` im Repo
+(per `pg_dump`/Extraktion erzeugt, 17 Tabellen + alle Funktionen/Trigger/RLS).
+Eingespielt wurde es **byte-genau über den Supabase-SQL-Editor** des Staging-Projekts
+(Datei-Inhalt einfügen → Run). Bei einem **Reset** von Staging einfach erneut so
+einspielen. Alternativ per CLI: `npx supabase db push` (braucht Access-Token + DB-Passwort).
+
+### Vercel Preview-Variablen (OPTIONAL — nur falls Preview-URLs gegen Staging laufen sollen)
 
 Project → Settings → Environment Variables → für **Preview** (nicht Production!):
 - `NEXT_PUBLIC_SUPABASE_URL` = Staging-URL

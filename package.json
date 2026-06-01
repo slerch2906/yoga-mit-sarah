@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:staging": "node scripts/dev-staging.mjs",
     "build": "next build",
     "start": "next start",
     "test:setup": "ts-node --project tsconfig.test.json scripts/setup-test-users.ts",

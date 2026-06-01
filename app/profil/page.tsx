@@ -7,7 +7,6 @@ import { getCurrentUser } from '@/lib/auth'
 import { fullLogout } from '@/lib/logout'
 import { getCurrentAgbVersion, type AgbVersion } from '@/lib/agb-version'
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
-import { Email } from '@/lib/email'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 
@@ -420,21 +419,12 @@ export default function ProfilPage() {
     // 3e) Audit-Log Einträge anonymisieren (DSGVO – PII aus details JSONB entfernen)
     try { await supabase.rpc('anonymize_user_audit_logs' as any, { target_user_id: user.id }) } catch {}
 
-    // 4) Admin informieren (inkl. Drive-Hinweis)
-    await supabase.from('admin_notifications').insert({
-      type: 'account_deleted_dsgvo',
-      message: `DSGVO: ${fullName} (${email}) hat seinen Account gelöscht. Bitte PDF im Google Drive manuell löschen.`,
-      details: { user_id: user.id, email, full_name: fullName }
-    })
-
-    // 4a) Yogi-Bestaetigungs-Email VOR dem Auth-Delete senden (DSGVO Art. 12).
-    //     Muss VOR dem Auth-Delete laufen, weil danach die Email-Adresse weg ist.
-    await Email.accountDeletedYogi({ email, firstName: profile?.first_name || 'Yogi' })
-
-    // 5) Email an Admin
-    // Sarah-Fix 2026-05-25: zentraler Helper statt direkter fetch — sonst fehlt
-    // x-function-secret-Header und die Edge Function antwortet 401 (Email kam nie an).
-    await Email.adminDsgvoDeletion({ fullName, email })
+    // 4) Sarah-Fix 2026-06-01: Yogi-Bestaetigungsmail, Admin-Info-Mail UND die
+    //    Admin-Benachrichtigung laufen jetzt SERVER-SEITIG in /api/delete-account
+    //    (Service-Rolle, RLS-immun). Vorher liefen sie hier clientseitig als Yogi und
+    //    scheiterten still an der "Admin only"-RLS von admin_notifications bzw. brachen
+    //    durch das nachfolgende Logout/Navigieren ab → Sarah bekam keine Info-Mail.
+    //    email + fullName + firstName werden unten an die Route uebergeben.
 
     // 6) Auth User löschen + sofort ausloggen
     // Welle S1/H1 (Sarah 2026-05-27): Bearer-Token VOR signOut greifen — die API-Route
@@ -457,7 +447,7 @@ export default function ProfilPage() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ userId: user.id })
+      body: JSON.stringify({ userId: user.id, email, fullName, firstName: profile?.first_name || 'Yogi' })
     }).catch(e => console.error('Delete account:', e))
 
     // Sofort zur Login-Seite, keine Rückkehr möglich

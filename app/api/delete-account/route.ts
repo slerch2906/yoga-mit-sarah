@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { Email } from '@/lib/email'
 
 // Welle S1/H1 (Sarah 2026-05-27): Auth-Check für DSGVO-Account-Loeschung.
 // Vorher: jeder konnte mit fremder userId einen Admin-Delete ausloesen. Jetzt:
 // Bearer-Token Pflicht. User darf nur sich selbst loeschen, ausser er ist Admin.
+//
+// Sarah 2026-06-01: Die Loesch-Nebenwirkungen (Yogi-Bestaetigungsmail, Admin-Info-Mail,
+// Admin-Benachrichtigung) laufen jetzt HIER server-seitig mit Service-Rolle — nicht mehr
+// clientseitig. Grund: bei der Selbst-Loeschung lief das clientseitig als Yogi, scheiterte
+// teils an RLS (admin_notifications ist "Admin only") bzw. brach durch Navigation/Logout ab
+// → Sarah bekam keine Info-Mail. Server-seitig greift es zuverlaessig bei BEIDEN Wegen.
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await req.json()
+    const { userId, email, fullName, firstName } = await req.json()
     if (!userId) return NextResponse.json({ error: 'No userId' }, { status: 400 })
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -34,6 +41,13 @@ export async function POST(req: NextRequest) {
       allowed = !!prof?.is_admin
     }
     if (!allowed) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+
+    // Yogi-Bestaetigungsmail VOR dem Auth-Delete (DSGVO Art. 12 — danach ist die
+    // Email-Adresse weg). email/firstName kommen vom Client (vor der Anonymisierung erfasst).
+    if (email) {
+      try { await Email.accountDeletedYogi({ email, firstName: firstName || 'Yogi' }) }
+      catch (e) { console.error('accountDeletedYogi (route):', e) }
+    }
 
     // Auth-User loeschen (das invalidiert automatisch alle Sessions)
     const res = await fetch(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
@@ -65,6 +79,20 @@ export async function POST(req: NextRequest) {
         { status: 502 },
       )
     }
+
+    // Nach erfolgreicher Loeschung: Admin informieren — server-seitig (Service-Rolle,
+    // RLS-immun) und unabhaengig vom Client-Flow. Greift damit AUCH bei Selbst-Loeschung.
+    try {
+      await Email.adminDsgvoDeletion({ fullName: fullName || 'Unbekannt', email: email || '' })
+    } catch (e) { console.error('adminDsgvoDeletion (route):', e) }
+    try {
+      await sb.from('admin_notifications').insert({
+        type: 'account_deleted_dsgvo',
+        message: `DSGVO: ${fullName || 'Ein Account'}${email ? ` (${email})` : ''} wurde gelöscht. Bitte die AGB-PDF im Google Drive manuell löschen.`,
+        details: { user_id: userId, email: email || null, full_name: fullName || null },
+        read: false,
+      })
+    } catch (e) { console.error('account_deleted_dsgvo notif (route):', e) }
 
     return NextResponse.json({ success: true })
   } catch (e: any) {

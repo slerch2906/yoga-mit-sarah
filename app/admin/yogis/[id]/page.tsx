@@ -247,11 +247,9 @@ export default function AdminYogiDetailPage() {
     // 3. audit_log-PII anonymisieren (Name/Email in details JSONB entfernen)
     try { await supabase.rpc('anonymize_user_audit_logs' as any, { target_user_id: id }) } catch {}
 
-    // 3a. Yogi-Bestaetigungs-Email VOR dem Auth-Delete senden (DSGVO Art. 12).
-    //     Muss VOR Schritt 4 laufen, weil danach die Email-Adresse weg ist.
-    if (email) {
-      await Email.accountDeletedYogi({ email, firstName: yogi?.first_name || 'Yogi' })
-    }
+    // Sarah 2026-06-01: Yogi-Bestaetigungsmail, Admin-Info-Mail und Admin-Benachrichtigung
+    // laufen jetzt server-seitig in /api/delete-account (RLS-immun, einheitlich fuer
+    // Selbst- + Admin-Loeschung). email/fullName/firstName werden unten uebergeben.
 
     // 4. Auth-User löschen → Sessions invalidiert, profile cascadet weg
     //    (audit_log user_id wird SET NULL — Compliance-Spur bleibt erhalten)
@@ -272,7 +270,7 @@ export default function AdminYogiDetailPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ userId: id })
+        body: JSON.stringify({ userId: id, email, fullName, firstName: yogi?.first_name || 'Yogi' })
       })
       authDeleted = deleteRes.ok
       if (!deleteRes.ok) {
@@ -289,10 +287,7 @@ export default function AdminYogiDetailPage() {
       details: { anonymized_user_id: id }
     })
 
-    // Email an Sarah: PDF im Drive manuell entfernen
-    // Sarah-Fix 2026-05-25: zentraler Helper statt direkter fetch — sonst fehlt
-    // x-function-secret-Header und die Edge Function antwortet 401.
-    await Email.adminDsgvoDeletion({ fullName, email })
+    // (Admin-Info-Mail + admin_notifications laufen jetzt server-seitig in der Route.)
 
     // Ehrliche Rueckmeldung: Wenn der Auth-Login NICHT entfernt werden konnte,
     // bleibt die E-Mail-Adresse belegt → Admin klar warnen statt "erfolgreich".

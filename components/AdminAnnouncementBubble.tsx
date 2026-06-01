@@ -71,7 +71,9 @@ export default function AdminAnnouncementBubble() {
           <div className="absolute -left-[6px] top-1/2 -translate-y-1/2 w-0 h-0"
             style={{ borderTop: '6px solid transparent', borderBottom: '6px solid transparent', borderRight: '6px solid #ffffff' }} />
           <div className="relative bg-white border border-yoga-border rounded-yoga px-4 py-3 text-center">
-            <p className="text-sm text-yoga-text/85 leading-snug">
+            {/* whitespace-pre-line: Zeilenumbrueche (\n) aus dem Admin-Textfeld
+                bleiben in der Sprechblase erhalten (Sarah-Wunsch 2026-06-01). */}
+            <p className="text-sm text-yoga-text/85 leading-snug whitespace-pre-line">
               {message}
             </p>
             {linkUrl && (() => {

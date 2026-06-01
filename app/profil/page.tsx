@@ -308,6 +308,7 @@ export default function ProfilPage() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteConfirmed, setDeleteConfirmed] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [savedToast, setSavedToast] = useState(false) // Sarah-Wunsch 2026-05-25: Toast "Profil gespeichert"
   const [editingEmergency, setEditingEmergency] = useState(false)
   const [emergencyForm, setEmergencyForm] = useState({ name: '', phone: '' })
@@ -343,9 +344,10 @@ export default function ProfilPage() {
   const [loadingProtocol, setLoadingProtocol] = useState(false)
 
   async function handleDeleteAccount() {
-    if (!deleteConfirmed) return
+    if (!deleteConfirmed || deleting) return
+    setDeleting(true)
     const user = await getCurrentUser()
-    if (!user) return
+    if (!user) { setDeleting(false); return }
 
     const fullName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()
     const email = userEmail || profile?.email || ''
@@ -426,31 +428,36 @@ export default function ProfilPage() {
     //    durch das nachfolgende Logout/Navigieren ab → Sarah bekam keine Info-Mail.
     //    email + fullName + firstName werden unten an die Route uebergeben.
 
-    // 6) Auth User löschen + sofort ausloggen
-    // Welle S1/H1 (Sarah 2026-05-27): Bearer-Token VOR signOut greifen — die API-Route
-    // braucht ihn um den Caller zu authentifizieren (vorher: unauthorized POST).
+    // 6) Auth-User serverseitig löschen — Bearer-Token VOR jeglichem Logout greifen.
     let accessToken = ''
     try {
       const { data: { session: sess } } = await supabase.auth.getSession()
       accessToken = sess?.access_token || ''
     } catch {}
 
-    // Erst lokal ausloggen (Session löschen), dann Auth-User löschen
-    try { await supabase.auth.signOut({ scope: 'global' }) } catch {}
+    // Sarah-Fix 2026-06-01 (KRITISCH): Die Route MUSS abgewartet werden, BEVOR wir
+    // navigieren/ausloggen. Vorher war es fire-and-forget + sofortiges
+    // window.location.replace → die Navigation brach die Anfrage ab, der Server
+    // verarbeitete sie nie zu Ende (Auth-User blieb hängen, keine Bestätigungs-/Admin-
+    // Mail, keine Benachrichtigung). Jetzt: await (+ keepalive als Zusatzsicherung),
+    // und der Fetch läuft VOR dem signOut, damit der Token gültig ist.
+    try {
+      await fetch('/api/delete-account', {
+        method: 'POST',
+        keepalive: true,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ userId: user.id, email, fullName, firstName: profile?.first_name || 'Yogi' })
+      })
+    } catch (e) { console.error('Delete account:', e) }
+
+    // Jetzt lokal ausloggen + Speicher leeren (die Route hat die Server-Session bereits
+    // mit dem Auth-Delete invalidiert), dann zur Login-Seite — keine Rückkehr möglich.
+    try { await supabase.auth.signOut({ scope: 'local' }) } catch {}
     localStorage.clear()
     sessionStorage.clear()
-
-    // Auth-User asynchron löschen (muss nach signOut passieren)
-    fetch('/api/delete-account', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ userId: user.id, email, fullName, firstName: profile?.first_name || 'Yogi' })
-    }).catch(e => console.error('Delete account:', e))
-
-    // Sofort zur Login-Seite, keine Rückkehr möglich
     window.location.replace('/login')
   }
 
@@ -1160,10 +1167,10 @@ export default function ProfilPage() {
               </span>
             </label>
             <div className="flex gap-2">
-              <button onClick={handleDeleteAccount} disabled={!deleteConfirmed}
+              <button onClick={handleDeleteAccount} disabled={!deleteConfirmed || deleting}
                 className={`flex-1 text-sm font-bold py-2.5 rounded-yoga border-0 cursor-pointer
-                  ${deleteConfirmed ? 'bg-yoga-red-text text-white' : 'bg-yoga-red-bg text-yoga-red-text/40 cursor-not-allowed'}`}>
-                Ja, Account löschen
+                  ${deleteConfirmed && !deleting ? 'bg-yoga-red-text text-white' : 'bg-yoga-red-bg text-yoga-red-text/40 cursor-not-allowed'}`}>
+                {deleting ? 'Wird gelöscht…' : 'Ja, Account löschen'}
               </button>
               <button onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmed(false) }}
                 className="flex-1 text-sm py-2.5 rounded-yoga border-0 cursor-pointer bg-yoga-gray text-yoga-text">

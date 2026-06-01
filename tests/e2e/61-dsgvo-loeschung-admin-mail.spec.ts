@@ -27,6 +27,9 @@ test.describe('DSGVO-Loeschung: server-seitige Admin-Info', () => {
   test('Selbst-Loeschung uebergibt Daten an die Route und macht KEINE eigene Admin-Mail/-Benachrichtigung', () => {
     const profil = read('app/profil/page.tsx')
     expect(profil, 'email + fullName + firstName an die Route').toMatch(/email,\s*fullName,\s*firstName/)
+    // Race-Fix (Sarah 2026-06-01): der Route-Aufruf MUSS awaited werden, sonst bricht
+    // window.location.replace die Anfrage ab und nichts passiert.
+    expect(profil, 'Route-Aufruf wird abgewartet (await)').toMatch(/await fetch\('\/api\/delete-account'/)
     // Nicht mehr clientseitig (scheiterte an RLS / brach ab):
     expect(profil, 'kein clientseitiger admin-Mail-Aufruf mehr').not.toMatch(/adminDsgvoDeletion/)
     expect(profil, 'kein clientseitiger admin_notifications-Insert mehr').not.toMatch(/account_deleted_dsgvo/)

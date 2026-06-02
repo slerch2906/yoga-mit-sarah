@@ -56,6 +56,38 @@ test.describe('Zeitzonen-Welle 2: überall Berlin (DST-sicher)', () => {
     expect(src).not.toMatch(/new Date\(`\$\{[^}]*\}T\$\{[^}]*\}`\)\.getTime\(\)/)
   })
 
+  test('Jede Datei, die einen Berlin-Helfer AUFRUFT, importiert ihn auch (Crash-Schutz)', () => {
+    // Regression Sarah 2026-06-02: app/admin/kurse/page.tsx rief berlinDateStr() auf,
+    // ohne es zu importieren -> "berlinDateStr is not defined" -> weisse Seite beim
+    // Kurs-Anlegen. next build faengt das NICHT (typescript.ignoreBuildErrors: true).
+    // Dieser Test prueft den Import/Aufruf-Abgleich fuer alle Berlin-Helfer projektweit.
+    const HELPERS = ['berlinTodayStr', 'berlinDateStr', 'parseSessionDateTimeBerlin']
+    const dirs = ['app', 'lib', 'components']
+    const walk = (dir: string): string[] => {
+      const full = path.join(ROOT, dir)
+      if (!fs.existsSync(full)) return []
+      const out: string[] = []
+      for (const e of fs.readdirSync(full, { withFileTypes: true })) {
+        const rel = `${dir}/${e.name}`
+        if (e.isDirectory()) out.push(...walk(rel))
+        else if (/\.(ts|tsx)$/.test(e.name)) out.push(rel)
+      }
+      return out
+    }
+    const files = dirs.flatMap(walk)
+    for (const f of files) {
+      const src = read(f)
+      for (const h of HELPERS) {
+        // Aufruf = Helfername direkt gefolgt von '(' . Definition/Import zaehlt nicht als Aufruf.
+        const isCall = new RegExp(`(?<![\\w.])${h}\\s*\\(`).test(src)
+        if (!isCall) continue
+        if (f === 'lib/session-time.ts') continue // dort definiert
+        const imported = new RegExp(`import\\s*\\{[^}]*\\b${h}\\b[^}]*\\}\\s*from\\s*['"]@?/?.*session-time`).test(src)
+        expect(imported, `${f} ruft ${h}() auf, importiert es aber nicht aus session-time`).toBeTruthy()
+      }
+    }
+  })
+
   test('Kein UTC-heute-Muster mehr in den umgestellten Kern-Dateien', () => {
     const files = [
       'app/admin/anwesenheit/page.tsx',

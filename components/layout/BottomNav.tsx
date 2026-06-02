@@ -38,15 +38,13 @@ export default function BottomNav({ isAdmin }: BottomNavProps) {
   const pathname = usePathname()
   const items = isAdmin ? adminNav : yogiNav
 
-  // Admin hat auf /admin/* die Desktop-Sidebar → dort BottomNav nur auf Mobile.
-  // ABER (Sarah 2026-06-02): Landet ein Admin auf einer Yogi-Seite (z.B. /kurse),
-  // gibt es dort KEINE Sidebar. Dann muss die Admin-BottomNav auch auf dem Desktop
-  // sichtbar sein — sonst hat der Admin null Navigation und kommt nicht mal zum
-  // Logout (= Sackgasse). Yogi hat nie eine Sidebar → BottomNav immer sichtbar.
-  const onAdminRoute = pathname.startsWith('/admin')
-  const hideOnDesktop = isAdmin && onAdminRoute
-  const navClass = hideOnDesktop ? 'bottom-nav md:hidden' : 'bottom-nav'
-  const spacerClass = hideOnDesktop ? 'h-20 md:hidden' : 'h-20'
+  // Admin hat Sidebar auf Desktop → BottomNav nur auf Mobile
+  // Yogi hat keine Sidebar → BottomNav immer
+  // (Sarah 2026-06-02: Admins landen gar nicht mehr auf Yogi-Seiten — /kurse
+  //  leitet sie sofort ins Admin-Dashboard. Daher braucht es hier keinen
+  //  Desktop-Sonderfall; am Laptop gilt fuer Admins immer die Sidebar.)
+  const navClass = isAdmin ? 'bottom-nav md:hidden' : 'bottom-nav'
+  const spacerClass = isAdmin ? 'h-20 md:hidden' : 'h-20'
 
   return (
     <>

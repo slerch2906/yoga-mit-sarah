@@ -35,10 +35,12 @@ test.describe('Admin-Guard ist robust (keine Sackgasse)', () => {
     await expect(page.getByText('Hallo Yogi')).toHaveCount(0)
   })
 
-  test('Sackgassen-Schutz: Admin auf /kurse hat am Desktop trotzdem Navigation', async ({ page }) => {
+  test('Admin auf /kurse wird ins Admin-Dashboard umgeleitet (nie Yogi-Ansicht)', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 }) // Laptop
     await page.goto('/kurse')
-    // Admin-BottomNav muss jetzt auch am Desktop sichtbar sein → Weg zurück/Logout
-    await expect(page.getByRole('link', { name: 'Einladen' })).toBeVisible()
+    // Admin gehoert nicht auf die Yogi-Seite → Redirect ins Admin-Dashboard (Sidebar)
+    await expect(page).toHaveURL(/\/admin\/dashboard/, { timeout: 10_000 })
+    await expect(page.getByText('AGB-Nachweise')).toBeVisible() // Sidebar-Marker
+    await expect(page.getByText('Hallo Yogi')).toHaveCount(0)
   })
 })

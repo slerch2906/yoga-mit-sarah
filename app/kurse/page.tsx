@@ -85,6 +85,12 @@ export default function KursePage() {
           supabase.from('profiles').select('*').eq('id', user.id).single(),
           getCurrentAgbVersion(supabase),
         ])
+        // Sarah 2026-06-02: Ein Admin gehoert nicht auf die Yogi-Seite. Sofort ins
+        // Admin-Dashboard (Sidebar) — nie das Yogi-Dashboard, nie das untere Menue.
+        // /kurse ist fuer Admins kein Ziel (keine adminNav-Verlinkung dorthin); der
+        // einzige Weg hierher waere die Start-Weiche "/" -> /kurse oder ein alter
+        // Bounce. Beides faengt dieser Redirect ab.
+        if (prof?.is_admin) { router.replace('/admin/dashboard'); return }
         const currentOrder = agb?.sort_order ?? 1
         if (prof && (!prof.legal_accepted_at || (prof.agb_version ?? 0) < currentOrder)) {
           window.location.href = '/rechtliches'; return
@@ -274,6 +280,10 @@ export default function KursePage() {
     onSwipeLeft: () => goWeek(+1),
     onSwipeRight: () => goWeek(-1),
   })
+
+  // Admin wird in init() nach /admin/dashboard umgeleitet — hier nichts von der
+  // Yogi-Ansicht rendern, damit nichts aufblitzt.
+  if (profile?.is_admin) return null
 
   return (
     <div className="max-w-md mx-auto min-h-screen" {...swipeHandlers}>

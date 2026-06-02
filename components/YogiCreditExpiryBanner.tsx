@@ -20,6 +20,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/auth'
+import { useHintDismissals } from '@/lib/hint-dismissals'
 
 type Reminder = { id: string; kind: 'warn' | 'alert'; text: string }
 
@@ -27,27 +28,12 @@ function daysBetween(a: Date, b: Date) {
   return Math.round((a.getTime() - b.getTime()) / (24 * 60 * 60 * 1000))
 }
 
-// Sarah-Wunsch 2026-05-25: Hinweisboxen wegklickbar (localStorage per Reminder-ID)
-const DISMISS_KEY = 'yogi-credit-expiry-dismissed'
-function loadDismissed(): string[] {
-  if (typeof window === 'undefined') return []
-  try { return JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]') } catch { return [] }
-}
-function saveDismissed(ids: string[]) {
-  try { localStorage.setItem(DISMISS_KEY, JSON.stringify(ids)) } catch {}
-}
-
 export default function YogiCreditExpiryBanner() {
   const [reminders, setReminders] = useState<Reminder[]>([])
-  const [dismissed, setDismissed] = useState<string[]>([])
-
-  useEffect(() => { setDismissed(loadDismissed()) }, [])
-
-  function dismiss(id: string) {
-    const next = [...dismissed, id]
-    setDismissed(next)
-    saveDismissed(next)
-  }
+  // Sarah 2026-06-02: Wegklicken pro Hinweis ueber den zentralen DB-Speicher
+  // (logout-fest + geraeteuebergreifend) statt localStorage.
+  const { isDismissed, dismiss: dismissHint } = useHintDismissals()
+  const dismiss = (id: string) => dismissHint('credit_expiry:' + id)
 
   useEffect(() => {
     let active = true
@@ -149,7 +135,7 @@ export default function YogiCreditExpiryBanner() {
     return () => { active = false }
   }, [])
 
-  const visible = reminders.filter(r => !dismissed.includes(r.id))
+  const visible = reminders.filter(r => !isDismissed('credit_expiry:' + r.id))
   if (visible.length === 0) return null
 
   return (

@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/auth'
 import { useSwipe } from '@/lib/useSwipe'
 import { getCurrentAgbVersion } from '@/lib/agb-version'
+import { useHintDismissals } from '@/lib/hint-dismissals'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import WeekPickerPopover from '@/components/WeekPickerPopover'
@@ -67,22 +68,11 @@ export default function KursePage() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [loading, setLoading] = useState(true)
   // Welle 6 (Sarah 2026-05-27): "Sarah trägt dich ein"-Banner wegklickbar.
-  // Fix Sarah 2026-06-02: Dismiss PRO YOGI in der DB (profiles.new_yogi_hint_dismissed)
-  // statt nur localStorage. Vorher loeschte localStorage.clear() beim Logout den
-  // Merker -> Banner kam wieder; ausserdem war es geraete-lokal. localStorage bleibt
-  // nur schneller Cache gegen Flackern; die DB ist die Wahrheit (siehe init()).
-  const [newYogiDismissed, setNewYogiDismissed] = useState(false)
-  useEffect(() => {
-    try { setNewYogiDismissed(localStorage.getItem('new_yogi_banner_dismissed') === '1') } catch {}
-  }, [])
-  async function dismissNewYogi() {
-    setNewYogiDismissed(true)
-    try { localStorage.setItem('new_yogi_banner_dismissed', '1') } catch {}
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) await supabase.from('profiles').update({ new_yogi_hint_dismissed: true }).eq('id', user.id)
-    } catch {}
-  }
+  // Sarah 2026-06-02: zentrale DB-Persistenz (useHintDismissals) — logout-fest +
+  // geraeteuebergreifend, gleicher Mechanismus wie alle anderen Hinweise.
+  const { isDismissed, dismiss: dismissHint } = useHintDismissals()
+  const newYogiDismissed = isDismissed('new_yogi')
+  function dismissNewYogi() { void dismissHint('new_yogi') }
   const router = useRouter()
   const supabase = createClient()
 
@@ -101,8 +91,6 @@ export default function KursePage() {
         }
         setProfile(prof)
         setUserId(user.id)
-        // DB-Wahrheit fuer den Neu-Yogi-Hinweis (logout-fest, geraeteuebergreifend).
-        if (prof?.new_yogi_hint_dismissed) setNewYogiDismissed(true)
 
         // Onboarding-Tour zeigen wenn noch nicht durchlaufen
         if (!prof?.is_admin && prof?.onboarding_completed === false) {

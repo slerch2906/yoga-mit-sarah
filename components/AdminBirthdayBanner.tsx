@@ -15,6 +15,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useHintDismissals } from '@/lib/hint-dismissals'
 
 interface BirthdayYogi {
   id: string
@@ -46,43 +47,19 @@ function weekMondayStr(): string {
   return `${yyyy}-${mm}-${dd}`
 }
 
-/** Welle 6.1 Hotfix (Sarah 2026-05-27): Per-Woche dismiss-Key —
- * Sarah klickt einmal weg, kommt erst nächste Woche wieder. */
-function getWeekDismissKey(): string {
-  return `birthday_banner_dismissed_${weekMondayStr()}`
-}
-
 export default function AdminBirthdayBanner() {
   const [yogis, setYogis] = useState<BirthdayYogi[]>([])
-  const [dismissed, setDismissed] = useState(false)
   const supabase = createClient()
+  // Sarah 2026-06-02: Wegklicken ueber den zentralen DB-Speicher (logout-fest,
+  // geraeteuebergreifend). Key pro Kalenderwoche -> naechste Woche wieder.
+  const { isDismissed, dismiss: dismissHint, ready } = useHintDismissals()
+  const birthdayKey = `birthday:${weekMondayStr()}`
 
-  useEffect(() => {
-    // localStorage nur als schneller Cache (verhindert Flackern); die DB ist die
-    // Wahrheit (geräteübergreifend + überlebt den localStorage.clear() beim Logout).
-    try { setDismissed(localStorage.getItem(getWeekDismissKey()) === '1') } catch {}
-    void load()
-  }, [])
+  useEffect(() => { void load() }, [])
 
-  async function dismiss() {
-    setDismissed(true)
-    try { localStorage.setItem(getWeekDismissKey(), '1') } catch {}
-    // DB-Persistenz pro Kalenderwoche (Sarah 2026-06-02) — bleibt nach Logout/auf
-    // anderen Geräten erhalten. Doppel-Insert wird per ON CONFLICT ignoriert.
-    try {
-      await supabase.from('admin_banner_dismissals')
-        .upsert({ banner: 'birthday', week: weekMondayStr() }, { onConflict: 'banner,week', ignoreDuplicates: true })
-    } catch {}
-  }
+  function dismiss() { void dismissHint(birthdayKey) }
 
   async function load() {
-    // DB-Wahrheit: wurde das Banner DIESE Woche bereits weggeklickt? (logout-fest)
-    try {
-      const { data: dis } = await supabase.from('admin_banner_dismissals')
-        .select('week').eq('banner', 'birthday').eq('week', weekMondayStr()).maybeSingle()
-      if (dis) { setDismissed(true); return }
-    } catch {}
-
     const { data } = await supabase
       .from('profiles')
       .select('id, first_name, last_name, birthdate')
@@ -121,7 +98,7 @@ export default function AdminBirthdayBanner() {
     setYogis(matches)
   }
 
-  if (yogis.length === 0 || dismissed) return null
+  if (!ready || yogis.length === 0 || isDismissed(birthdayKey)) return null
 
   return (
     <div className="mx-4 mt-3 bg-white border border-yoga-border rounded-yoga px-4 py-3 relative pr-9 shadow-sm">

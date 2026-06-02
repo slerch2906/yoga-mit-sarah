@@ -37,15 +37,19 @@ function getMonday(d: Date): Date {
   return m
 }
 
-/** Welle 6.1 Hotfix (Sarah 2026-05-27): Per-Woche dismiss-Key —
- * Sarah klickt einmal weg, kommt erst nächste Woche wieder. */
-function getWeekDismissKey(): string {
-  const d = new Date()
-  const monday = getMonday(d)
+/** Montag der aktuellen Woche als 'YYYY-MM-DD' (Wochen-Schlüssel für Dismiss). */
+function weekMondayStr(): string {
+  const monday = getMonday(new Date())
   const yyyy = monday.getFullYear()
   const mm = String(monday.getMonth() + 1).padStart(2, '0')
   const dd = String(monday.getDate()).padStart(2, '0')
-  return `birthday_banner_dismissed_${yyyy}-${mm}-${dd}`
+  return `${yyyy}-${mm}-${dd}`
+}
+
+/** Welle 6.1 Hotfix (Sarah 2026-05-27): Per-Woche dismiss-Key —
+ * Sarah klickt einmal weg, kommt erst nächste Woche wieder. */
+function getWeekDismissKey(): string {
+  return `birthday_banner_dismissed_${weekMondayStr()}`
 }
 
 export default function AdminBirthdayBanner() {
@@ -54,16 +58,31 @@ export default function AdminBirthdayBanner() {
   const supabase = createClient()
 
   useEffect(() => {
+    // localStorage nur als schneller Cache (verhindert Flackern); die DB ist die
+    // Wahrheit (geräteübergreifend + überlebt den localStorage.clear() beim Logout).
     try { setDismissed(localStorage.getItem(getWeekDismissKey()) === '1') } catch {}
     void load()
   }, [])
 
-  function dismiss() {
-    try { localStorage.setItem(getWeekDismissKey(), '1') } catch {}
+  async function dismiss() {
     setDismissed(true)
+    try { localStorage.setItem(getWeekDismissKey(), '1') } catch {}
+    // DB-Persistenz pro Kalenderwoche (Sarah 2026-06-02) — bleibt nach Logout/auf
+    // anderen Geräten erhalten. Doppel-Insert wird per ON CONFLICT ignoriert.
+    try {
+      await supabase.from('admin_banner_dismissals')
+        .upsert({ banner: 'birthday', week: weekMondayStr() }, { onConflict: 'banner,week', ignoreDuplicates: true })
+    } catch {}
   }
 
   async function load() {
+    // DB-Wahrheit: wurde das Banner DIESE Woche bereits weggeklickt? (logout-fest)
+    try {
+      const { data: dis } = await supabase.from('admin_banner_dismissals')
+        .select('week').eq('banner', 'birthday').eq('week', weekMondayStr()).maybeSingle()
+      if (dis) { setDismissed(true); return }
+    } catch {}
+
     const { data } = await supabase
       .from('profiles')
       .select('id, first_name, last_name, birthdate')

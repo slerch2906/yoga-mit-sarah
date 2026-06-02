@@ -5,7 +5,9 @@
 > Datei-, Funktions- und Variablennamen. Sie wurde durch systematisches Scannen der Codebase
 > erstellt (nicht aus Annahmen).
 >
-> **Stand:** 2026-05-30 · **Projekt-Verzeichnis:** `C:\Users\Sarah\Desktop\yoga-app`
+> **Stand:** 2026-06-01 · **Projekt-Verzeichnis:** `C:\Users\Sarah\Desktop\yoga-app`
+>
+> _Letzte Aktualisierung 2026-06-01 — siehe [Änderungshistorie](#änderungshistorie) am Ende._
 
 ---
 
@@ -224,6 +226,43 @@ Formel und denselben `lib/session-status`-Zählern. Die Zahlen stimmen **per Kon
 > **Wichtig — VORHOLEN ist origin-bezogen, nicht buchungstag-bezogen:** Das 10-Tage-Fenster
 > wird ab dem **Termin der abgesagten (Origin-)Stunde** gerechnet (`sessionDt ≥ originDt − 10d`),
 > nicht ab dem Tag der Buchung.
+
+### 3.2a Guthaben → Kurs-Credit-Umwandlung beim Admin-Einbuchen
+
+> **Stand 2026-06-01.** Trägt der Admin einen Yogi **mit vorhandenem Guthaben** in einen
+> neuen Kurs ein (`handleEnroll`, `app/admin/yogis/[id]/page.tsx`, Normal-Pfad), wird das
+> **Guthaben 1:1 in Kurs-Credits umgewandelt** — nicht separat verbucht.
+
+**Regel:**
+
+1. Es wird **EIN** Kurs-Credit (`model: 'course'`, `course_id` gesetzt) mit
+   **`total = Anzahl der (zukünftigen, nicht abgesagten) Kursstunden`** angelegt — er deckt
+   **alle** Stunden ab, egal ob durch Guthaben gedeckt oder neu bezahlt.
+2. **Alle** Buchungen des Yogis im Kurs hängen an diesem Kurs-Credit (`recalc_credit_used`
+   setzt `used` = aktive Buchungen).
+3. Der verbrauchte Guthaben-Anteil wird vom Guthaben-Konto **abgezogen**; ein **vollständig**
+   umgewandeltes Guthaben wird **gelöscht** (`DELETE FROM credits`) → es **verschwindet
+   spurlos**. Teil-Umwandlung: nur der verbrauchte Teil verschwindet, der Rest bleibt als
+   Guthaben.
+4. **Reihenfolge:** erst Buchungen an den Kurs-Credit hängen, **dann** Guthaben reduzieren/
+   löschen (sonst FK-Konflikt).
+
+**Folge:** Die umgewandelten Credits sind **vollwertige Kurs-Credits** — ab dann gelten
+**ausschließlich** die Kurs-Credit-Regeln (Ablauf 8 Tage nach Kursende, Rückbuchung bei
+Stunden-Absage als Kurs-Credit, Anzeige als Kurs-Credit in `/meine`). Das ursprüngliche
+Guthaben-Konto und seine 10-Monats-/2-Jahres-Frist sind danach **gegenstandslos**.
+
+**Gilt für BEIDE Guthaben-Arten** — Krankheit (`source: 'illness'`) **und** Admin-Kursabbruch
+(`source: 'cancellation_choice'`): der Einbuch-Code filtert ausschließlich nach
+`model = 'guthaben'`, nicht nach `source`.
+
+**Buchhaltung:** Wird Guthaben verrechnet, gehen eine Admin-Mail `Email.adminGuthabenVerrechnet`
+(„X aus Guthaben verrechnet, Y muss neu bezahlt werden") **und** eine abhakbare
+`admin_notifications`-Aufgabe (`type: 'guthaben_verrechnet'`) raus. Audit:
+`yogi_enrolled_by_admin` mit `guthaben_verrechnet` / `neue_credits`.
+
+> Verifiziert: `tests/e2e/admin/08-admin-guthaben-kurs.spec.ts` (3 Guthaben + 4-Stunden-Kurs →
+> Guthaben gelöscht, Kurs-Credit `total=4/used=4`).
 
 ### 3.3 Status-Modell
 
@@ -746,6 +785,82 @@ für das Löschen gibt:
 - **DSGVO-konform & konsistent:** Da exakt die bestehenden Lösch-/Anonymisierungs-Schritte
   wiederverwendet werden, bleibt das Verhalten identisch zur manuellen Löschung (kein zweiter,
   abweichender Code-Pfad).
+
+---
+
+## Änderungshistorie
+
+### 2026-06-02 — Zeitzonen-Welle 2: durchgängig Europe/Berlin (DST-sicher)
+
+**Grund-Bug:** `new Date().toISOString().split('T')[0]` liefert das **UTC**-Datum.
+Kurz nach Mitternacht Berlin (UTC noch Vortag) wurde dadurch z. B. beim Einbuchen
+eine bereits vergangene Stunde noch als „heute/Zukunft" gewertet → Yogi bekam eine
+Buchung für eine schon gelaufene Stunde („Teilgenommen" statt „—").
+
+**Zentrale Helfer** (`lib/session-time.ts`): `berlinTodayStr()` / `berlinDateStr(d)`
+→ Berlin-Kalenderdatum `YYYY-MM-DD` über `toLocaleDateString('en-CA', { timeZone:
+'Europe/Berlin' })` (Sommer-/Winterzeit automatisch korrekt). Für Stunden-Zeitpunkte
+weiterhin `parseSessionDateTimeBerlin(date,time)`.
+
+**Umgestellt (alle Audit-Fundstellen):**
+- **Einbuchen** (`admin/yogis`): Berlin-Datum **+ minutengenauer** Zukunfts-Filter
+  (`parseSessionDateTimeBerlin(...).getTime() > now`) → heute bereits begonnene
+  Stunden werden **nicht mehr** mitgebucht.
+- **Fristen/Status:** `session-status` (isStarted/isCourseEnded/isPastDay/
+  countActiveFutureUnits), `credit-selector` (Vorhol-/Nachhol-Fenster),
+  `waitlist-offer` 90-Min-Frist (serverseitig) — alle Berlin-verankert, null-sicher.
+- **„heute"-Datumsgrenzen + Wochenfenster + Defaults** in kurse/anwesenheit/meine/
+  einladen/profil/dashboard/credits/sessions/register/rechtliches/nachweise →
+  `berlinTodayStr()`/`berlinDateStr()`.
+- **DB:** `fn_check_yogi_birthdays` + `fn_check_courses_ending_soon`: `CURRENT_DATE`
+  → `(now() AT TIME ZONE 'Europe/Berlin')::date` (Migration `20260602`, Staging + Prod).
+- **Unverändert (korrekt):** alle `expires_at`/`created_at`-Instant-Vergleiche
+  (`> new Date().toISOString()`) — die vergleichen absolute Zeitpunkte, kein Datum.
+
+**Verifiziert:** DST-Beweis (node) — 00:38 Sommer → 2.6., 00:30 Winter → 2.12.;
+alter UTC-Code lag je einen Tag daneben. Build grün. Regressions-Test
+`tests/e2e/62-zeitzonen-berlin.spec.ts`. Commit `94f2f67`.
+
+### 2026-06-01
+
+**Geschäftslogik (Credits & Guthaben):**
+
+- **Guthaben → Kurs-Credit-Umwandlung beim Einbuchen (NEU, maßgeblich):** Trägt der Admin
+  einen Yogi mit Guthaben in einen Kurs ein, wird das Guthaben **1:1 in einen Kurs-Credit
+  umgewandelt** (`total` = alle Kursstunden), alle Buchungen hängen am Kurs-Credit, und das
+  vollständig umgewandelte Guthaben wird **gelöscht (verschwindet spurlos)**. Ab dann gelten
+  reine Kurs-Credit-Regeln. Gilt für **beide** Guthaben-Arten (`illness` + `cancellation_choice`).
+  Details: Abschnitt **3.2a**. Datei `app/admin/yogis/[id]/page.tsx` (`handleEnroll`).
+  Vorher (Bug): Kurs-Credit wurde nur mit dem bezahlten Rest angelegt → Kurs zeigte zu wenige
+  Credits (z. B. 2 statt 5). Daten-Reparatur für betroffenen Yogi (Mindful & Slow) durchgeführt.
+  Test: `tests/e2e/admin/08-admin-guthaben-kurs.spec.ts` (aktualisiert).
+- **Fristen-Klarstellung (unverändert in der Logik, jetzt auch in der Mail sichtbar):**
+  Krankheits-Guthaben **10 Monate**, Kursabbruch-Guthaben **2 Jahre** (siehe Fristen-Matrix 3.1
+  / Sektion 5).
+
+**E-Mail:**
+
+- **Fix „Gültig bis Invalid Date"** in der Krankheits-Austragungs-Mail (`illness_credit`):
+  `fmtDate`/`fmtDateShort` in der Edge Function `send-email` (v85) schneiden den Datums-String
+  jetzt auf `YYYY-MM-DD` (tolerant gegen volle ISO-Timestamps). Die Mail zeigt zusätzlich
+  **„(10 Monate)"** hinter dem Datum. Test `27-email-plausibilitaet` erweitert.
+
+**Admin-UI (reine Anzeige, keine Logik):**
+
+- **Yogi-Detail — zeitlich begrenzte Teilnahme (Range-Einbuchung):** Pille zeigt
+  „Teilnahme nur vom X bis Y", Stunden außerhalb des Zeitraums zeigen „—" statt „Ausgetragen"
+  (Teilnahme-Zeitraum aus credit-verknüpften/aktiven Buchungen). Test `admin/46-…`.
+- **Yogi-Liste — kompakte Karten** im Stil der Yogi-Dashboard-Kacheln (Name fett, Rest klein
+  darunter, `p-3`). Test `admin/47-…`.
+- **Yogi-Detail — Bereich „Letzte Buchungen" entfernt** (redundant: Status steht unter
+  „Eingebuchte Kurse", Historie im aufklappbaren Protokoll). Helfer `getStatusBadge` +
+  `bookingStatusLabel`-Import entfernt; Status-Label-Tests (52-spec) auf das Stunden-Grid umgestellt.
+- **Admin-Kurse — die drei Buttons „Neuer Kurs / Neue Stunde / Neues Event"** stehen jetzt
+  **auch in der Handy-Ansicht nebeneinander** (immer `grid-cols-3`).
+
+> Commits 2026-06-01: `002f388` (Range-Anzeige), `eef1270` (kompakte Karten),
+> `e8dac7f` („Letzte Buchungen" entfernt), `3ce1a15` + `41e9f5f` (Guthaben-Umwandlung),
+> `c3b6156` (Email-Datum-Fix), `d93e80e` (Buttons nebeneinander). Edge `send-email` v85.
 
 ---
 

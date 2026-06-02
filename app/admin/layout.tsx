@@ -21,26 +21,113 @@ const navItems = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<any>(null)
+  // Sarah 2026-06-02: Recovery-State statt stiller Demotion auf /kurse.
+  // Wenn der Profil-Check transient haengt, landen wir NICHT mehr auf der
+  // Yogi-Seite (= Sackgasse ohne Logout), sondern zeigen einen klaren
+  // Wiederherstellungs-Screen mit "Neu laden" + "Neu anmelden".
+  const [authError, setAuthError] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session?.user) { router.push('/login'); return }
-      supabase.from('profiles').select('*').eq('id', session.user.id).single()
-        .then(({ data }) => {
-          if (!data?.is_admin) { router.push('/kurse'); return }
-          setProfile(data)
-        })
-    })
+    let cancelled = false
+
+    // Warum dieser Umbau (Sarah 2026-06-02):
+    //  - Vorher: getSession() (nur lokal, ungeprueft) + .single(). Ein totes
+    //    Token oder ein kurzer RLS-/Netz-Haenger lieferte ein leeres Profil →
+    //    der Code dachte "kein Admin" → router.push('/kurse'). Folge: Admin in
+    //    Yogi-Ansicht OHNE Sidebar und OHNE Logout (Sackgasse).
+    //  - Jetzt:
+    //    1) getUser() validiert SERVERSEITIG → kein blindes Vertrauen auf ein
+    //       lokales (evtl. totes) Token → keine Zombie-Session.
+    //    2) maybeSingle() statt single() → leeres Ergebnis wirft nicht.
+    //    3) Transiente Fehler (Netz/RLS) werden RETRYt und fuehren nie zu
+    //       /kurse, sondern schlimmstenfalls zum Recovery-Screen.
+    //    4) Nur ein EINDEUTIGES is_admin === false leitet auf /kurse.
+    async function check(attempt = 0) {
+      const retryOrRecover = () => {
+        if (cancelled) return
+        if (attempt < 2) { setTimeout(() => check(attempt + 1), 800) }
+        else setAuthError(true)
+      }
+
+      let userRes
+      try {
+        userRes = await supabase.auth.getUser()
+      } catch {
+        retryOrRecover(); return
+      }
+      if (cancelled) return
+
+      const user = userRes?.data?.user
+      const userErr: any = userRes?.error
+      if (!user) {
+        const status = userErr?.status
+        if (status === 401 || status === 403) {
+          // Token wirklich ungueltig → sauber zum Login (lokalen Cache leeren)
+          await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+          if (!cancelled) router.replace('/login')
+          return
+        }
+        // Sonst (z.B. Netz weg) → transient behandeln, NICHT ausloggen
+        retryOrRecover(); return
+      }
+
+      let profRes
+      try {
+        profRes = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
+      } catch {
+        retryOrRecover(); return
+      }
+      if (cancelled) return
+
+      if (profRes?.error) { retryOrRecover(); return }
+      const data = profRes?.data
+      if (!data) { retryOrRecover(); return }
+
+      if (data.is_admin === false) {
+        // Eindeutig kein Admin → Yogi-Ansicht
+        if (!cancelled) router.replace('/kurse')
+        return
+      }
+      // is_admin === true
+      if (!cancelled) setProfile(data)
+    }
+
+    check()
+    return () => { cancelled = true }
   }, [])
 
-  // Immer nur Sidebar auf Desktop, nur BottomNav auf Mobile – nie beides
-  // BottomNav in den einzelnen Pages wird durch isAdmin=true gesteuert
-  // Auf Desktop: Sidebar-Layout, BottomNav in Pages gibt null zurück wenn isLaptop
-  // → Wir steuern das hier zentral: Admin-Layout rendert Sidebar auf Desktop
-  // und auf Mobile nur children (BottomNav kommt aus den Pages)
+  async function handleRelogin() {
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+    router.replace('/login')
+  }
+
+  // Recovery-Screen — funktioniert auf Desktop UND Mobile, immer mit Auswegen.
+  if (authError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6" style={{ background: 'var(--yoga-bg)' }}>
+        <div className="w-full max-w-sm rounded-yoga p-6 text-center" style={{ background: 'var(--yoga-card)', border: '1px solid var(--yoga-border2)' }}>
+          <i className="ti ti-refresh-alert text-3xl" style={{ color: 'var(--yoga-text)', opacity: 0.6 }} />
+          <h2 className="font-bold mt-3 mb-1" style={{ color: 'var(--yoga-text)' }}>Sitzung konnte nicht geladen werden</h2>
+          <p className="text-sm mb-5" style={{ color: 'var(--yoga-text)', opacity: 0.6 }}>
+            Das war nur ein kurzer Verbindungs-Hänger. Deine Daten sind unberührt.
+          </p>
+          <button onClick={() => window.location.reload()}
+            className="w-full rounded-yoga py-2.5 font-bold mb-2 cursor-pointer border-0"
+            style={{ background: 'var(--yoga-text)', color: 'var(--yoga-bg)' }}>
+            Neu laden
+          </button>
+          <button onClick={handleRelogin}
+            className="w-full rounded-yoga py-2.5 font-medium cursor-pointer"
+            style={{ background: 'transparent', color: 'var(--yoga-text)', border: '1px solid var(--yoga-border2)' }}>
+            Neu anmelden
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>

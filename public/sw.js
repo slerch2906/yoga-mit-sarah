@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'yoga-sarah-v8'
+const CACHE_VERSION = 'yoga-sarah-v9'
 const STATIC_ASSETS = ['/manifest.json']
 
 self.addEventListener('install', event => {
@@ -35,6 +35,18 @@ self.addEventListener('fetch', event => {
           return res
         })
       )
+    )
+    return
+  }
+
+  // Sarah 2026-06-02: Navigationen (HTML-Dokument) IMMER frisch ohne HTTP-Cache
+  // laden. Sonst kann iOS/WebKit beim Seitenaufruf ein altes Dokument liefern, das
+  // veraltete JS-Chunks referenziert -> Bugfixes erreichen das Geraet trotz Deploy
+  // nicht ("Hinweis kommt immer wieder"). no-store zwingt zum Netz; Fallback auf
+  // normalen Fetch, falls no-store mal nicht unterstuetzt wird.
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' }).catch(() => fetch(event.request))
     )
     return
   }

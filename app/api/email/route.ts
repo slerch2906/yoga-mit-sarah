@@ -76,8 +76,12 @@ export async function POST(req: NextRequest) {
   if (!callerUserId && !isPublic) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
-  // admin_*-Typ + eingeloggt aber kein Admin → blockieren (Anti-Spoof).
-  if (isAdminType && callerUserId && !callerIsAdmin) {
+  // admin_*-Typ + eingeloggt aber kein Admin → blockieren (Anti-Spoof) — ABER NICHT
+  // bei den als PUBLIC gewhitelisteten admin_*-Typen. Grund: 'admin_new_yogi' wird
+  // genau vom frisch registrierten (eingeloggten, NICHT-Admin) Yogi ausgelöst; die
+  // 403-Sperre hat diese Admin-Benachrichtigung bisher still geschluckt → kam nie an.
+  // (Sarah 2026-06-02 Fix.)
+  if (isAdminType && callerUserId && !callerIsAdmin && !isPublic) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 

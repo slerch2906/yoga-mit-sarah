@@ -28,6 +28,7 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   yogi_anonymized_dsgvo:          { label: 'Yogi anonymisiert (DSGVO)',      color: 'text-yoga-red-text' },
   legal_accepted:                 { label: 'AGB bestätigt',                  color: 'text-yoga-green-text' },
   waitlist_joined:                { label: 'Warteliste eingetragen',         color: 'text-yoga-amber-text' },
+  waitlist_left:                  { label: 'Warteliste verlassen (selbst)',  color: 'text-yoga-amber-text' },
   waitlist_promoted:              { label: 'Warteliste nachgerückt',         color: 'text-yoga-green-text' },
   waitlist_offer_late_accepted:   { label: 'Warteliste — Spät-Angebot angenommen', color: 'text-yoga-green-text' },
   // Fall 3 (Sarah 2026-05-29): automatisches Entfernen von ANDEREN Wartelisten,

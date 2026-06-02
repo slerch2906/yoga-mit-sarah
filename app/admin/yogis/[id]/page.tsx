@@ -1173,6 +1173,10 @@ export default function AdminYogiDetailPage() {
         const cn = courseName || d.course_name
         return { text: `Yogi hat sich auf Warteliste eingetragen`, subject: termin || (cn ? `· ${cn}` : '') }
       }
+      case 'waitlist_left': {
+        const cn = courseName || d.course_name
+        return { text: `Yogi hat sich selbst von der Warteliste ausgetragen`, subject: termin || (cn ? `· ${cn}` : '') }
+      }
       case 'waitlist_promoted': {
         const cn = courseName || d.course_name
         return { text: `Yogi wurde automatisch von Warteliste nachgerückt`, subject: termin || (cn ? `· ${cn}` : '') }

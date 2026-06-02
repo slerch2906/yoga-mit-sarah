@@ -5,9 +5,9 @@
 > Datei-, Funktions- und Variablennamen. Sie wurde durch systematisches Scannen der Codebase
 > erstellt (nicht aus Annahmen).
 >
-> **Stand:** 2026-06-01 · **Projekt-Verzeichnis:** `C:\Users\Sarah\Desktop\yoga-app`
+> **Stand:** 2026-06-02 · **Projekt-Verzeichnis:** `C:\Users\Sarah\Desktop\yoga-app`
 >
-> _Letzte Aktualisierung 2026-06-01 — siehe [Änderungshistorie](#änderungshistorie) am Ende._
+> _Letzte Aktualisierung 2026-06-02 (Live-Bugfixes, zentrale Hinweis-Persistenz, PWA-Update-Stabilität, Prozess: Staging-first) — siehe [Änderungshistorie](#änderungshistorie) am Ende._
 
 ---
 
@@ -789,6 +789,61 @@ für das Löschen gibt:
 ---
 
 ## Änderungshistorie
+
+### 2026-06-02 (Nachmittag) — Live-Bugfixes + zentrale Hinweis-Persistenz + Update-Stabilität
+
+Wave direkt vor Go-Live. Reihenfolge spiegelt die Commits.
+
+**1) KRITISCH — Kurs-Anlegen crasht (`berlinDateStr is not defined`).** Regression aus
+Zeitzonen-Welle 2: `app/admin/kurse/page.tsx` nutzte `berlinDateStr()` in
+`getDatesForCourse()`, ohne es zu importieren → weiße Seite beim Anlegen/Bearbeiten
+eines Kurses mit Zukunfts-Enddatum. **Nicht vom Build gefangen**, weil
+`next.config.js` `typescript.ignoreBuildErrors:true` setzt. Fix: Import ergänzt.
+Verifikation neu: `tsc --noEmit` gefiltert auf TS2304/TS2552 (Cannot-find-name) in
+app/lib/components + Import/Aufruf-Guard in `62-zeitzonen-berlin.spec.ts`. Commits
+`c301aca`, `5f66108`.
+
+**2) Einbuchen über „Yogi zu bestehendem Kurs hinzufügen" buchte begonnene Stunde mit.**
+`addYogiToCourse` (admin/kurse) filterte Sessions nur per `.gte('date', berlinTodayStr())`
+— **ohne** den minutengenauen Berlin-Filter (in Welle 2 übersehen). Eine heute bereits
+gestartete Stunde wurde gebucht (zählte als „Teilgenommen" + in den Credit). Fix:
+gleicher `parseSessionDateTimeBerlin(...).getTime() > now`-Filter wie die Yogi-Detail-
+Pfade. Prod-Altdaten bereinigt. Test in `62-zeitzonen-berlin.spec.ts`. Commit `0abed02`.
+
+**3) Wegklickbare Hinweise verschwanden nicht dauerhaft → EIN zentraler Mechanismus.**
+Mehrere Banner merkten sich das Wegklicken nur in `localStorage` → beim Logout
+(`localStorage.clear()`) oder auf anderem Gerät/Browser kamen sie wieder. Lösung:
+- **Tabelle `user_dismissals(user_id, key)`** (RLS: nur eigene Zeilen) + Hook
+  `lib/hint-dismissals.ts` (`useHintDismissals` → `isDismissed/dismiss`), DB-persistent,
+  localStorage nur Cache. Umgestellt: **Geburtstags-Banner** (`birthday:<Woche>`),
+  **„Sarah trägt dich ein"** (`new_yogi`), **Credit-Ablauf-Warnung** (`credit_expiry:<id>`).
+  UpdateBanner bleibt gerätelokal; Onboarding ist bereits DB-gestützt. Backfill in der
+  Migration. Commit `cea9f5d`, Test `63-hint-dismissals.spec.ts`.
+- **ROOT-CAUSE-FIX:** `user_dismissals` (und die zuvor angelegte `admin_banner_dismissals`)
+  hatten **kein `GRANT SELECT, INSERT` für die `authenticated`-Rolle** → Postgres blockte
+  jeden Client-Zugriff **vor** der RLS-Policy → Wegklicken wurde nie gespeichert/gelesen.
+  Lesson learned: Tabellen via `apply_migration` (MCP) bekommen **nicht** automatisch
+  anon/authenticated-Grants — künftig explizit setzen. Migration
+  `20260602_user_dismissals_grants.sql` (Staging + Prod), als eingeloggter Nutzer
+  verifiziert. Commit `8e0653c`.
+
+**4) PWA-Update-Stabilität (Fixes erreichten Geräte nicht).**
+- **Automatischer Update-Hinweis**: `UpdateBanner` vergleicht jetzt die eingebaute
+  `NEXT_PUBLIC_BUILD_SHA` mit der live deployten (`/api/version`). Bei Abweichung
+  erscheint „Neue Version verfügbar" **automatisch** (zusätzlich zum manuellen Toggle),
+  self-resolving nach Reload. Commit `4f0f2aa`.
+- **Service Worker v9**: Navigationen (HTML) werden mit `cache:'no-store'` geladen →
+  iOS/WebKit kann kein altes Dokument mehr liefern; jeder Start referenziert das
+  aktuelle Bundle. `CACHE_VERSION` bump erzwingt SW-Update. Commit `521f34b`.
+
+**Bestätigt (alle Hinweis-/Benachrichtigungs-Wege geprüft, Grants + RLS):**
+`user_dismissals` (behoben), `yogi_notifications` (Kurs-/Event-Abbruch, `dismissed_at`),
+`admin_notifications` (Admin-Feed inkl. Kursabbruch/Auszahlen, `read=true`),
+`course_cancellation_responses` (Auszahl-Aufgaben, datengetrieben). Kein Hinweis offen.
+
+**Prozess ab hier:** keine direkten Prod-Änderungen mehr — Build + Test auf **Staging**,
+erst nach erfolgreichem Test Migration/Deploy auf **Prod**. Staging und Prod sind nach
+den heutigen Migrationen schema-gleich.
 
 ### 2026-06-02 — Zeitzonen-Welle 2: durchgängig Europe/Berlin (DST-sicher)
 

@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Email } from '@/lib/email'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
+import { berlinTodayStr } from '@/lib/session-time'
 
 function EinladenInner() {
   const [courses, setCourses] = useState<any[]>([])
@@ -82,7 +83,7 @@ function EinladenInner() {
   function getRemainingUnits(course: any) {
     if (course.is_single) return 1
     // Immer echte zukünftige Sessions zählen
-    const today = new Date().toISOString().split('T')[0]
+    const today = berlinTodayStr()
     const futureSessions = (course.sessions || []).filter(
       (s: any) => s.date >= today && !s.is_cancelled
     )
@@ -94,7 +95,7 @@ function EinladenInner() {
   // hat >= max_spots (aktive Buchungen + externe Teilnehmer), wie der Buchungs-Trigger.
   function isCourseFull(course: any) {
     if (!course.max_spots || course.max_spots === 0) return false
-    const today = new Date().toISOString().split('T')[0]
+    const today = berlinTodayStr()
     const future = (course.sessions || []).filter((s: any) => s.date >= today && !s.is_cancelled)
     if (future.length === 0) return false
     const maxOcc = Math.max(0, ...future.map((s: any) =>

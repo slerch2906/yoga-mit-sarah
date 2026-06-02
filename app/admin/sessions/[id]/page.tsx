@@ -11,7 +11,7 @@ import { escapeForOrFilter } from '@/lib/search-sanitize'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 // Welle S3/Pattern 3 (Sarah 2026-05-27): defensive Date-Parsing.
-import { parseSessionDateTime } from '@/lib/session-time'
+import { parseSessionDateTime, berlinTodayStr } from '@/lib/session-time'
 
 export default function AdminSessionPage() {
   const { id } = useParams<{ id: string }>()
@@ -1214,7 +1214,7 @@ export default function AdminSessionPage() {
                   <label className="field-label">Datum</label>
                   <input type="date" className="field-input" value={lateReplacementDate}
                     onChange={e => setLateReplacementDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]} />
+                    min={berlinTodayStr()} />
                 </div>
                 <div>
                   <label className="field-label">Uhrzeit</label>
@@ -1272,7 +1272,7 @@ export default function AdminSessionPage() {
                           <label className="field-label">Datum</label>
                           <input type="date" className="field-input" value={replacementDate}
                             onChange={e => setReplacementDate(e.target.value)}
-                            min={new Date().toISOString().split('T')[0]} />
+                            min={berlinTodayStr()} />
                         </div>
                         <div>
                           <label className="field-label">Uhrzeit</label>

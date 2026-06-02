@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Email } from '@/lib/email'
 import { isActive, isStarted, countActiveFutureUnits, isExcluded, cancelledActorLabel } from '@/lib/session-status'
+import { berlinTodayStr, parseSessionDateTimeBerlin } from '@/lib/session-time'
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
@@ -36,7 +37,7 @@ export default function AdminYogiDetailPage() {
   // attestConfirmed = Pflicht-Checkbox "Yogi hat Attest vorgelegt".
   // illnessPreview = Live-Berechnung (Reststunden + Vorhol-Anzahl + Termine).
   const [cancelIllnessFor, setCancelIllnessFor] = useState<{ courseId: string; courseName: string; enrollmentId: string } | null>(null)
-  const [attestDate, setAttestDate] = useState<string>(new Date().toISOString().split('T')[0])
+  const [attestDate, setAttestDate] = useState<string>(berlinTodayStr())
   const [attestConfirmed, setAttestConfirmed] = useState(false)
   const [illnessPreview, setIllnessPreview] = useState<{ hoursCredited: number; sessions: { date: string; time_start: string }[]; vorholCount: number } | null>(null)
   const [illnessSubmitting, setIllnessSubmitting] = useState(false)
@@ -220,7 +221,7 @@ export default function AdminYogiDetailPage() {
     // Sarah-Wunsch 2026-05-25: Wartelisten der freigewordenen Stunden
     // automatisch nachruecken. Zuerst session_ids der zukuenftigen
     // Buchungen sammeln, BEVOR sie geloescht werden.
-    const today = new Date().toISOString().split('T')[0]
+    const today = berlinTodayStr()
     const { data: futureActiveBookings } = await supabase.from('bookings')
       .select('session_id, session:sessions!bookings_session_id_fkey(date)')
       .eq('user_id', id).eq('status', 'active')
@@ -359,15 +360,23 @@ export default function AdminYogiDetailPage() {
 
     // Range-Mode: Guthaben-Pfad überspringen (Edge-Case, manuell handhaben)
     if (enrollRangeMode) {
-      // Sessions ab heute, sortiert nach Datum
+      // Sessions ab heute (Berlin-Datum), sortiert nach Datum.
+      // Zeitzonen-Welle 2 (Sarah 2026-06-02): berlinTodayStr() statt UTC-Datum.
       const { data: allSessions } = await supabase.from('sessions')
-        .select('id, date, is_cancelled, cancel_reason')
+        .select('id, date, time_start, is_cancelled, cancel_reason')
         .eq('course_id', selectedCourseId)
-        .gte('date', new Date().toISOString().split('T')[0])
+        .gte('date', berlinTodayStr())
         .order('date')
-      // Nur aktive (nicht excluded, nicht admin-cancelled) zählen als Einheit
+      // Nur aktive (nicht excluded, nicht admin-cancelled) zählen als Einheit —
+      // UND deren Startzeit (Berlin, minutengenau) noch in der Zukunft liegt.
+      // So werden heute bereits BEGONNENE Stunden nicht mehr mitgebucht.
+      const nowMsEnroll = Date.now()
       const activeSessions = (allSessions || [])
         .filter((s: any) => s.cancel_reason !== 'excluded' && !s.is_cancelled)
+        .filter((s: any) => {
+          const st = parseSessionDateTimeBerlin(s.date, s.time_start)
+          return st ? st.getTime() > nowMsEnroll : true
+        })
       const targetSessions = activeSessions.slice(fromUnit - 1, untilUnit!)
       const rangeCount = targetSessions.length
 
@@ -435,13 +444,20 @@ export default function AdminYogiDetailPage() {
     }
 
     // === Normal-Pfad: Guthaben automatisch verrechnen wenn vorhanden ===
-    // Sessions laden (sortiert nach Datum)
-    const { data: sessionsData } = await supabase.from('sessions').select('id, date')
+    // Sessions laden (sortiert nach Datum). Zeitzonen-Welle 2 (Sarah 2026-06-02):
+    // Berlin-Datum (berlinTodayStr) statt UTC, UND nur Stunden, deren Startzeit
+    // (Berlin, minutengenau) noch in der Zukunft liegt — heute bereits begonnene
+    // Stunden werden NICHT mehr mitgebucht.
+    const { data: sessionsData } = await supabase.from('sessions').select('id, date, time_start')
       .eq('course_id', selectedCourseId)
-      .gte('date', new Date().toISOString().split('T')[0])
+      .gte('date', berlinTodayStr())
       .eq('is_cancelled', false)
       .order('date')
-    const sessionList = sessionsData || []
+    const nowMsEnrollN = Date.now()
+    const sessionList = (sessionsData || []).filter((s: any) => {
+      const st = parseSessionDateTimeBerlin(s.date, s.time_start)
+      return st ? st.getTime() > nowMsEnrollN : true
+    })
     const actualCount = sessionList.length
 
     // Verfügbares Guthaben (auto-verrechnen, kein Confirm-Dialog mehr)
@@ -800,7 +816,7 @@ export default function AdminYogiDetailPage() {
       setCancelIllnessFor(null)
       setAttestConfirmed(false)
       setIllnessPreview(null)
-      setAttestDate(new Date().toISOString().split('T')[0])
+      setAttestDate(berlinTodayStr())
       loadData()
       alert(`Yogi krankheitsbedingt ausgetragen.\n${hoursCredited} Stunden Guthaben gutgeschrieben (gültig 10 Monate).${vorholCancelled > 0 ? `\n${vorholCancelled} Vorhol-/Nachholbuchung${vorholCancelled === 1 ? '' : 'en'} storniert.` : ''}`)
     } catch (e: any) {
@@ -1193,7 +1209,7 @@ export default function AdminYogiDetailPage() {
     // der Vergangenheit). Sonst sieht der Admin eine "0 frei"-Karte für einen
     // Kurs in dem der Yogi gar nicht mehr ist — verwirrend. Guthaben (illness
     // & cancellation_choice) bleiben sichtbar.
-    const todayStr = new Date().toISOString().slice(0, 10)
+    const todayStr = berlinTodayStr()
     const endedCourseIds = new Set(
       enrollments
         .filter((e: any) => e.end_date && e.end_date <= todayStr)
@@ -1544,7 +1560,7 @@ export default function AdminYogiDetailPage() {
           // (enrollment.end_date <= heute, end_reason='illness') werden
           // hier NICHT mehr angezeigt. Der Kurs ist fuer sie beendet — sie
           // sehen stattdessen ihr Krankheits-Guthaben in der Credits-Sektion.
-          const todayStr = new Date().toISOString().slice(0, 10)
+          const todayStr = berlinTodayStr()
           const activeEnrollments = enrollments.filter((e: any) =>
             e.course?.is_active !== false
             && e.course?.is_cancelled !== true
@@ -1735,7 +1751,7 @@ export default function AdminYogiDetailPage() {
                         courseName: e.course?.name || '',
                         enrollmentId: e.id,
                       })
-                      setAttestDate(new Date().toISOString().split('T')[0])
+                      setAttestDate(berlinTodayStr())
                       setAttestConfirmed(false)
                     }}
                       className="w-full text-xs text-yoga-amber-text bg-yoga-amber-bg border border-yoga-amber-text/30 rounded-yoga py-2 cursor-pointer font-semibold hover:opacity-80">

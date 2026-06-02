@@ -9,6 +9,7 @@ import { getCurrentAgbVersion, type AgbVersion } from '@/lib/agb-version'
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
+import { berlinTodayStr } from '@/lib/session-time'
 
 function InstallButton() {
   const [installPrompt, setInstallPrompt] = useState<any>(null)
@@ -379,7 +380,7 @@ export default function ProfilPage() {
     // entfernen, damit Plätze für andere Yogis (Wartelisten) frei werden.
     // 3a) Alle aktiven Buchungen mit Session-Daten laden, dann clientseitig auf zukünftige
     //     Sessions filtern. PostgREST kann nicht direkt auf nested session.date filtern.
-    const today = new Date().toISOString().split('T')[0]
+    const today = berlinTodayStr()
     const { data: allActiveBookings } = await supabase.from('bookings')
       .select('id, session_id, session:sessions!bookings_session_id_fkey(date, time_start)')
       .eq('user_id', user.id).eq('status', 'active')
@@ -970,7 +971,7 @@ export default function ProfilPage() {
                   <input className="field-input flex-1" value={editValue}
                     onChange={e => setEditValue(e.target.value)}
                     type={f.key === 'email' ? 'email' : f.key === 'birthdate' ? 'date' : 'text'}
-                    max={f.key === 'birthdate' ? new Date().toISOString().split('T')[0] : undefined} />
+                    max={f.key === 'birthdate' ? berlinTodayStr() : undefined} />
                   <button onClick={() => handleSave(f.key)}
                     className="text-sm bg-yoga-text text-yoga-bg rounded-full px-3 py-1.5 font-semibold">Speichern</button>
                   <button onClick={() => setEditing(null)} className="text-sm text-yoga-text/50">Abbrechen</button>

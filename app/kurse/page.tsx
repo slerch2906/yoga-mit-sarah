@@ -13,7 +13,7 @@ import AdminAnnouncementBubble from '@/components/AdminAnnouncementBubble'
 import YogiCreditExpiryBanner from '@/components/YogiCreditExpiryBanner'
 import YogiCancelNotifications from '@/components/YogiCancelNotifications'
 // Welle S3/Pattern 3 (Sarah 2026-05-27): defensive Date-Parsing.
-import { parseSessionDateTime } from '@/lib/session-time'
+import { parseSessionDateTime, berlinDateStr } from '@/lib/session-time'
 import OnboardingTour from '@/components/OnboardingTour'
 
 const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
@@ -140,8 +140,8 @@ export default function KursePage() {
     const { data, error } = await supabase
       .from('sessions')
       .select(`id, date, time_start, duration_min, session_type, name, location, description, max_spots, image_url, price_eur, bring_along, difficulty, external_participants_count, course:courses(id, name, max_spots, difficulty, is_free, image_url, location, description, bring_along)`)
-      .gte('date', weekStart.toISOString().split('T')[0])
-      .lte('date', weekEnd.toISOString().split('T')[0])
+      .gte('date', berlinDateStr(weekStart))
+      .lte('date', berlinDateStr(weekEnd))
       .eq('is_cancelled', false)
       .order('date').order('time_start')
 

@@ -15,7 +15,7 @@ import WeekPickerPopover from '@/components/WeekPickerPopover'
 import AdminAnnouncementBubble from '@/components/AdminAnnouncementBubble'
 import AdminBirthdayBanner from '@/components/AdminBirthdayBanner'
 // Welle S3/Pattern 3 (Sarah 2026-05-27): defensive Date-Parsing.
-import { parseSessionDateTime } from '@/lib/session-time'
+import { parseSessionDateTime, berlinTodayStr, berlinDateStr } from '@/lib/session-time'
 import { sessionDisplayName } from '@/lib/session-display'
 // Welle Akteur-Logik (Sarah 2026-05-29): Ausgetragen (Admin) vs. Abgemeldet (selbst)
 import { cancelledActorLabel } from '@/lib/session-status'
@@ -134,8 +134,8 @@ export default function AdminDashboard() {
       .select('*, course:courses(name, max_spots, is_active), bookings!bookings_session_id_fkey(id, status, user_id, profile:profiles(first_name, last_name))')
       // Welle 2.6: session.name + session_type sind via `*` mit dabei — Display-Name
       // bevorzugt session.name (SYS-Container-Name würde sonst durchschlagen).
-      .gte('date', weekStart.toISOString().split('T')[0])
-      .lte('date', weekEnd.toISOString().split('T')[0])
+      .gte('date', berlinDateStr(weekStart))
+      .lte('date', berlinDateStr(weekEnd))
       .order('date').order('time_start')
 
     // Ersatzstunden-Mapping: welche Sessions sind die Ersatzstunden für eine abgesagte?
@@ -1030,7 +1030,7 @@ export default function AdminDashboard() {
                       <label className="field-label">Datum</label>
                       <input className="field-input text-sm" type="date" value={lateReplacementDate}
                         onChange={e => setLateReplacementDate(e.target.value)}
-                        min={new Date().toISOString().split('T')[0]} />
+                        min={berlinTodayStr()} />
                     </div>
                     <div>
                       <label className="field-label">Uhrzeit</label>
@@ -1289,7 +1289,7 @@ export default function AdminDashboard() {
                       <label className="field-label">Datum</label>
                       <input className="field-input" type="date" value={replacementDate}
                         onChange={e => setReplacementDate(e.target.value)}
-                        min={new Date().toISOString().split('T')[0]} />
+                        min={berlinTodayStr()} />
                     </div>
                     <div>
                       <label className="field-label">Uhrzeit</label>

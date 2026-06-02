@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
+import { berlinTodayStr } from '@/lib/session-time'
 
 // Sarah-Wunsch 2026-05-25: Quick-Credit-Form ueberarbeitet.
 //  - "Kurs" als Modell raus (macht Sarah ueber "In Kurs einbuchen")
@@ -205,7 +206,7 @@ function CreditsVergebenInner() {
                 <div className="mt-2">
                   <input className="field-input" type="date" value={customExpiry}
                     onChange={e => setCustomExpiry(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]} required />
+                    min={berlinTodayStr()} required />
                 </div>
               )}
             </div>

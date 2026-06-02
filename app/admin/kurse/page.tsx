@@ -7,6 +7,7 @@ import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import { selectCreditForBooking } from '@/lib/credit-selector'
 import { escapeForOrFilter } from '@/lib/search-sanitize'
 import { isCourseEnded } from '@/lib/session-status'
+import { berlinTodayStr } from '@/lib/session-time'
 import { createClient } from '@/lib/supabase/client'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
@@ -41,7 +42,8 @@ function getDatesForCourse(weekday: string, dateStart: string, dateEnd: string, 
   let current = new Date(dateStart)
   while (current.getDay() !== targetDay) current.setDate(current.getDate() + 1)
   while (current <= end) {
-    const dateStr = current.toISOString().split('T')[0]
+    // Zeitzonen-Welle 2: berlinDateStr statt toISOString (DST-sicher, kein UTC-Off-by-one)
+    const dateStr = berlinDateStr(current)
     if (!excludedDates.includes(dateStr)) dates.push(dateStr)
     current.setDate(current.getDate() + 7)
   }
@@ -223,7 +225,7 @@ export default function AdminKursePage() {
       // Stunden-Gäste, keine Kurs-Teilnehmer. Sarah-Klarstellung 21.5.
       // Sarah-BugFix 2026-05-26: beendete enrollments (z.B. krankheitsbedingt
       // ausgetragen) belegen KEINEN Platz mehr.
-      const todayStr = new Date().toISOString().slice(0, 10)
+      const todayStr = berlinTodayStr()
       const enrolledCount = (c.enrollments || []).filter((e: any) =>
         !e.end_date || e.end_date > todayStr
       ).length
@@ -468,7 +470,7 @@ export default function AdminKursePage() {
           image_url: courseData.image_url,
         }).eq('id', editCourse.id)
         // Zukünftige Sessions: Uhrzeit + Dauer aktualisieren
-        const today = new Date().toISOString().split('T')[0]
+        const today = berlinTodayStr()
         await supabase.from('sessions').update({
           time_start: courseData.time_start,
           duration_min: courseData.duration_min,
@@ -500,7 +502,7 @@ export default function AdminKursePage() {
         // der ZUKUENFTIGEN Sessions automatisch nachruecken (so viele wie
         // jetzt Platz ist). promoteWaitlistOrOfferLate macht das pro Session.
         if (spotsIncreased) {
-          const today = new Date().toISOString().split('T')[0]
+          const today = berlinTodayStr()
           const { data: futureSessions } = await supabase.from('sessions')
             .select('id').eq('course_id', editCourse.id)
             .eq('is_cancelled', false).gte('date', today)
@@ -796,7 +798,7 @@ export default function AdminKursePage() {
     if (!cancellingCourse || !cancelReason || !cancelRefundMode) return
     setDoingCancelCourse(true)
 
-    const today = new Date().toISOString().split('T')[0]
+    const today = berlinTodayStr()
 
     // 1) Zukünftige Sessions abbrechen
     const { data: futureSessions } = await supabase.from('sessions')
@@ -921,7 +923,7 @@ export default function AdminKursePage() {
         // beim Kursabbruch ausgetragen — ihr Anspruch steckt ja bereits in der
         // vollen remainingCount-Gutschrift oben. Nur ZUKÜNFTIGE austragen
         // (vergangene Stunden wurden bereits besucht). Freie Plätze → Warteliste.
-        const todayIso = new Date().toISOString().split('T')[0]
+        const todayIso = berlinTodayStr()
         const { data: creditBookings } = await supabase.from('bookings')
           .select('id, session:sessions!bookings_session_id_fkey(id, date)')
           .eq('user_id', prof.id).eq('status', 'active').in('credit_id', cIds)
@@ -1140,7 +1142,7 @@ export default function AdminKursePage() {
     }
 
     // Ab hier: alle Schutz-Bedingungen erfüllt → Standard-Confirm
-    const today = new Date().toISOString().split('T')[0]
+    const today = berlinTodayStr()
     const futureSessions = (courseObj.sessions || [])
       .filter((s: any) => s.date >= today && !s.is_cancelled)
     const enrolledCount = courseObj.participant_count
@@ -1266,7 +1268,7 @@ export default function AdminKursePage() {
             email: b.profile.email,
             firstName: b.profile.first_name || 'Yogi',
             courseName: name,
-            date: new Date().toISOString().split('T')[0],
+            date: berlinTodayStr(),
             timeStart: '00:00',
             reason: `Der Kurs "${name}" wurde gelöscht.`,
           })
@@ -1314,7 +1316,7 @@ export default function AdminKursePage() {
   // Rollover: 3 Wochen vor Kursende = anzeigen
   function getCourseStatus(course: any): string {
     if (course.is_cancelled) return 'abgebrochen'
-    const today = new Date().toISOString().split('T')[0]
+    const today = berlinTodayStr()
     if (!course.is_active) return 'beendet'
     if (course.date_start > today) return 'geplant'
     // Sarah-Regel 2026-05-28: beendet ab Start der letzten Stunde (date_end +
@@ -1356,7 +1358,7 @@ export default function AdminKursePage() {
     // Sessions laden (sortiert)
     const { data: futureSessions } = await supabase.from('sessions')
       .select('id, date').eq('course_id', course.id)
-      .gte('date', new Date().toISOString().split('T')[0]).eq('is_cancelled', false)
+      .gte('date', berlinTodayStr()).eq('is_cancelled', false)
       .order('date')
     const sessionList = futureSessions || []
     const sessionCount = sessionList.length
@@ -1576,7 +1578,7 @@ export default function AdminKursePage() {
     // ausgetragen) sind KEINE aktiven Teilnehmer mehr — exakt dieselbe
     // Filter-Regel wie der Kurskarten-Counter (loadData), damit die
     // Teilnehmer-Anzeige ueber alle Quellen hinweg konsistent ist.
-    const todayStr = new Date().toISOString().slice(0, 10)
+    const todayStr = berlinTodayStr()
     const activeEnrollments = (data || []).filter((e: any) => !e.end_date || e.end_date > todayStr)
     const members = (activeEnrollments).map((e: any) => ({
       ...e.profile,
@@ -2596,7 +2598,7 @@ export default function AdminKursePage() {
                       <button onClick={async () => {
                         // Kurs reaktivieren + zukünftige Sessions reaktivieren
                         await supabase.from('courses').update({ is_active: true, is_cancelled: false }).eq('id', c.id)
-                        const today = new Date().toISOString().split('T')[0]
+                        const today = berlinTodayStr()
                         await supabase.from('sessions').update({ is_cancelled: false })
                           .eq('course_id', c.id).gte('date', today)
                         loadData()
@@ -3233,13 +3235,13 @@ export default function AdminKursePage() {
                 <label className="field-label">Startdatum</label>
                 <input type="date" className="field-input" value={folgekursDateStart}
                   onChange={e => setFolgekursDateStart(e.target.value)}
-                  min={new Date().toISOString().split('T')[0]} />
+                  min={berlinTodayStr()} />
               </div>
               <div>
                 <label className="field-label">Enddatum</label>
                 <input type="date" className="field-input" value={folgekursDateEnd}
                   onChange={e => setFolgekursDateEnd(e.target.value)}
-                  min={folgekursDateStart || new Date().toISOString().split('T')[0]} />
+                  min={folgekursDateStart || berlinTodayStr()} />
               </div>
             </div>
 

@@ -7,6 +7,7 @@ import { Email } from '@/lib/email'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
 import { sessionDisplayName } from '@/lib/session-display'
+import { berlinTodayStr } from '@/lib/session-time'
 
 function AnwesenheitInner() {
   const [session, setSession] = useState<any>(null)
@@ -23,7 +24,7 @@ function AnwesenheitInner() {
   async function loadData() {
     // Wenn keine Session-ID, zeige heutige Sessions
     if (!sessionId) {
-      const today = new Date().toISOString().split('T')[0]
+      const today = berlinTodayStr()
       const { data: sessions } = await supabase
         .from('sessions')
         .select('*, course:courses(name, max_spots)')

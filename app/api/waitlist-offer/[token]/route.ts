@@ -9,6 +9,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { parseSessionDateTimeBerlin } from '@/lib/session-time'
 
 export async function POST(
   req: NextRequest,
@@ -47,8 +48,10 @@ export async function POST(
   }
 
   // 2) Bereits abgelaufen? (Session-Start vorbei)
-  const sessionStart = new Date(`${(offer as any).session?.date}T${(offer as any).session?.time_start}`).getTime()
-  if (Date.now() >= sessionStart || (offer as any).session?.is_cancelled) {
+  // Berlin-verankert (Zeitzonen-Welle 2): Wandkalender-Zeit korrekt in UTC-Instant.
+  // Bei null (kaputte Werte) konservativ wie bisher → Angebot zulassen (kein Cutoff).
+  const sessionStart = parseSessionDateTimeBerlin((offer as any).session?.date, (offer as any).session?.time_start)?.getTime()
+  if ((sessionStart != null && Date.now() >= sessionStart) || (offer as any).session?.is_cancelled) {
     return NextResponse.json({ error: 'expired' }, { status: 410 })
   }
 

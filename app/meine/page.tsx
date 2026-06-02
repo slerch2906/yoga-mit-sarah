@@ -10,7 +10,7 @@ import BottomNav from '@/components/layout/BottomNav'
 import { getCurrentAgbVersion } from '@/lib/agb-version'
 import { sessionDisplayName } from '@/lib/session-display'
 // Welle S3/Pattern 3 (Sarah 2026-05-27): defensive Date-Parsing.
-import { parseSessionDateTime } from '@/lib/session-time'
+import { parseSessionDateTime, berlinTodayStr, berlinDateStr } from '@/lib/session-time'
 
 export default function MeinePage() {
   const [profile, setProfile] = useState<any>(null)
@@ -82,7 +82,7 @@ export default function MeinePage() {
       // "Beendete Kurse"-Sektion sichtbar — unabhängig davon, ob noch ein freier
       // Credit existiert. (Vorher wurden sie ausgeblendet, sobald kein Credit mehr
       // frei war.) So sieht der Yogi sein Nachhol-Fenster zuverlässig bis zum Ende.
-      const eightDaysAgoIso = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      const eightDaysAgoIso = berlinDateStr(new Date(Date.now() - 8 * 24 * 60 * 60 * 1000))
       // Sarah-Regel 2026-05-28: Kurs gilt als "aktiv" solange die letzte Stunde
       // noch nicht begonnen hat (date_end + course.time_start), nicht erst am
       // Tagesende.
@@ -426,7 +426,7 @@ export default function MeinePage() {
             angezeigt. Yogi sieht stattdessen sein Krankheits-Guthaben in der
             Credits-Sektion und kann damit einen neuen Kurs buchen. */}
         {(() => {
-          const todayStr = new Date().toISOString().slice(0, 10)
+          const todayStr = berlinTodayStr()
           const activeEnrollments = enrollments.filter((e: any) =>
             !e.end_date || e.end_date > todayStr
           )

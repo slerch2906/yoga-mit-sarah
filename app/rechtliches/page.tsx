@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { getCurrentUser } from '@/lib/auth'
 import { Email } from '@/lib/email'
 import { getCurrentAgbVersion, getAgbChangelogSince, type AgbVersion } from '@/lib/agb-version'
+import { berlinDateStr } from '@/lib/session-time'
 
 // Einfaches PDF als Base64 via HTML-Canvas-Trick mit jsPDF-ähnlichem Ansatz
 // Wir bauen das PDF manuell als minimales PDF-Binary
@@ -14,7 +15,7 @@ import { getCurrentAgbVersion, getAgbChangelogSince, type AgbVersion } from '@/l
 // Die API-Route prueft den Bearer-Token serverseitig.
 async function uploadToEdgeFunction(fullName: string, email: string, acceptedAt: string, accessToken: string): Promise<void> {
   try {
-    const datePart = new Date(acceptedAt).toISOString().split('T')[0]
+    const datePart = berlinDateStr(new Date(acceptedAt))
     const safeName = fullName.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_')
     const filename = `AGB_${safeName}_${datePart}.pdf`
 

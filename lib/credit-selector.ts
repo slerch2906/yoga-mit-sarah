@@ -13,6 +13,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { parseSessionDateTimeBerlin } from './session-time'
 
 const TEN_DAYS_MS = 10 * 24 * 60 * 60 * 1000
 const EIGHT_DAYS_MS = 8 * 24 * 60 * 60 * 1000
@@ -40,7 +41,11 @@ export async function selectCreditForBooking(
   sessionDate: string,           // YYYY-MM-DD
   sessionTimeStart: string,      // HH:MM[:SS]
 ): Promise<CreditPickResult> {
-  const sessionDt = new Date(`${sessionDate}T${sessionTimeStart}`).getTime()
+  // Berlin-verankert (Zeitzonen-Welle 2): Wandkalender-Zeit korrekt in UTC-Instant.
+  // Muss zur Berlin-Verankerung von originDt (Window-Check) konsistent sein, sonst
+  // entsteht ein DST-Versatz im 10d/8d-Vergleich. Fallback naiv, falls null.
+  const sessionDt = (parseSessionDateTimeBerlin(sessionDate, sessionTimeStart)
+    ?? new Date(`${sessionDate}T${sessionTimeStart}`)).getTime()
   const nowIso = new Date().toISOString()
   const sessionIso = new Date(sessionDt).toISOString()
 
@@ -178,8 +183,9 @@ async function tryCourseCredit(
   const cancelledSorted = ((cancelled || []) as any[])
     .filter(b => b.session?.date && b.session?.time_start)
     .sort((a: any, b: any) => {
-      const ad = new Date(`${a.session.date}T${a.session.time_start}`).getTime()
-      const bd = new Date(`${b.session.date}T${b.session.time_start}`).getTime()
+      // Berlin-verankert (Zeitzonen-Welle 2). null → ans Ende sortieren (Infinity).
+      const ad = parseSessionDateTimeBerlin(a.session.date, a.session.time_start)?.getTime() ?? Number.POSITIVE_INFINITY
+      const bd = parseSessionDateTimeBerlin(b.session.date, b.session.time_start)?.getTime() ?? Number.POSITIVE_INFINITY
       return ad - bd
     })
 
@@ -224,7 +230,11 @@ async function tryCourseCredit(
     if (claimedIds.has(cb.session.id)) continue
     // (Reaktivierung der gleichen Stunde ist oben bereits abgehandelt.)
 
-    const originDt = new Date(`${cb.session.date}T${cb.session.time_start}`).getTime()
+    // Berlin-verankert (Zeitzonen-Welle 2). cancelledSorted ist bereits auf
+    // date+time_start vorgefiltert (siehe oben), daher kein null-Fall hier;
+    // dennoch defensiv naiv defaulten.
+    const originDt = (parseSessionDateTimeBerlin(cb.session.date, cb.session.time_start)
+      ?? new Date(`${cb.session.date}T${cb.session.time_start}`)).getTime()
     const windowStart = originDt - TEN_DAYS_MS
     const courseEnd = cb.session.course?.date_end
     const windowEnd = courseEnd

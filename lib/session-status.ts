@@ -14,6 +14,8 @@
  * mitladen, sonst kann hier nicht korrekt unterschieden werden.
  */
 
+import { parseSessionDateTimeBerlin, berlinTodayStr } from './session-time'
+
 export type SessionLike = {
   id?: string
   date?: string | null
@@ -41,15 +43,18 @@ export function isActive(s: SessionLike | null | undefined): boolean {
 /** Stunde hat begonnen (gilt als „Teilgenommen"). Stundenstart ist der Cutoff. */
 export function isStarted(s: SessionLike | null | undefined): boolean {
   if (!s?.date || !s?.time_start) return false
-  return new Date(`${s.date}T${s.time_start}`) < new Date()
+  // Berlin-verankert (Zeitzonen-Welle 2): Wandkalender-Zeit korrekt in UTC-Instant.
+  // Bei null (kaputte Werte) konservativ → nicht gestartet.
+  const start = parseSessionDateTimeBerlin(s.date, s.time_start)
+  if (!start) return false
+  return start < new Date()
 }
 
-/** Stunde liegt zeitlich in der Vergangenheit (ganzer Tag-Check, ignoriert Status). */
+/** Stunde liegt zeitlich in der Vergangenheit (ganzer Tag-Check, ignoriert Status).
+ *  Zeitzonen-Welle 2: Vergleich gegen Berlin-Datum (DST-/zeitzonensicher). */
 export function isPastDay(s: SessionLike | null | undefined): boolean {
   if (!s?.date) return false
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return new Date(s.date) < today
+  return s.date < berlinTodayStr()
 }
 
 /**
@@ -65,9 +70,9 @@ export function countActiveUnits(sessions: SessionLike[] | null | undefined): nu
  * Genutzt fürs Einbuchen — vergangene Sessions kann man nicht mehr buchen.
  */
 export function countActiveFutureUnits(sessions: SessionLike[] | null | undefined): number {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return (sessions || []).filter(s => isActive(s) && s.date && new Date(s.date) >= today).length
+  // Zeitzonen-Welle 2: Berlin-Datum statt lokaler/UTC-Mitternacht.
+  const todayStr = berlinTodayStr()
+  return (sessions || []).filter(s => isActive(s) && s.date && s.date >= todayStr).length
 }
 
 export type CourseLike = {
@@ -88,7 +93,10 @@ export type CourseLike = {
 export function isCourseEnded(course: CourseLike | null | undefined, refNow?: Date): boolean {
   if (!course?.date_end) return false
   const t = course.time_start || '23:59:59'
-  const endDt = new Date(`${course.date_end}T${t}`)
+  // Berlin-verankert (Zeitzonen-Welle 2): Wandkalender-Zeit korrekt in UTC-Instant.
+  // Bei null (kaputte Werte) konservativ → nicht beendet.
+  const endDt = parseSessionDateTimeBerlin(course.date_end, t)
+  if (!endDt) return false
   return endDt < (refNow || new Date())
 }
 

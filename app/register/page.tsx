@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Email } from '@/lib/email'
+import { berlinTodayStr } from '@/lib/session-time'
 
 function RegisterInner() {
   const [firstName, setFirstName] = useState('')
@@ -247,7 +248,7 @@ function RegisterInner() {
               <label className="field-label">Geburtsdatum *</label>
               <input className="field-input" type="date" value={birthdate}
                 onChange={e => setBirthdate(e.target.value)}
-                max={new Date().toISOString().split('T')[0]}
+                max={berlinTodayStr()}
                 required />
             </div>
             <div>

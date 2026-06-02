@@ -38,6 +38,30 @@ export function parseSessionDateTime(
  *
  * Liefert NULL bei fehlenden/kaputten Werten (Caller defaulten konservativ).
  */
+/**
+ * Welle "Zeitzonen-Welle 2" (Sarah 2026-06-02): Aktuelles KALENDERDATUM in
+ * Europe/Berlin als 'YYYY-MM-DD' — DST-sicher (Sommer-/Winterzeit automatisch).
+ *
+ * Ersetzt das fehlerhafte Muster `new Date().toISOString().split('T')[0]`, das
+ * IMMER das UTC-Datum liefert. Kurz nach Mitternacht Berlin (UTC noch Vortag)
+ * lieferte das den falschen Tag — z.B. wurden beim Einbuchen bereits vergangene
+ * Stunden noch als "heute/Zukunft" gewertet.
+ *
+ * `en-CA` formatiert als ISO `YYYY-MM-DD`; die `timeZone`-Option wählt den
+ * korrekten Berlin-Offset (CEST/CET) anhand des konkreten Zeitpunkts.
+ */
+export function berlinTodayStr(now: Date = new Date()): string {
+  return now.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
+}
+
+/**
+ * 'YYYY-MM-DD' in Europe/Berlin für einen BELIEBIGEN Zeitpunkt (z.B. Wochen-Start/
+ * -Ende, "vor 8 Tagen"). Damit landet die Datumsgrenze nicht im UTC-Vortag.
+ */
+export function berlinDateStr(d: Date): string {
+  return d.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
+}
+
 export function parseSessionDateTimeBerlin(
   date: string | null | undefined,
   time: string | null | undefined,

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
+import { berlinTodayStr } from '@/lib/session-time'
 
 export default function NachweisePage() {
   const [acceptances, setAcceptances] = useState<any[]>([])
@@ -39,7 +40,7 @@ export default function NachweisePage() {
     const encoded = encodeURIComponent('\uFEFF' + csv) // BOM für Excel
     const a = document.createElement('a')
     a.href = 'data:text/csv;charset=utf-8,' + encoded
-    a.download = `AGB-Nachweise-${new Date().toISOString().split('T')[0]}.csv`
+    a.download = `AGB-Nachweise-${berlinTodayStr()}.csv`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)

@@ -174,18 +174,28 @@ export default function AdminDashboard() {
       }))
     setSessions(displayed)
 
-    const weekSessionIds = displayed.map((s: any) => s.id)
-    const bookingsThisWeek = displayed.reduce((sum: number, s: any) => sum + s.active_count, 0)
-    const cancellationsThisWeek = displayed.reduce((sum: number, s: any) => sum + s.cancelled_count, 0)
-    let waitlistThisWeek = 0
-    if (weekSessionIds.length > 0) {
-      const { count: wlCount } = await supabase.from('waitlist')
-        .select('*', { count: 'exact', head: true })
-        .eq('type', 'waitlist')
-        .in('session_id', weekSessionIds)
-      waitlistThisWeek = wlCount || 0
+    // Sarah 2026-06-02: Kacheln messen REINE YOGI-AKTIVITÄT in der angezeigten Woche —
+    // gezählt nach ZEITPUNKT DER AKTION (audit_log.created_at), nicht nach Stand der
+    // Stunden. Admin-Aktionen (Ein-/Austragen, Einladungs-Einschreibung) zählen NICHT.
+    //   Buchungen   = Yogi hat selbst gebucht          (booking_created)
+    //   Abmeldungen = Yogi hat sich selbst abgemeldet  (booking_cancelled)
+    //   Warteliste  = Yogi hat sich auf WL gesetzt      (waitlist_joined)
+    // Identische Logik wie die Detailseite /admin/stats/[type] (Konsistenz Kachel↔Klick).
+    const weekStartTs = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate(), 0, 0, 0).toISOString()
+    const weekEndExclTs = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 7, 0, 0, 0).toISOString()
+    const countWeekAction = async (act: string) => {
+      const { count } = await supabase.from('audit_log')
+        .select('id', { count: 'exact', head: true })
+        .eq('action', act)
+        .gte('created_at', weekStartTs).lt('created_at', weekEndExclTs)
+      return count || 0
     }
-    setStats({ bookings: bookingsThisWeek, cancellations: cancellationsThisWeek, waitlist: waitlistThisWeek })
+    const [bkCnt, abCnt, wlCnt] = await Promise.all([
+      countWeekAction('booking_created'),
+      countWeekAction('booking_cancelled'),
+      countWeekAction('waitlist_joined'),
+    ])
+    setStats({ bookings: bkCnt, cancellations: abCnt, waitlist: wlCnt })
 
     // Ungelesene Benachrichtigungen laden
     const { data: notifs } = await supabase.from('admin_notifications')
@@ -1434,7 +1444,7 @@ export default function AdminDashboard() {
             { key: 'warteliste', label: 'Warteliste', value: stats.waitlist },
           ].map(tile => (
             <button key={tile.key}
-              onClick={() => router.push(`/admin/stats/${tile.key}`)}
+              onClick={() => router.push(`/admin/stats/${tile.key}?ws=${berlinDateStr(addDays(getMonday(new Date()), weekOffset * 7))}`)}
               className="card text-center cursor-pointer hover:border-yoga-border2 active:opacity-70 transition-opacity">
               <div className="text-2xl font-bold">{tile.value}</div>
               <div className="text-xs text-yoga-text/50">{tile.label}</div>

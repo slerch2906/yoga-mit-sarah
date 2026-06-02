@@ -25,14 +25,6 @@ const INITIAL_DELAY_MS = 30 * 1000     // 30 Sek nach Mount
 
 const LS_KEY = 'seen_update_version'
 
-// Sarah 2026-06-02: AUTOMATISCHER Update-Hinweis. Die geladene App hat ihre
-// Build-SHA fest eingebaut (NEXT_PUBLIC_BUILD_SHA). /api/version liefert die
-// aktuell DEPLOYTE Server-Build-SHA. Weichen sie ab, laeuft die installierte
-// PWA auf einem veralteten Bundle -> Banner "Neue Version verfuegbar" automatisch
-// anzeigen, damit Fixes die Nutzer ueberhaupt erreichen. (Vorher nur manueller
-// Toggle -> stale Installs bekamen Updates nie.)
-const CLIENT_SHA = process.env.NEXT_PUBLIC_BUILD_SHA || 'local'
-
 export default function UpdateBanner() {
   const [currentBannerVersion, setCurrentBannerVersion] = useState<string | null>(null)
   const [reloading, setReloading] = useState(false)
@@ -59,13 +51,9 @@ export default function UpdateBanner() {
         const res = await fetch('/api/version', { cache: 'no-store', signal: controller.signal })
         if (!res.ok) return
         const json = await res.json()
-        // 1) AUTOMATISCH: deployte Server-Version weicht von der geladenen ab.
-        const serverSha = json?.sha || null
-        if (serverSha && serverSha !== 'local' && CLIENT_SHA !== 'local' && serverSha !== CLIENT_SHA) {
-          setCurrentBannerVersion('build:' + serverSha)
-          return
-        }
-        // 2) MANUELL: Sarahs Update-Banner-Toggle (Ankuendigung wichtiger Updates).
+        // Sarah 2026-06-02: NUR manueller Toggle (admin_announcement.update_banner_version).
+        // Kein automatischer Build-SHA-Abgleich mehr — im Live-Betrieb soll der Banner
+        // nur erscheinen, wenn Sarah ihn aktiv pusht.
         const v = json?.update_banner_version || null
         if (!v) {
           setCurrentBannerVersion(null)

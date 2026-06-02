@@ -1068,6 +1068,10 @@ export default function AdminYogiDetailPage() {
         const gh = d.guthaben_verrechnet > 0 ? `, davon ${d.guthaben_verrechnet} aus Guthaben verrechnet` : ''
         return { text: `Admin hat Yogi in ${courseLabel} eingebucht — ${cr} Stunden${gh}`, subject: '' }
       }
+      case 'yogi_enrolled_via_invitation': {
+        const cr = d.credits ?? '?'
+        return { text: `Yogi hat sich per Einladung in ${courseLabel} eingetragen — ${cr} Stunden gebucht`, subject: '' }
+      }
       case 'yogi_removed_from_course': {
         const dc = d.delete_credits ? ' (inkl. Credit-Löschung)' : ''
         return { text: `Admin hat Yogi aus ${courseLabel} entfernt${dc}`, subject: '' }

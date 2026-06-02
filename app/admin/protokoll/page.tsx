@@ -22,6 +22,7 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   credit_deleted:                 { label: 'Credit gelöscht',                color: 'text-yoga-red-text' },
   session_cancelled:              { label: 'Stunde abgesagt (Admin)',        color: 'text-yoga-red-text' },
   yogi_enrolled_by_admin:         { label: 'In Kurs eingetragen',            color: 'text-yoga-green-text' },
+  yogi_enrolled_via_invitation:   { label: 'Per Einladung eingetragen',      color: 'text-yoga-green-text' },
   yogi_removed_from_course:       { label: 'Aus Kurs ausgetragen',           color: 'text-yoga-red-text' },
   yogi_deleted:                   { label: 'User gelöscht',                  color: 'text-yoga-red-text' },
   yogi_anonymized_dsgvo:          { label: 'Yogi anonymisiert (DSGVO)',      color: 'text-yoga-red-text' },

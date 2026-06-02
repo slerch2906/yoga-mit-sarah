@@ -28,14 +28,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session?.user) { router.push('/login'); return }
-      supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle()
-        .then(({ data, error }) => {
-          // Sarah 2026-06-02: bei transientem Fehler NICHT wegleiten (sonst landet
-          // der Admin auf /kurse → dort harter Logout). Nur bei eindeutigem
-          // Nicht-Admin-Profil umleiten.
-          if (error) return
-          if (!data) return
-          if (!data.is_admin) { router.push('/kurse'); return }
+      supabase.from('profiles').select('*').eq('id', session.user.id).single()
+        .then(({ data }) => {
+          if (!data?.is_admin) { router.push('/kurse'); return }
           setProfile(data)
         })
     })

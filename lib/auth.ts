@@ -1,74 +1,63 @@
 import { createClient } from './supabase/client'
 
-/**
- * Sarah 2026-06-02: Session-Stabilität. Vorher loggte diese Funktion bei jedem
- * kleinen Hänger aus (teils global über alle Geräte) — Yogis UND Admin flogen
- * ständig raus. Neu:
- *  - getSession() statt getUser(): refresht den Access-Token automatisch
- *    (getUser() refresht NICHT → nach ~1h Token-Ablauf gab es Logout).
- *  - Ausloggen NUR bei eindeutigem Befund (Profil existiert wirklich nicht, oder
- *    DSGVO-gelöschtes Konto). Transiente Fehler (Netz/Timeout/Server-Blip) lassen
- *    die Session UNANGETASTET.
- *  - Kein automatischer scope:'global' mehr (außer beim DSGVO-Konto). Automatische
- *    Checks beenden höchstens die lokale Session.
- * Sessions bleiben damit stabil bis zum manuellen Logout.
- */
 export async function getCurrentUser() {
   if (typeof window === 'undefined') return null
   const supabase = createClient()
 
   try {
-    // getSession() liest die Session und refresht den Token bei Bedarf automatisch.
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.user) return null
-    const user = session.user
+    // getUser() fragt den Server – verhindert dass gecachte Sessions nach Logout genutzt werden
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) {
+      // Lokalen Cache auch leeren
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+      return null
+    }
+    const session = { user }
 
-    // Profil prüfen — mit 5s-Timeout, damit eine hängende Query die Seite nicht blockt.
     const profilePromise = supabase
       .from('profiles')
       .select('id, first_name')
-      .eq('id', user.id)
-      .maybeSingle()
+      .eq('id', session.user.id)
+      .single()
 
+    // Welle S3/N8 (Sarah 2026-05-27): Timeout-Helper rumte vorher 5s lang
+    // im Hintergrund weiter, auch wenn die echte Query schon zurueck war.
+    // Jetzt: clearTimeout sobald die Profile-Query auf Tour ist.
     let timeoutId: ReturnType<typeof setTimeout> | null = null
-    const timeoutPromise = new Promise<'timeout'>((resolve) => {
-      timeoutId = setTimeout(() => resolve('timeout'), 5000)
+    const profileRaced = profilePromise.then((v) => {
+      if (timeoutId) { clearTimeout(timeoutId); timeoutId = null }
+      return v
     })
-    const raced = await Promise.race([
-      profilePromise.then((v) => { if (timeoutId) { clearTimeout(timeoutId); timeoutId = null } return v }),
-      timeoutPromise,
-    ])
+    const timeoutPromise = new Promise<null>((resolve) => {
+      timeoutId = setTimeout(() => resolve(null), 5000)
+    })
 
-    // Timeout → Session behalten, NICHT ausloggen.
-    if (raced === 'timeout') return user
+    const result = await Promise.race([profileRaced, timeoutPromise])
+    
+    if (result === null) return session.user
 
-    const { data: profile, error } = raced as any
-
-    // Transienter Fehler (Netz/Timeout/RLS-Blip) → Session behalten, NICHT ausloggen.
-    if (error) return user
-
-    // maybeSingle ohne Fehler und data=null → Profil existiert wirklich nicht (abnormal).
+    const { data: profile } = result as any
     if (!profile) {
-      await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
-      try { localStorage.clear() } catch {}
-      try { sessionStorage.clear() } catch {}
+      // Profil fehlt → sofort ausloggen
+      await supabase.auth.signOut({ scope: 'global' }).catch(() => {})
+      localStorage.clear()
+      sessionStorage.clear()
       window.location.replace('/login')
       return null
     }
 
-    // DSGVO-anonymisiertes Konto → global ausloggen (verhindert Rückkehr nach Löschung).
+    // Anonymisiertes DSGVO-Profil → sofort ausloggen (verhindert Rückkehr nach Löschung)
     if (profile.first_name === 'Gelöschter') {
       await supabase.auth.signOut({ scope: 'global' }).catch(() => {})
-      try { localStorage.clear() } catch {}
-      try { sessionStorage.clear() } catch {}
+      localStorage.clear()
+      sessionStorage.clear()
       window.location.replace('/login')
       return null
     }
 
     return user
   } catch (e) {
-    // Unerwarteter Fehler: Session NICHT zerstören (kein signOut/clear). Nur keinen
-    // Zugriff gewähren — beim nächsten Versuch ist die gültige Session wieder da.
+    // Bei jedem Fehler: kein Zugang gewähren
     return null
   }
 }

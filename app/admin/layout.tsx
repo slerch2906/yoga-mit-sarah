@@ -45,6 +45,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     //    3) Transiente Fehler (Netz/RLS) werden RETRYt und fuehren nie zu
     //       /kurse, sondern schlimmstenfalls zum Recovery-Screen.
     //    4) Nur ein EINDEUTIGES is_admin === false leitet auf /kurse.
+    // Timeout-Waechter: ein haengender Request (z.B. RLS-/Netz-Stau, totes Token)
+    // darf den Check nicht einfrieren. Nach TIMEOUT_MS gilt der Versuch als
+    // "transient gescheitert" → Retry, am Ende Recovery-Screen (nie /kurse).
+    const TIMEOUT = Symbol('auth-timeout')
+    const TIMEOUT_MS = 2500
+    function withTimeout<T>(p: Promise<T>): Promise<T | typeof TIMEOUT> {
+      return Promise.race([p, new Promise<typeof TIMEOUT>(res => setTimeout(() => res(TIMEOUT), TIMEOUT_MS))])
+    }
+
     async function check(attempt = 0) {
       const retryOrRecover = () => {
         if (cancelled) return
@@ -54,14 +63,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       let userRes
       try {
-        userRes = await supabase.auth.getUser()
+        userRes = await withTimeout(supabase.auth.getUser())
       } catch {
         retryOrRecover(); return
       }
       if (cancelled) return
+      if (userRes === TIMEOUT) { retryOrRecover(); return }
 
-      const user = userRes?.data?.user
-      const userErr: any = userRes?.error
+      const user = (userRes as any)?.data?.user
+      const userErr: any = (userRes as any)?.error
       if (!user) {
         const status = userErr?.status
         if (status === 401 || status === 403) {
@@ -76,14 +86,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       let profRes
       try {
-        profRes = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
+        profRes = await withTimeout(supabase.from('profiles').select('*').eq('id', user.id).maybeSingle())
       } catch {
         retryOrRecover(); return
       }
       if (cancelled) return
+      if (profRes === TIMEOUT) { retryOrRecover(); return }
 
-      if (profRes?.error) { retryOrRecover(); return }
-      const data = profRes?.data
+      if ((profRes as any)?.error) { retryOrRecover(); return }
+      const data = (profRes as any)?.data
       if (!data) { retryOrRecover(); return }
 
       if (data.is_admin === false) {

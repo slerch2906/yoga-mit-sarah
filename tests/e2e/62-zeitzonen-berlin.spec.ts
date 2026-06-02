@@ -88,6 +88,19 @@ test.describe('Zeitzonen-Welle 2: überall Berlin (DST-sicher)', () => {
     }
   })
 
+  test('Yogi zu bestehendem Kurs hinzufuegen: minutengenauer Zukunfts-Filter', () => {
+    // Regression Sarah 2026-06-02: addYogiToCourse (admin/kurse) filterte Sessions
+    // nur per .gte('date', berlinTodayStr()) — ohne Uhrzeit. Eine heute bereits
+    // BEGONNENE Stunde wurde mitgebucht und erschien als "Teilgenommen" + zaehlte
+    // in den Credit. Muss denselben Berlin-Minuten-Filter nutzen wie die
+    // Yogi-Detail-Enroll-Pfade.
+    const src = read('app/admin/kurse/page.tsx')
+    // time_start wird mitgeladen (sonst kein Minuten-Vergleich moeglich)
+    expect(src).toMatch(/\.select\('id, date, time_start'\)\.eq\('course_id', course\.id\)/)
+    // Minuten-genauer Berlin-Filter direkt nach dem Sessions-Laden
+    expect(src).toMatch(/parseSessionDateTimeBerlin\(s\.date, s\.time_start\)/)
+  })
+
   test('Kein UTC-heute-Muster mehr in den umgestellten Kern-Dateien', () => {
     const files = [
       'app/admin/anwesenheit/page.tsx',

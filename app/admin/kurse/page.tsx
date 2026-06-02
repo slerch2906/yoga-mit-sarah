@@ -7,7 +7,7 @@ import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import { selectCreditForBooking } from '@/lib/credit-selector'
 import { escapeForOrFilter } from '@/lib/search-sanitize'
 import { isCourseEnded } from '@/lib/session-status'
-import { berlinTodayStr, berlinDateStr } from '@/lib/session-time'
+import { berlinTodayStr, berlinDateStr, parseSessionDateTimeBerlin } from '@/lib/session-time'
 import { createClient } from '@/lib/supabase/client'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
@@ -1355,12 +1355,21 @@ export default function AdminKursePage() {
     setAddingYogiToCourse(true)
     const course = participantsCourse
 
-    // Sessions laden (sortiert)
+    // Sessions laden (sortiert). Zeitzonen-Welle 2 Nachzügler (Sarah 2026-06-02):
+    // Wie die Yogi-Detail-Enroll-Pfade muss auch das "Yogi zum bestehenden Kurs
+    // hinzufuegen" nur Stunden buchen, deren Startzeit (Berlin, minutengenau) noch
+    // in der ZUKUNFT liegt. Sonst wird eine heute bereits BEGONNENE Stunde mitgebucht
+    // (zaehlt faelschlich als "Teilgenommen" und in den Credit). berlinTodayStr()
+    // allein filtert nur den Tag, nicht die Uhrzeit.
     const { data: futureSessions } = await supabase.from('sessions')
-      .select('id, date').eq('course_id', course.id)
+      .select('id, date, time_start').eq('course_id', course.id)
       .gte('date', berlinTodayStr()).eq('is_cancelled', false)
       .order('date')
-    const sessionList = futureSessions || []
+    const nowMsAddYogi = Date.now()
+    const sessionList = (futureSessions || []).filter((s: any) => {
+      const st = parseSessionDateTimeBerlin(s.date, s.time_start)
+      return st ? st.getTime() > nowMsAddYogi : true
+    })
     const sessionCount = sessionList.length
     const expiresAt = new Date(course.date_end || new Date())
     expiresAt.setDate(expiresAt.getDate() + 8)

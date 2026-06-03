@@ -5,9 +5,9 @@
 > Datei-, Funktions- und Variablennamen. Sie wurde durch systematisches Scannen der Codebase
 > erstellt (nicht aus Annahmen).
 >
-> **Stand:** 2026-06-02 · **Projekt-Verzeichnis:** `C:\Users\Sarah\Desktop\yoga-app`
+> **Stand:** 2026-06-03 · **Projekt-Verzeichnis:** `C:\Users\Sarah\Desktop\yoga-app`
 >
-> _Letzte Aktualisierung 2026-06-02 (Live-Bugfixes, zentrale Hinweis-Persistenz, PWA-Update-Stabilität, Prozess: Staging-first) — siehe [Änderungshistorie](#änderungshistorie) am Ende._
+> _Letzte Aktualisierung 2026-06-03 (Live-Vorfälle behoben: Protokoll-Lücken geschlossen, Dashboard = reine Yogi-Aktivität, Auth/Sidebar-Stabilität, Admin landet immer im Admin-Bereich) — siehe [Änderungshistorie](#änderungshistorie) am Ende._
 
 ---
 
@@ -619,13 +619,16 @@ Quelle: `app/admin/protokoll/page.tsx`, Zeilen 13–69. Jeder Schlüssel hat Lab
 „Buchung blockiert (Frist)" — fehlgeschlagene Buchung (Silent-Failure-Logging)
 
 **Kurs-Teilnahme:** `yogi_enrolled_by_admin` „In Kurs eingetragen" · `yogi_removed_from_course`
-„Aus Kurs ausgetragen" · `session_cancelled` „Stunde abgesagt (Admin)"
+„Aus Kurs ausgetragen" · `session_cancelled` „Stunde abgesagt (Admin)" · `yogi_enrolled_via_invitation`
+„Per Einladung eingetragen" — Yogi registriert sich über Einladungslink **und** wird in den Kurs
+eingebucht (Self-Service, neu 2026-06-03)
 
 **Warteliste:** `waitlist_joined` „Warteliste eingetragen" · `waitlist_promoted`
 „Warteliste nachgerückt" · `waitlist_offer_late_accepted` „Warteliste — Spät-Angebot angenommen" ·
 `waitlist_auto_removed` „Von Warteliste entfernt (letzter Credit verbraucht)" ·
 `admin_promoted_waitlist_yogi` „Waitlist-Yogi nachgerückt (Admin)" · `waitlist_offer_rollback`
-„Warteliste-Angebot zurückgerollt"
+„Warteliste-Angebot zurückgerollt" · `waitlist_left` „Warteliste verlassen (selbst)" — Yogi trägt sich
+über den Unsubscribe-Link selbst aus (Self-Service, neu 2026-06-03)
 
 **Events / Einzelstunden / Sessions:** `single_session_created` „Einzelstunde angelegt" ·
 `single_session_updated` „Einzelstunde bearbeitet" · `event_created` „Event angelegt" ·
@@ -790,6 +793,81 @@ für das Löschen gibt:
 
 ## Änderungshistorie
 
+### 2026-06-03 — Live-Vorfälle behoben: Protokoll-Lücken, Dashboard-Aktivität, Auth/Sidebar-Stabilität, Admin-Landing
+
+Erste echte Nutzer auf Prod. Diese Welle wurde **Staging-first** gebaut (Branch → Vercel-Preview,
+funktional auf Staging getestet, dann nach ausdrücklicher Freigabe nach `main`/Prod gemerged).
+Reihenfolge ≈ Commits.
+
+**1) Protokoll-Lücken geschlossen (KRITISCH — „plötzlich kein Eintrag mehr").** Zwei Self-Service-
+Pfade schrieben bisher **keinen** `audit_log`-Eintrag:
+- **Einladungs-Registrierung → Kurs-Einbuchung:** RPC `consume_invitation_enrollment` schreibt jetzt
+  `yogi_enrolled_via_invitation` (Kurs + gebuchte Stundenzahl). Der Eintrag erfasst die **Einbuchung**,
+  nicht nur die Registrierung.
+- **Warteliste selbst verlassen (Unsubscribe-Link):** RPC `leave_waitlist_by_token` schreibt jetzt
+  `waitlist_left`.
+- **Gehärtet:** Beide Protokoll-Inserts laufen in einem `BEGIN … EXCEPTION WHEN OTHERS THEN NULL`-
+  Block (Best-Effort) → ein fehlschlagender Audit-Insert kann die eigentliche Aktion (Einbuchung /
+  Austragen) **nie** blockieren oder zurückrollen.
+- Labels ergänzt in `app/admin/protokoll/page.tsx` (`ACTION_LABELS`) und in der Pro-Yogi-Historie
+  (`app/admin/yogis/[id]/page.tsx`, `formatAuditEntry`). Migrationen `20260602_audit_log_invitation_
+  enrollment.sql` + `20260602_audit_log_waitlist_left.sql` (Staging + Prod). End-to-End auf Staging
+  getestet (enrolled=true, 2 Buchungen, 1 Credit, 1 Audit bzw. ok=true, 0 Wartelisten-Rest, 1 Audit).
+  **Hinweis:** Yogi-Selbstbuchungen (`booking_created`/`booking_cancelled`/`waitlist_joined` in
+  `app/kurse/[id]/page.tsx`) wurden schon immer protokolliert und waren nie betroffen.
+
+**2) Admin-Dashboard-Kacheln = reine Yogi-Aktivität pro Woche.** Die 3 Kacheln zählten zuvor den
+Einschreibungs-Stand; jetzt zählen sie **Aktionen** im Wochenfenster aus `audit_log`:
+`booking_created` (Selbstbuchungen), `booking_cancelled` (Selbst-Austragungen), `waitlist_joined`
+(Warteliste-Eintragungen). Die Detailseite `app/admin/stats/[type]` nutzt **dieselbe** Query
+(Parameter `?ws=<Montag>`) → Kachel-Zahl == Detail-Zahl, Klick zeigt die Einträge (vorher „5 auf der
+Kachel, beim Klick nichts"). Dateien `app/admin/dashboard/page.tsx`, `app/admin/stats/[type]/page.tsx`.
+
+**3) Update-Banner wieder rein manuell (Auto-Abgleich entfernt).** Der am 2026-06-02 eingeführte
+automatische Build-SHA-Abgleich (`UpdateBanner`) wird **zurückgenommen**: Das Banner „Neue Version
+verfügbar" erscheint **nur noch**, wenn es im Admin-Profil aktiv gepusht wird
+(`admin_announcement.update_banner_version`). Datei `components/UpdateBanner.tsx`.
+
+**4) Admin-Benachrichtigungs-Mail bei Registrierung kam nicht an.** Der Anti-Spoofing-Check in
+`app/api/email/route.ts` blockte `admin_*`-Mailtypen für eingeloggte Nicht-Admins mit **403** — genau
+der Fall beim frisch registrierten Yogi, der `admin_new_yogi` auslöst (Sofort-Session, da E-Mail-
+Bestätigung aus). Fix: die als **public** gewhitelisteten `admin_*`-Typen (`admin_new_yogi`,
+`admin_dsgvo_deletion`) sind vom 403 ausgenommen. Empfänger/Template waren bereits korrekt.
+
+**5) Auth-/Sidebar-Stabilität (KRITISCH — Admin in Yogi-Sackgasse).** `app/admin/layout.tsx` prüfte
+mit `getSession()` (nur lokal) + `.single()`; ein totes Token oder kurzer RLS-/Netz-Hänger lieferte
+ein leeres Profil → Code dachte „kein Admin" → `push('/kurse')`. Folge: Admin ohne Sidebar in der
+Yogi-Ansicht, ohne Logout. Neu:
+- **`getUser()`** validiert serverseitig (kein blindes Vertrauen auf ein evtl. totes Token → **keine
+  Zombie-Session**; der frühere Versuch `ab3f317`, der genau das verursachte, war zurückgerollt).
+- **`maybeSingle()`** statt `single()`; **Timeout pro Versuch (2,5 s) + Retry** → ein Hänger friert den
+  Check nicht ein.
+- Transienter Fehler → **Recovery-Screen** („Sitzung konnte nicht geladen werden — Neu laden / Neu
+  anmelden"), **nie** stille Weiterleitung auf /kurse. Nur ein **eindeutiges** `is_admin = false`
+  führt zur Yogi-Ansicht; 401/403 → sauberer Logout + /login. `lib/auth.ts` bewusst unangetastet.
+
+**6) Admin landet nie auf der Yogi-Seite.** Wurzel: die Startseite `app/page.tsx` („/") leitet
+**alle** auf `/kurse` — ohne Admin-Prüfung; `/kurse` schickte Admins nicht zurück. Fix: `/kurse`
+leitet `is_admin`-Profile **sofort** nach `/admin/dashboard` (und rendert für Admins nichts von der
+Yogi-Ansicht → kein Aufblitzen). Der am selben Tag testweise eingeführte BottomNav-Desktop-Sonderfall
+ist wieder entfernt — am Laptop gilt für Admins **immer** die Sidebar.
+
+**7) Neuer Dauer-Regressionstest** `tests/e2e/admin/53-admin-guard-resilient.spec.ts` (3 Tests, gegen
+Staging grün): Normalfall (Sidebar, kein /kurse), Profil-Hänger → Recovery statt /kurse, Admin auf
+/kurse → Redirect ins Admin-Dashboard.
+
+**8) Yogi-Hinweis: „Unsichere App"-Warnung bei PWA-Installation (Google Play Protect).** Kein App-
+Fehler: Beim Installieren einer PWA baut der Browser automatisch ein WebAPK; Play Protect markiert das
+(v. a. via **Samsung Internet**) manchmal als „für ältere Android-Version / unsicher". Die Ziel-
+Android-Version des WebAPK setzt der Browser/Google, **nicht** die App — im App-Code nicht behebbar.
+Empfehlung an Yogis: Installation über **Chrome** (Android) bzw. **Safari** (Apple); „Trotzdem
+installieren" ist gefahrlos.
+
+> Commits (Branch → `main`): `659d2e9`/`b264b33`/`ca69c56` (Banner + Dashboard + Einladungs-/Waitlist-
+> Audit gehärtet + Email-Fix), `6cbb9f4` (Auth/Sidebar-Guard + Test 53), `d7fa9c5` (Admin-Landing-
+> Redirect + BottomNav-Revert). Prod-DB: RPCs `consume_invitation_enrollment` + `leave_waitlist_by_token`
+> (gehärtet) angewandt.
+
 ### 2026-06-02 (Nachmittag) — Live-Bugfixes + zentrale Hinweis-Persistenz + Update-Stabilität
 
 Wave direkt vor Go-Live. Reihenfolge spiegelt die Commits.
@@ -832,6 +910,9 @@ Mehrere Banner merkten sich das Wegklicken nur in `localStorage` → beim Logout
   `NEXT_PUBLIC_BUILD_SHA` mit der live deployten (`/api/version`). Bei Abweichung
   erscheint „Neue Version verfügbar" **automatisch** (zusätzlich zum manuellen Toggle),
   self-resolving nach Reload. Commit `4f0f2aa`.
+  > **Hinweis (2026-06-03 zurückgenommen):** Dieser Auto-Abgleich wurde am Folgetag wieder
+  > entfernt — das Banner erscheint seither **nur** noch bei manuellem Push. Siehe Eintrag
+  > 2026-06-03, Punkt 3.
 - **Service Worker v9**: Navigationen (HTML) werden mit `cache:'no-store'` geladen →
   iOS/WebKit kann kein altes Dokument mehr liefern; jeder Start referenziert das
   aktuelle Bundle. `CACHE_VERSION` bump erzwingt SW-Update. Commit `521f34b`.

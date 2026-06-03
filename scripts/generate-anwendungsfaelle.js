@@ -195,7 +195,7 @@ content.push(new Paragraph({
 content.push(new Paragraph({
   alignment: AlignmentType.CENTER,
   spacing: { after: 80 },
-  children: [new TextRun({ text: 'Version 2.4 — Stand der App nach Welle A bis I (UI-Refresh, Credit-Banner, 3h-Modal, Quick-Credit-Form, Krankheits-Austragung, Click-Wrap, 2J-Auto-Refund, DSGVO-Confirm-Mail, Audit-Fixes 29.05.2026 inkl. DSGVO-Restdaten-Löschung) + Akteur-Logik der Storno-Labels (Abgemeldet / Ausgetragen / Abgesagt, einheitlich überall — 29.05.2026)', font: FONT, size: 22 })],
+  children: [new TextRun({ text: 'Version 2.7 — Stand der App nach Welle A bis J (UI-Refresh, Credit-Banner, 3h-Modal, Quick-Credit-Form, Krankheits-Austragung, Click-Wrap, 2J-Auto-Refund, DSGVO-Confirm-Mail, Audit-Fixes 29.05.2026 inkl. DSGVO-Restdaten-Löschung) + Akteur-Logik der Storno-Labels (Abgemeldet / Ausgetragen / Abgesagt, einheitlich überall — 29.05.2026) + Fristen-Audit (90-Min-Last-Minute bestätigt, Vorhol 10 Tage / Nachhol 8 Tage origin-bezogen, Krankheits-Guthaben-Lösch-Cron nach 10 Monaten + 4-Wochen-Kalender-Vorwarnung, Late-Offer-Text aktualisiert — 30.05.2026) + Late-Offer ohne Gnadenfrist (Annahme < 90 Min ab Sekunde 1 verbindlich, kein promoted_at; Storno < 3h verfällt — 30.05.2026) + Welle J: Live-Bugfixes (Einladung→Kurs-Auto-Einbuchung zuverlässig, echte Event-/Einzelstunden-Titel in Protokoll & Kachel-Detail, Dashboard-Wochenkacheln) + Sicherheits-Härtung vor Go-Live (kein Self-Admin, keine Credit-Selbstgutschrift, 3-Std-Frist server-seitig erzwungen, robustes Inaktivitäts-Signal — 30.05.2026)', font: FONT, size: 22 })],
 }))
 content.push(pageBreak())
 
@@ -729,24 +729,26 @@ content.push(...ucase({
     'Stunde wird frei, weniger als 90 Min. bis Start.',
     'System schickt allen Wartelisten-Yogis (mit oder ohne Credit) eine E-Mail mit individuellem Token-Link.',
     'Wer zuerst klickt + Credit hat, bekommt den Platz.',
-    'Andere bekommen beim Klick die Meldung „Leider zu spät – jemand anderes war schneller".',
+    'Andere bekommen beim Klick die Meldung „Schade, ein anderer Yogi war schneller!".',
   ],
   regeln: [
     'Nur Yogis auf der Warteliste (nicht „Nur benachrichtigen") bekommen die Late-Offer-Mail.',
     'Ohne freien Credit: Klick endet mit Hinweis „Kein freier Credit".',
     'Klick nach Stundenbeginn: „Link abgelaufen".',
+    'KEINE 60-Minuten-Gnadenfrist: Wer ein Late-Offer aktiv per Link-Klick annimmt, ist AB SEKUNDE 1 verbindlich gebucht (anders als beim automatischen Nachrücken > 90 Min). Eine Stornierung unter 3 Stunden vor Stundenbeginn gilt sofort als „spät storniert" — der Credit verfällt.',
   ],
   texte: [
     'Du bist dabei',
-    'Leider zu spät – Jemand anderes war schneller',
+    'Schade, ein anderer Yogi war schneller!',
     'Kein freier Credit',
     'Link abgelaufen',
+    'Verbindliche Sofort-Buchung – kostenfreie Stornierung so kurzfristig nicht mehr möglich.',
   ],
   emails: [
     {
       betreff: 'Letzte Chance: [Kursname] in Kürze',
       an: 'Alle Wartelisten-Yogis dieser Stunde',
-      kern: 'Hallo [Vorname], ein Platz wurde gerade frei — aber es ist weniger als 90 Minuten vor Stundenbeginn. [Datum, Uhrzeit]. Alle Wartelisten-Yogis bekommen diese Mail — wer zuerst klickt, bekommt den Platz. Wenn du nicht reagierst, passiert nichts — dein Wartelisten-Platz bleibt aber auch nicht erhalten für diese Stunde.',
+      kern: 'Hallo [Vorname], ein Platz wurde gerade frei — aber es ist weniger als 90 Minuten vor Stundenbeginn. [Datum, Uhrzeit]. Alle Wartelisten-Yogis bekommen diese Mail — wer zuerst klickt, bekommt den Platz. Verbindliche Sofort-Buchung – kostenfreie Stornierung so kurzfristig nicht mehr möglich. Wenn du nicht reagierst, passiert nichts — dein Wartelisten-Platz bleibt aber auch nicht erhalten für diese Stunde.',
     },
   ],
 }))
@@ -1181,7 +1183,7 @@ content.push(...ucase({
     {
       betreff: 'Du wurdest in den Kurs [Kursname] eingetragen',
       an: 'Jeder übernommene Yogi',
-      kern: 'Hallo [Vorname], ich habe dich in einen Kurs eingetragen. Kurs: [Name]. 📅 [Wochentag] um [Uhrzeit]. [Dauer] Minuten pro Einheit. ✅ Du nimmst an allen [X] Stunden teil — du hast dafür [X] Credits in deinem Profil. Wichtige Regeln: Abmeldung kostenlos bis 3 Stunden vorher, Nachholen bis 8 Tage nach Kursende, Vorholen max. 10 Tage im Voraus, Rücktritt vom gesamten Kurs kostenlos bis 14 Tage vor Kursbeginn — danach Gebühr (30 € bis 7 Tage vorher, ab 6 Tagen volle Gebühr); Ersatzteilnehmer jederzeit möglich.',
+      kern: 'Hallo [Vorname], ich habe dich in einen Kurs eingetragen. Kurs: [Name]. 📅 [Wochentag] um [Uhrzeit]. [Dauer] Minuten pro Einheit. ✅ Du nimmst an allen [X] Stunden teil — du hast dafür [X] Credits in deinem Profil. Wichtige Regeln: Abmeldung kostenlos bis 3 Stunden vorher, Nachholen bis 8 Tage nach Kursende, Vorholen max. 10 Tage im Voraus, Rücktritt vom gesamten Kurs kostenlos bis 14 Tage vor Kursbeginn — danach gilt: gebucht ist gebucht, die volle Kursgebühr fällt an; Ersatzteilnehmer jederzeit möglich. Danke für Dein Verständnis und deine Wertschätzung für meine Planung ❤️',
     },
   ],
 }))
@@ -1989,7 +1991,7 @@ content.push(pageBreak())
 content.push(h1('Welle H: Click-Wrap, Auto-Refund & DSGVO-Confirm (25.05.2026)'))
 content.push(p('Welle H bündelt vier rechtlich relevante Änderungen, die alle am selben Tag entstanden sind:'))
 content.push(bullet('Click-Wrap „Allgemeine Regeln" auf der Rechtliches-Seite — Yogi muss die Verhaltensregeln zusätzlich zur AGB aktiv bestätigen.'))
-content.push(bullet('Stornofrist auf 14 Tage erhöht + 30 € Bearbeitungsgebühr im Fenster 13–7 Tage.'))
+content.push(bullet('Stornofrist vereinfacht: kostenfrei bis 14 Tage vor Kursbeginn, danach „gebucht ist gebucht" (volle Kursgebühr). Ersatzteilnehmer jederzeit möglich.'))
 content.push(bullet('Kursabbruch-Default umgestellt: ohne Yogi-Wahl gibt es jetzt Geldbetrag (war: Guthaben).'))
 content.push(bullet('Cron-Job „2-Jahre-Guthaben-Auto-Refund" — abgelaufene Kursabbruch-Guthaben lösen Admin-Notification + Email an Sarah aus.'))
 content.push(bullet('Account-Lösch-Workflow: Yogi bekommt VOR dem finalen Auth-Delete eine Bestätigungs-Mail (DSGVO Art. 12 Transparenz).'))
@@ -2020,13 +2022,12 @@ content.push(...ucase({
 }))
 
 content.push(...ucase({
-  titel: 'Stornofrist neu: 14 Tage + 30 € Bearbeitungsgebühr (13–7 Tage)',
-  was: 'Die Stornofrist für komplette Kurse wurde von 7 auf 14 Tage erhöht; im Fenster 13–7 Tage vorher fällt eine Bearbeitungsgebühr von 30 € an. Unter 7 Tagen ist die volle Kursgebühr fällig. Ersatzteilnehmer sind jederzeit möglich.',
+  titel: 'Stornofrist: 14 Tage, danach „gebucht ist gebucht" (volle Kursgebühr)',
+  was: 'Die Stornofrist für komplette Kurse: kostenfrei bis 14 Tage vor Kursbeginn. Danach gilt „gebucht ist gebucht" — die volle Kursgebühr ist fällig. Ersatzteilnehmer sind jederzeit möglich. (Die frühere 30-€-Zwischenstufe im Fenster 13–7 Tage entfällt.)',
   wer: 'Yogi / Admin (rechtlicher Workflow)',
   ablauf: [
-    '> 14 Tage vor Kursbeginn: kostenfreie Stornierung.',
-    '13 bis 7 Tage vor Kursbeginn: 30 € Bearbeitungsgebühr, da der Platz kurzfristig neu vergeben werden muss.',
-    '< 7 Tage vor Kursbeginn: volle Kursgebühr ist fällig — auch bei Nichterscheinen.',
+    'Bis 14 Tage vor Kursbeginn: kostenfreie Stornierung.',
+    'Ab 14 Tagen vor Kursbeginn: gebucht ist gebucht — die volle Kursgebühr ist fällig, auch bei Nichterscheinen.',
     'Jederzeit möglich: Yogi benennt einen passenden Ersatzteilnehmer.',
   ],
   regeln: [
@@ -2035,9 +2036,9 @@ content.push(...ucase({
   ],
   texte: [
     'Kostenfreie Stornierung bis 14 Tage vor Kursbeginn',
-    '30 € Bearbeitungsgebühr (13 bis 7 Tage vorher)',
-    'Volle Kursgebühr ab 6 Tagen vorher',
+    'Danach: gebucht ist gebucht — volle Kursgebühr',
     'Ersatzteilnehmer jederzeit möglich',
+    'Danke für Dein Verständnis und deine Wertschätzung für meine Planung ❤️',
   ],
 }))
 
@@ -2054,7 +2055,7 @@ content.push(...ucase({
     'Sarah sieht die Aufgabe im Dashboard, überweist den Geldbetrag und hakt die Notification ab.',
   ],
   regeln: [
-    'Nur Kursabbruch-Guthaben (2 Jahre) betroffen — Krankheits-Guthaben (10 Monate, source=„illness") verfällt nach AGB ersatzlos und wird NICHT automatisch erstattet.',
+    'Nur Kursabbruch-Guthaben (2 Jahre) betroffen — Krankheits-Guthaben (10 Monate, source=„illness") verfällt nach AGB ersatzlos und wird NICHT erstattet, sondern durch den separaten Lösch-Cron fn_check_illness_credit_expiry hart gelöscht (siehe eigener Anwendungsfall direkt unten).',
     'Idempotent: bereits vollständig verbrauchte Guthaben werden nicht erneut verarbeitet.',
     'DB-Function nutzt net.http_post → trigger-admin-email → Edge-Function; verifiziert in Test 19-notifications.spec.ts.',
   ],
@@ -2071,6 +2072,33 @@ content.push(...ucase({
   ],
   sonder: [
     'Damit erfüllt die App das in AGB § 1.2 versprochene „du verlierst in keinem Fall etwas" für Kursabbruch-Guthaben.',
+  ],
+}))
+
+content.push(...ucase({
+  titel: 'Cron-Job: Krankheits-Guthaben-Löschung nach 10 Monaten (+ 4-Wochen-Vorwarnung)',
+  was: 'Ein täglicher Cron-Job (fn_check_illness_credit_expiry) löscht abgelaufene Krankheits-Guthaben (credits.source=„illness", 10 Monate) hart und ersatzlos. Anders als beim Kursabbruch-Guthaben gibt es KEINE Auszahlung — Krankheits-Guthaben ist eine Kulanz. Vier Wochen vor Ablauf wird der Yogi im Kalender gewarnt.',
+  wer: 'System (DB-Function + pg_cron, täglich 05:00 Uhr) + Yogi (sieht Vorwarnung)',
+  ablauf: [
+    '4 Wochen (28 Tage) vor Ablauf zeigt der Yogi-Kalender (/kurse) oben einen Hinweis: „Dein Krankheits-Guthaben läuft in [Frist] ab (gültig bis [Datum]) und wird danach gelöscht."',
+    'Am Verfallstag wechselt der Hinweis zu „Dein Krankheits-Guthaben verfällt heute und wird gelöscht."',
+    'pg_cron ruft täglich um 05:00 Uhr die DB-Function public.fn_check_illness_credit_expiry(p_dry_run) auf.',
+    'Standardmäßig läuft der Cron als Trockenlauf (p_dry_run=true): er zählt nur die ablaufenden Guthaben und legt eine Info-Notification (illness_cleanup_dryrun) an — es wird NICHTS gelöscht.',
+    'Die echte Löschung erfolgt erst beim Aufruf mit p_dry_run=false: pro Treffer wird ein Audit-Log „illness_credit_expired" geschrieben und der Credit hart gelöscht (DELETE FROM credits).',
+  ],
+  regeln: [
+    'Nur Krankheits-Guthaben (source=„illness", 10 Monate) betroffen — Kursabbruch-Guthaben (2 Jahre) wird NICHT gelöscht, sondern ausgezahlt (siehe Cron oben).',
+    'Krankheits-Guthaben ist Kulanz (keine bezahlte Leistung) → es verfällt ersatzlos, ohne Geld-Erstattung.',
+    'Der Yogi wird 4 Wochen vorher im Kalender gewarnt — danach ist das Guthaben unwiederbringlich weg.',
+    'Im Yogi-Protokoll erscheint der Eintrag als „Krankheits-Guthaben nach 10 Monaten abgelaufen und gelöscht".',
+  ],
+  texte: [
+    'Dein Krankheits-Guthaben läuft in [Frist] ab (gültig bis [Datum]) und wird danach gelöscht.',
+    'Dein Krankheits-Guthaben verfällt heute und wird gelöscht.',
+  ],
+  sonder: [
+    'Bewusste Trennung: Kursabbruch-Guthaben = bezahlte, nicht erbrachte Leistung → Auszahlung. Krankheits-Guthaben = Kulanz → ersatzlose Löschung.',
+    'Beide Ablaufpfade sind in tests/e2e/55-fristen-audit.spec.ts E2E-abgesichert.',
   ],
 }))
 
@@ -2196,6 +2224,22 @@ content.push(...ucase({
 }))
 
 content.push(pageBreak())
+content.push(pageBreak())
+content.push(h1('Welle J: Live-Bugfixes & Sicherheits-Härtung (30.05.2026)'))
+content.push(p('Nach einem Live-Test und einem Sicherheits-Audit vor dem Go-Live wurden mehrere Fehler behoben und die App im Hintergrund gehärtet. Für dich als Nutzerin ändert sich am Ablauf NICHTS — die bestehenden Regeln (3-Std-Frist, Einladungs-Einbuchung, Warteliste usw.) gelten unverändert; sie werden jetzt nur zuverlässiger und manipulationssicher durchgesetzt.'))
+
+content.push(h2('Behobene Fehler aus dem Live-Test'))
+content.push(bullet('Einladung mit Kurs: Wer sich über einen Einladungslink registriert, wird jetzt zuverlässig automatisch in alle Kursstunden eingebucht (vorher wurde die Einbuchung in seltenen Fällen still übersprungen, und Sarah musste manuell nachbuchen).'))
+content.push(bullet('Protokoll & Statistik-Kacheln: Bei Events und Einzelstunden steht jetzt der ECHTE Titel (z. B. „Charity Yoga") statt eines internen Container-Namens; Wartelisten-Einträge im Protokoll zeigen die konkrete Stunde (Datum/Uhrzeit).'))
+content.push(bullet('Dashboard-Kacheln: „Buchungen / Abmeldungen / Warteliste" zählen jetzt den Stand der Stunden DIESER Woche (statt einer globalen bzw. anlagedatum-basierten Zahl).'))
+
+content.push(h2('Datenschutz & Sicherheit (Schutzmechanik im Hintergrund)'))
+content.push(p('Diese Punkte sind keine Klick-Abläufe, sondern Schutzmaßnahmen auf dem Server. Sie stellen sicher, dass niemand die App-Regeln über technische Umwege aushebeln kann — auch nicht jemand mit Programmierkenntnissen:'))
+content.push(bullet('Nur Sarah ist Admin: Ein normaler Yogi kann sich KEINE Admin-Rechte verschaffen — das ist server-seitig gesperrt (nicht nur in der Oberfläche).'))
+content.push(bullet('Credits nur durch Sarah/System: Niemand kann sich selbst Gratis-Stunden gutschreiben. Die automatische Einbuchung über eine Einladung läuft server-validiert mit der von Sarah vorgegebenen Stundenzahl.'))
+content.push(bullet('3-Stunden-Frist verbindlich: Eine Abmeldung unter 3 Stunden vor Stundenbeginn gilt server-seitig als „spät" (der Credit verfällt) — das lässt sich technisch nicht als „pünktlich" ausgeben.'))
+content.push(bullet('Inaktive Konten: Die geplante 24-Monats-Inaktivitäts-Löschung misst „aktiv" jetzt robust (spätester Zeitpunkt aus letztem Login UND letzter App-Aktion), damit aktive Dauer-Nutzer (z. B. installierte App ohne erneuten Login) nie versehentlich erfasst werden. Läuft weiterhin nur als Trockenlauf — es wird nichts gelöscht.'))
+
 content.push(h1('Anhang: Begriffsklärung'))
 content.push(...[
   ['Credit', 'Wertgutschrift für 1 Stunde. Unterschiedliche Arten (Kurs, Punktekarte, Guthaben).'],
@@ -2226,7 +2270,7 @@ content.push(...[
   ['credits.source', 'Spalte auf der credits-Tabelle (Welle G). Werte: NULL (Standard), „illness" (Krankheits-Austragung, 10 Mo), „cancellation_choice" (Kursabbruch-Wahl, 2 Jahre).'],
   ['enrollments.end_date / end_reason', 'Spalten auf enrollments (Welle G). end_date = Tag, an dem die Teilnahme endet (z.B. Attest-Datum). end_reason = „illness" / „course_cancelled" / „admin_removed".'],
   ['Click-Wrap (Welle H)', 'Aktive Zustimmung per Häkchen auf /rechtliches — Yogi bestätigt zusätzlich zu den AGB die „Allgemeinen Regeln" (Pünktlichkeit, Handy, Krankheit). Zeitstempel + Versionsnummer werden im Profil gespeichert.'],
-  ['Stornofrist 14 Tage (Welle H)', 'Neue Frist seit 25.05.2026 — kostenfreier Rücktritt bis 14 Tage vor Kursbeginn, danach 30 € Bearbeitungsgebühr bis 7 Tage vorher, danach volle Kursgebühr.'],
+  ['Stornofrist 14 Tage', 'Kostenfreier Rücktritt bis 14 Tage vor Kursbeginn, danach „gebucht ist gebucht" (volle Kursgebühr). Ersatzteilnehmer jederzeit möglich. (Frühere 30-€-Zwischenstufe entfällt seit 31.05.2026.)'],
   ['fn_check_guthaben_2y_expiry (Welle H)', 'DB-Function, die täglich 04:00 Uhr per pg_cron läuft. Findet abgelaufene Kursabbruch-Guthaben (2 Jahre), markiert sie als verbraucht, legt admin_notification an und triggert via pg_net Edge-Function trigger-admin-email → Mail an Sarah.'],
   ['admin_guthaben_2y_expiry (Mail-Template)', 'E-Mail-Template für die 2-Jahre-Auto-Refund-Benachrichtigung an Sarah. Subject: „Guthaben nach 2 Jahren abgelaufen: [Yogi-Name] — bitte erstatten".'],
   ['account_deleted_yogi (Mail-Template)', 'Bestätigungs-Mail an den Yogi vor dem finalen Auth-Delete (DSGVO Art. 12). Letzte Nachricht vor Entfernung der E-Mail-Adresse.'],
@@ -2235,6 +2279,42 @@ content.push(...[
   { text: term + ': ', bold: true },
   { text: def },
 ])))
+
+// ════════════════════════════════════════════════════════════════════════════
+// Stand 2026-06-03 — Live-Stabilisierung, lückenloses Protokoll & Admin-Ansicht
+// ════════════════════════════════════════════════════════════════════════════
+content.push(pageBreak())
+content.push(h1('Stand 2026-06-03 — Live-Stabilisierung, lückenloses Protokoll & Admin-Ansicht'))
+content.push(p('Mit den ersten echten Nutzern auf der Live-App wurden mehrere Dinge nachgezogen. Alles wurde zuerst auf einer Test-Umgebung (Staging) gebaut und geprüft und erst nach Freigabe auf die Live-App übernommen.'))
+
+content.push(h2('1. Protokoll: zwei bisher fehlende Vorgänge werden jetzt erfasst'))
+content.push(bullet('Registriert sich ein Yogi über einen Einladungslink und wird dadurch in einen Kurs eingebucht, steht das jetzt im Protokoll und in der Yogi-Historie („Per Einladung eingetragen") — inklusive Kurs und Stundenzahl.'))
+content.push(bullet('Trägt sich ein Yogi über den Abmelde-Link selbst von der Warteliste aus, steht auch das jetzt im Protokoll („Warteliste verlassen (selbst)").'))
+content.push(bullet('Technisch abgesichert: Selbst wenn das Schreiben des Protokoll-Eintrags einmal scheitern würde, läuft die eigentliche Aktion (Einbuchung bzw. Austragen) trotzdem normal durch.'))
+content.push(bullet('Hinweis: Normale Yogi-Selbstbuchungen und -Stornierungen wurden schon immer protokolliert — die waren nie betroffen.'))
+
+content.push(h2('2. Admin-Dashboard: die 3 Kacheln zeigen die Yogi-Aktivität der Woche'))
+content.push(bullet('Die drei Kacheln zählen jetzt, wie oft in der jeweiligen Woche Yogis selbst gebucht, sich selbst ausgetragen oder sich auf die Warteliste gesetzt haben.'))
+content.push(bullet('Ein Klick auf eine Kachel zeigt genau diese Einträge (vorher kam beim Klick nichts).'))
+
+content.push(h2('3. „Neue Version verfügbar"-Banner nur noch auf Knopfdruck'))
+content.push(bullet('Das Banner erscheint nur noch, wenn du es im Admin-Profil aktiv auslöst — nicht mehr automatisch bei jedem Update.'))
+
+content.push(h2('4. Admin-Benachrichtigung bei Neu-Registrierung kommt wieder an'))
+content.push(bullet('Bei jeder Yogi-Registrierung geht wieder eine E-Mail an Mail@yogamitsarah.me. Eine interne Schutzregel hatte diese Mail bisher fälschlich unterdrückt.'))
+
+content.push(h2('5. Stabiler Admin-Zugang (kein „Rauswurf" mehr in die Yogi-Ansicht)'))
+content.push(bullet('Früher konnte ein kurzer Verbindungs-Hänger den Admin ohne Seitenmenü in die Yogi-Ansicht werfen — ohne Weg zum Logout. Das passiert nicht mehr.'))
+content.push(bullet('Bei einem kurzen Hänger erscheint jetzt ein klarer Hinweis „Sitzung konnte nicht geladen werden — Neu laden / Neu anmelden" statt einer Sackgasse.'))
+
+content.push(h2('6. Admin landet immer im Admin-Bereich'))
+content.push(bullet('Als Admin landest du automatisch im Admin-Dashboard mit Seitenmenü (Sidebar) — nie auf der Yogi-Startseite, egal über welchen Link du hereinkommst.'))
+content.push(bullet('Am Laptop gilt für Admins immer die Sidebar (kein unteres Menü).'))
+
+content.push(h2('7. Hinweis für Yogis: „Unsichere App"-Warnung bei der Installation (Android)'))
+content.push(p('Beim Installieren auf manchen Android-Handys (vor allem über den Samsung-Browser) zeigt Google Play Protect manchmal „Unsichere App / für ältere Android-Version". Das ist harmlos und kein Fehler der App.'))
+content.push(bullet('Empfehlung: Installation über Chrome (Android) bzw. Safari (Apple).'))
+content.push(bullet('Die Warnung lässt sich mit „Trotzdem installieren" gefahrlos bestätigen.'))
 
 // ════════════════════════════════════════════════════════════════════════════
 // Doc bauen + speichern
@@ -2257,7 +2337,7 @@ const doc = new Document({
 })
 
 Packer.toBuffer(doc).then(buf => {
-  const out = path.join(__dirname, '..', 'Yoga-mit-Sarah-Anwendungsfaelle.docx')
+  const out = process.env.DOCX_OUT || path.join(__dirname, '..', 'Yoga-mit-Sarah-Anwendungsfaelle.docx')
   fs.writeFileSync(out, buf)
   console.log('✓ Dokument geschrieben:', out, '(' + (buf.length / 1024).toFixed(1) + ' KB)')
 }).catch(err => {

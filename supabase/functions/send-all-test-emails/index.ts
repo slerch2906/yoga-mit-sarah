@@ -16,7 +16,9 @@ serve(async (req) => {
   const userId = url.searchParams.get('userId') || 'ac5563aa-3ebb-42dd-b322-544550051d26'
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
+  // send-email hat verify_jwt:true → der anon-Key (neues sb_-Format) ist kein
+  // gültiges JWT → 401. Wie die App nutzen wir daher den Service-Role-Key als Bearer.
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY')!
   const secret = Deno.env.get('EDGE_FUNCTION_SECRET') || ''
 
   const today = new Date()
@@ -197,8 +199,8 @@ serve(async (req) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + anonKey,
-          'apikey': anonKey,
+          'Authorization': 'Bearer ' + serviceKey,
+          'apikey': serviceKey,
           'x-function-secret': secret,
         },
         body: JSON.stringify({ type: t.type, data: t.data }),

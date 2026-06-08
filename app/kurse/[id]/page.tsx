@@ -850,7 +850,9 @@ export default function SessionDetailPage() {
             {displayDescription && (
               <div className="mb-3">
                 <p className="text-xs text-yoga-text/40 uppercase tracking-wider font-bold mb-1">{descriptionHeader}</p>
-                <p className="text-sm text-yoga-text/80 leading-relaxed">{displayDescription}</p>
+                {/* Sarah 2026-06: whitespace-pre-line erhaelt die vom Nutzer eingegebenen
+                    Zeilenumbrueche in der Beschreibung (reine Anzeige, Text bleibt escaped). */}
+                <p className="text-sm text-yoga-text/80 leading-relaxed whitespace-pre-line">{displayDescription}</p>
               </div>
             )}
             {displayBringAlong && (

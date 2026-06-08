@@ -1033,7 +1033,7 @@ export default function SessionDetailPage() {
             {isEventPaid && freeSpots > 0 && effectiveOpen && (
               <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 mb-4">
                 <p className="text-sm text-yoga-amber-text leading-relaxed">
-                  Schön, dass du dabei sein möchtest! Deine Anmeldung ist <span className="font-bold">verbindlich</span> — die Bezahlung läuft direkt mit Sarah (PayPal oder Bar). Bis <strong>7 Tage</strong> vor dem Event kannst du dich kostenfrei wieder abmelden. Danach fällt die <strong>volle Gebühr</strong> an. Du kannst aber gerne einen <strong>Ersatzkandidaten</strong> benennen.
+                  So schön, dass du dabei sein möchtest! Deine Anmeldung ist verbindlich — die Bezahlung läuft direkt mit Sarah (PayPal oder Bar). Bis <strong>7 Tage</strong> vor dem Event kannst du dich kostenfrei wieder abmelden - danach fällt die volle Gebühr an. Du kannst aber gerne einen Ersatzkandidaten benennen. Danke für dein Verständnis und deine Wertschätzung für meine Planung 🤎
                 </p>
               </div>
             )}

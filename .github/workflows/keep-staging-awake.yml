@@ -1,0 +1,36 @@
+# Haelt das Supabase-STAGING-Projekt wach.
+# Supabase pausiert Free-Projekte nach 7 Tagen ohne Aktivitaet. Dieser Job
+# schickt zweimal pro Woche (Mo + Do) ein harmloses Lebenszeichen an die
+# Staging-Datenbank, damit sie nicht einschlaeft. Betrifft NUR Staging — Prod
+# ist davon nicht betroffen (laeuft durch echte Nutzer ohnehin durch).
+#
+# Einrichtung: 1 Repository-Secret noetig -> STAGING_SUPABASE_ANON_KEY
+# (GitHub -> Settings -> Secrets and variables -> Actions -> New repository secret)
+# Der Anon-Key ist oeffentlich (steckt ohnehin im Frontend), liegt aber sauber
+# als Secret, damit nichts im oeffentlichen Repo-Code steht.
+
+name: Keep Supabase Staging Awake
+
+on:
+  schedule:
+    - cron: '0 6 * * 1,4'   # Mo + Do, 06:00 UTC (~07:00/08:00 Berlin)
+  workflow_dispatch: {}      # erlaubt manuelles Ausloesen per Knopf
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Lebenszeichen an Staging-DB
+        run: |
+          URL="https://bbzfcidmyyiodirtbowq.supabase.co/rest/v1/courses?select=id&limit=1"
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.STAGING_SUPABASE_ANON_KEY }}" \
+            "$URL")
+          echo "HTTP-Status von Staging: $CODE"
+          if [ "$CODE" -ge 200 ] && [ "$CODE" -lt 500 ]; then
+            echo "OK — Staging hat geantwortet, Lebenszeichen gesendet."
+          else
+            echo "FEHLER — Staging nicht erreichbar (Status $CODE). Evtl. pausiert: im Supabase-Dashboard 'Restore' klicken."
+            exit 1
+          fi

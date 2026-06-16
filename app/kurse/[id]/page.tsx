@@ -810,7 +810,8 @@ export default function SessionDetailPage() {
           <div className="info-tile">
             <div className="lbl">{myBooking ? 'Dein Status' : 'Freie Plätze'}</div>
             <div className={`val ${myBooking ? 'text-yoga-green-text' : freeSpots <= 0 ? 'text-yoga-red-text' : ''}`}>
-              {myBooking ? 'Angemeldet ' : past ? '—' : freeSpots <= 0 ? 'Ausgebucht' : `${freeSpots} frei`}
+              {/* Sarah 2026-06: Bei Events keine Platz-Zahl zeigen — nur "Ja" statt "X frei". */}
+              {myBooking ? 'Angemeldet ' : past ? '—' : freeSpots <= 0 ? 'Ausgebucht' : isEvent ? 'Ja' : `${freeSpots} frei`}
             </div>
           </div>
           {!course?.is_free && !isEvent && (

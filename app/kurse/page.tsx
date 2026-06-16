@@ -245,6 +245,9 @@ export default function KursePage() {
     // Welle 2.11: external_participants_count auch abziehen.
     const free = (s.display_max_spots || 0) - s.booking_count - (s.external_participants_count || 0)
     if (free <= 0) return <span className="badge badge-full">Ausgebucht</span>
+    // Sarah 2026-06: Bei Events keine Platz-Zahl zeigen (zu transparent) — nur "Plätze frei".
+    // Reguläre Kurse/Einzelstunden behalten die konkrete Anzahl.
+    if (isEvent(s)) return <span className="badge badge-free">Plätze frei</span>
     if (free === 1) return <span className="badge badge-wait">1 Platz frei</span>
     return <span className="badge badge-free">{free} Plätze frei</span>
   }

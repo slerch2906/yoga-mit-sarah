@@ -10,6 +10,8 @@ export default function AdminYogisPage() {
   const [yogis, setYogis] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  // Sarah-Wunsch 2026-08-18: Filter-Leiste ueber der Yogi-Liste.
+  const [activeFilter, setActiveFilter] = useState<'all' | 'in_course' | 'no_course' | 'credits'>('all')
   const [showDummyForm, setShowDummyForm] = useState(false)
   const [dummyForm, setDummyForm] = useState({ first_name: '', last_name: '' })
   const [savingDummy, setSavingDummy] = useState(false)
@@ -20,10 +22,12 @@ export default function AdminYogisPage() {
   useEffect(() => { loadData() }, [])
 
   async function loadData() {
+    // Bugfix (Sarah 2026-08-18): is_active des Kurses mitladen, um zwischen
+    // "aktuell in einem laufenden Kurs" und einer Enrollment in einem
+    // archivierten Kurs unterscheiden zu koennen (siehe hasActiveEnrollment).
     const { data: yogiList } = await supabase
       .from('profiles')
-      .select('*, credits(*), enrollments(*, course:courses(name))')
-      .order('last_name')
+      .select('*, credits(*), enrollments(*, course:courses(name, is_active))')
     setYogis((yogiList || []).filter((y: any) => !y.is_admin && y.first_name !== 'Gelöschter'))
     setLoading(false)
   }
@@ -49,6 +53,18 @@ export default function AdminYogisPage() {
 
   function getCurrentCourse(yogi: any) {
     return yogi.enrollments?.[0]?.course?.name || '—'
+  }
+
+  // Sarah-Wunsch 2026-08-18: Filter-Kriterien für die Yogi-Übersicht.
+  // "Aktiv" = mind. eine Einschreibung in einen laufenden (nicht archivierten)
+  // Kurs — es gibt kein eigenes Aktiv/Inaktiv-Flag am Profil (das 24-Monats-
+  // Inaktivitäts-Konzept für die Auto-Löschung ist etwas anderes, siehe
+  // find_inactive_accounts in der DB).
+  function hasActiveEnrollment(yogi: any) {
+    return (yogi.enrollments || []).some((e: any) => e.course?.is_active !== false)
+  }
+  function hasOpenCredits(yogi: any) {
+    return getFreeCredits(yogi) > 0
   }
 
   function getDisplayName(yogi: any) {
@@ -90,9 +106,30 @@ export default function AdminYogisPage() {
     loadData()
   }
 
-  const filtered = yogis.filter(y =>
-    `${y.first_name} ${y.last_name} ${y.email}`.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = yogis
+    .filter(y => `${y.first_name} ${y.last_name} ${y.email}`.toLowerCase().includes(search.toLowerCase()))
+    .filter(y => {
+      if (activeFilter === 'in_course') return hasActiveEnrollment(y)
+      if (activeFilter === 'no_course') return !hasActiveEnrollment(y)
+      if (activeFilter === 'credits') return hasOpenCredits(y)
+      return true
+    })
+    // Sarah-Wunsch 2026-08-18: standardmäßig nach Vorname sortiert (passt zur
+    // Anzeige "Vorname Nachname"), Nachname als Tie-Breaker. Locale-aware
+    // (de) statt der DB-Sortierung, damit Umlaute/Groß-Kleinschreibung
+    // korrekt einsortiert werden.
+    .sort((a, b) => {
+      const byFirst = (a.first_name || '').localeCompare(b.first_name || '', 'de', { sensitivity: 'base' })
+      if (byFirst !== 0) return byFirst
+      return (a.last_name || '').localeCompare(b.last_name || '', 'de', { sensitivity: 'base' })
+    })
+
+  const FILTERS: { key: typeof activeFilter; label: string }[] = [
+    { key: 'all', label: 'Alle' },
+    { key: 'in_course', label: 'In Kursen' },
+    { key: 'no_course', label: 'Ohne Kurs' },
+    { key: 'credits', label: 'Credits' },
+  ]
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -120,7 +157,24 @@ export default function AdminYogisPage() {
           </button>
         </div>
 
-        <p className="section-label">Alle Yogis</p>
+        {/* Sarah-Wunsch 2026-08-18: Filter-Leiste über der Yogi-Liste — alle 4
+            Buttons in einer Zeile, kein horizontales Scrollen. */}
+        <div className="grid grid-cols-4 gap-1.5 mb-4">
+          {FILTERS.map(f => (
+            <button key={f.key} onClick={() => setActiveFilter(f.key)}
+              className={`text-center text-[11px] font-semibold rounded-full px-1 py-1.5 border-0 cursor-pointer transition-colors truncate ${
+                activeFilter === f.key
+                  ? 'bg-yoga-text text-yoga-bg'
+                  : 'bg-white text-yoga-text/60 border border-yoga-border'
+              }`}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <p className="section-label">
+          {activeFilter === 'all' ? 'Alle Yogis' : `Yogis (${filtered.length})`}
+        </p>
         {filtered.length === 0 ? (
           <p className="text-center text-yoga-text/40 text-sm py-6">Keine Yogis gefunden</p>
         ) : filtered.map(yogi => (

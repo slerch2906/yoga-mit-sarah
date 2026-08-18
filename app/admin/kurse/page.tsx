@@ -773,7 +773,7 @@ export default function AdminKursePage() {
       // replacement_session_id: zeigt von ABGESAGT auf neue Ersatz-Session → daraus
       // können wir ableiten welche Sessions SELBST Ersatzstunden sind (=Ziel einer Verlinkung).
       const { data } = await supabase.from('sessions')
-        .select('id, date, time_start, is_cancelled, cancel_reason, replacement_session_id')
+        .select('id, date, time_start, is_cancelled, cancel_reason, replacement_session_id, credit_reduced_on_cancel')
         .eq('course_id', courseId).order('date')
       // Sessions die Ziel eines replacement-Links sind → "is_replacement"
       const replacementTargets = new Set(
@@ -2235,7 +2235,11 @@ export default function AdminKursePage() {
                 <span className="text-sm">
                   {new Date(s.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })}
                   {' · '}{s.time_start?.slice(0,5)} Uhr
-                  {s.is_cancelled && (s.cancel_reason === 'excluded' ? ' · Ausgeschlossen' : ' · Abgesagt')}
+                  {s.is_cancelled && (
+                    s.cancel_reason === 'excluded' ? ' · Ausgeschlossen'
+                    : s.credit_reduced_on_cancel ? ' · Ausgefallen (Credits reduziert)'
+                    : ' · Abgesagt'
+                  )}
                   {s.is_replacement && (
                     <span className="text-yoga-text font-semibold">
                       {' · Ersatzstunde'}

@@ -254,7 +254,12 @@ serve(async (req) => {
         subject = `${subjNoun} abgesagt: ${data.courseName}`
         const hasRep = !!data.replacementDate && !isContainer
         let afterBlock = ''
-        if (hasRep) afterBlock = `${hl(`<p style="margin:0 0 8px;font-size:14px;font-weight:bold;color:#3a5a30">Ersatztermin: ${fmtDate(data.replacementDate, data.replacementTime)}</p><p style="margin:0;font-size:13px">Dein Credit wird automatisch auf den Ersatztermin eingebucht.</p>`,'#e8ede6')}${btn('Meine Buchungen',APP_URL+'/meine')}`
+        // Sarah 2026-08-18: "Kurscredits reduzieren" — KEIN Credit wird gutgeschrieben,
+        // stattdessen sinkt die Kurscredit-Gesamtzahl dauerhaft um 1 (eine Stunde weniger
+        // zu zahlen). Muss VOR den anderen Fällen geprüft werden, sonst würde faelschlich
+        // "Credit wird gutgeschrieben" behauptet.
+        if (data.creditReduced) afterBlock = `${hl(`<p style="margin:0;font-size:14px">❌ Es wird <strong>kein Credit gutgeschrieben</strong> — diese Stunde entfällt ersatzlos.</p><p style="margin:8px 0 0;font-size:14px;color:#3a5a30">✅ Stattdessen reduziert sich deine Kurscredit-Gesamtzahl automatisch um 1 — du zahlst für diesen Kurs eine Stunde weniger.</p>`,'#f0e6e6')}${btn('Meine Buchungen',APP_URL+'/meine')}`
+        else if (hasRep) afterBlock = `${hl(`<p style="margin:0 0 8px;font-size:14px;font-weight:bold;color:#3a5a30">Ersatztermin: ${fmtDate(data.replacementDate, data.replacementTime)}</p><p style="margin:0;font-size:13px">Dein Credit wird automatisch auf den Ersatztermin eingebucht.</p>`,'#e8ede6')}${btn('Meine Buchungen',APP_URL+'/meine')}`
         else if (isFreeEvent) afterBlock = `<p style="font-size:15px">Da das Event kostenlos war, ist keine weitere Aktion nötig. Ich melde mich, falls es einen Nachhol-Termin gibt.</p>`
         else if (isPaidEvent) afterBlock = `<p style="font-size:15px">Eine bereits geleistete Bezahlung erstatte ich dir extern (PayPal / Überweisung). Ich melde mich persönlich bei dir.</p>`
         else if (isContainer) afterBlock = `<p style="font-size:15px">✅ Dein Credit wurde dir automatisch gutgeschrieben.</p>`

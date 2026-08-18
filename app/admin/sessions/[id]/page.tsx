@@ -25,7 +25,11 @@ export default function AdminSessionPage() {
   const [cancelling, setCancelling] = useState(false)
   const [reason, setReason] = useState('')
   const [showCancelForm, setShowCancelForm] = useState(false)
-  const [hasReplacement, setHasReplacement] = useState(false)
+  // Welle 2026-08-18 (Sarah): 3 Absage-Wege statt Checkbox — 'refund' (Default,
+  // bisheriges Verhalten), 'replacement' (bisheriges Ersatztermin-Verhalten),
+  // 'reduce' (neu: keine Rückbuchung, Kurscredit total sinkt stattdessen um 1).
+  const [cancelMode, setCancelMode] = useState<'refund' | 'replacement' | 'reduce'>('refund')
+  const hasReplacement = cancelMode === 'replacement'
   const [replacementDate, setReplacementDate] = useState('')
   const [replacementTime, setReplacementTime] = useState('')
   const [showAddReplacement, setShowAddReplacement] = useState(false)
@@ -651,6 +655,12 @@ export default function AdminSessionPage() {
 
   async function handleAddLateReplacement() {
     if (!lateReplacementDate || !lateReplacementTime) return
+    // Sarah-Wunsch 2026-08-18: Sperre auch hier verankern (nicht nur im UI-Button
+    // ausgeblendet) — sonst würde die Kurscredit-total dauerhaft zu niedrig bleiben.
+    if ((session as any)?.credit_reduced_on_cancel) {
+      alert('Für eine Stunde, die mit "Kurscredits reduzieren" abgesagt wurde, kann kein Ersatztermin angelegt werden.')
+      return
+    }
     setAddingReplacement(true)
 
     // Alle stornierten Buchungen dieser Session holen
@@ -779,10 +789,12 @@ export default function AdminSessionPage() {
 
     // 2) Ursprüngliche Session als abgesagt markieren + ggf. Ersatztermin verlinken
     // WICHTIG: cancel_reason gesetzt damit UI zwischen "Abgesagt" und "Ausgeschlossen" unterscheidet.
+    const isReduceMode = isCourseSession && cancelMode === 'reduce'
     await supabase.from('sessions').update({
       is_cancelled: true,
       cancel_reason: reason || 'Abgesagt',
       replacement_session_id: replacementSessionId,
+      credit_reduced_on_cancel: isReduceMode,
     }).eq('id', id)
 
     // 3) Alle Buchungen stornieren
@@ -897,6 +909,7 @@ export default function AdminSessionPage() {
           replacementDate: hasReplacement ? replacementDate : undefined,
           replacementTime: hasReplacement ? replacementTime : undefined,
           sessionType: session?.session_type,
+          creditReduced: isReduceMode,
         })
 
         // Falls Ersatztermin: auch Buchungsbestätigung für neuen Termin
@@ -935,6 +948,25 @@ export default function AdminSessionPage() {
     // 4) Warteliste löschen
     await supabase.from('waitlist').delete().eq('session_id', id)
 
+    // 5) Reduce-Modus (Sarah 2026-08-18): keine Rückbuchung — stattdessen
+    // sinkt das total der betroffenen Kurs-Credits um 1. Der Trigger
+    // sync_credits_on_session_cancel hat "used" durch is_cancelled=true bereits
+    // automatisch mit-verringert; total zieht hier gleichauf nach, damit die
+    // verbleibende (nutzbare) Stundenzahl für den Yogi unverändert bleibt —
+    // er bekommt keine zusätzliche gratis Stunde, zahlt aber auch eine weniger.
+    if (isReduceMode) {
+      const reducedCreditIds = new Set<string>()
+      for (const booking of bookings) {
+        if (!booking.credit_id || reducedCreditIds.has(booking.credit_id)) continue
+        reducedCreditIds.add(booking.credit_id)
+        const { data: credit } = await supabase.from('credits')
+          .select('id, total').eq('id', booking.credit_id).maybeSingle()
+        if (credit) {
+          await supabase.from('credits').update({ total: credit.total - 1 }).eq('id', credit.id)
+        }
+      }
+    }
+
     // Welle 4.7 (Sarah 2026-05-26): Audit-Spur war komplett leer — kritische
     // Compliance-Luecke. Jetzt session_cancelled + (falls Ersatz) replacement_session_added.
     await supabase.from('audit_log').insert({
@@ -945,6 +977,7 @@ export default function AdminSessionPage() {
         session_date: session?.date, session_time: session?.time_start,
         reason: reason || null,
         replacement_session_id: replacementSessionId,
+        credit_reduced_on_cancel: isReduceMode,
         affected_yogis: bookings.length,
       }
     })
@@ -965,11 +998,13 @@ export default function AdminSessionPage() {
     // event_paid wurde extern bezahlt. Daher generische Meldung.
     const msg = replacementSessionId
       ? `Stunde abgesagt. ${bookings.length} Yogis wurden direkt in den Ersatztermin (${replacementDate}) eingebucht und informiert.`
-      : session?.session_type === 'event_free'
-        ? `Stunde abgesagt. ${bookings.length} Yogis wurden informiert (kein Credit verbraucht).`
-        : session?.session_type === 'event_paid'
-          ? `Stunde abgesagt. ${bookings.length} Yogis wurden informiert — Rückzahlung manuell klären.`
-          : `Stunde abgesagt. ${bookings.length} Yogis wurden informiert und ihre Credits zurückgebucht.`
+      : isReduceMode
+        ? `Stunde abgesagt. ${bookings.length} Yogis wurden informiert — ihre Kurscredits wurden um 1 reduziert (keine Rückbuchung).`
+        : session?.session_type === 'event_free'
+          ? `Stunde abgesagt. ${bookings.length} Yogis wurden informiert (kein Credit verbraucht).`
+          : session?.session_type === 'event_paid'
+            ? `Stunde abgesagt. ${bookings.length} Yogis wurden informiert — Rückzahlung manuell klären.`
+            : `Stunde abgesagt. ${bookings.length} Yogis wurden informiert und ihre Credits zurückgebucht.`
     alert(msg)
     router.back()
   }
@@ -1191,7 +1226,9 @@ export default function AdminSessionPage() {
         {/* Ersatztermin nachträglich anlegen (nur wenn bereits abgesagt) */}
         {session?.is_cancelled && (
           <div className="card border-yoga-amber-text/20 bg-yoga-amber-bg mb-4">
-            <p className="text-sm font-bold text-yoga-amber-text mb-1">Stunde ist abgesagt</p>
+            <p className="text-sm font-bold text-yoga-amber-text mb-1">
+              {(session as any).credit_reduced_on_cancel ? 'Ausgefallen – Kurscredits reduziert' : 'Stunde ist abgesagt'}
+            </p>
             {/* Link zum bereits verknüpften Ersatztermin (wenn vorhanden) */}
             {(session as any).replacement && !(session as any).replacement.is_cancelled && (
               <button onClick={() => router.push(`/admin/sessions/${(session as any).replacement.id}`)}
@@ -1200,7 +1237,15 @@ export default function AdminSessionPage() {
                 Zur Ersatzstunde: {new Date((session as any).replacement.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })} · {(session as any).replacement.time_start?.slice(0,5)} Uhr
               </button>
             )}
-            {!showAddReplacement && !(session as any).replacement ? (
+            {/* Sarah-Wunsch 2026-08-18: bei "Credits reduziert" KEIN nachträglicher
+                Ersatztermin — sonst würde die Kurscredit-total dauerhaft zu niedrig
+                bleiben, obwohl die Stunde doch nachgeholt wird. */}
+            {(session as any).credit_reduced_on_cancel ? (
+              <p className="text-xs text-yoga-text/60 mt-2">
+                Diese Stunde wurde ohne Rückbuchung abgesagt — die Kurscredits der betroffenen Yogis wurden
+                bereits um 1 reduziert. Ein nachträglicher Ersatztermin ist für diese Absage-Art nicht möglich.
+              </p>
+            ) : !showAddReplacement && !(session as any).replacement ? (
               <button onClick={() => setShowAddReplacement(true)}
                 className="w-full mt-2 text-sm border border-yoga-amber-text/30 text-yoga-amber-text rounded-yoga py-2 font-semibold bg-transparent cursor-pointer hover:opacity-80">
                 <i className="ti ti-calendar-plus mr-2" />Ersatztermin nachträglich anlegen
@@ -1255,16 +1300,15 @@ export default function AdminSessionPage() {
                     course_session sinnvoll. Einzelstunden/Events kommen
                     nicht zurück; kein Ersatz-Bereich anzeigen. */}
                 {session?.session_type === 'course_session' ? (
-                  <div className="mb-4">
-                    <label className="flex items-center gap-3 cursor-pointer mb-3">
-                      <input type="checkbox" checked={hasReplacement}
-                        onChange={e => setHasReplacement(e.target.checked)}
+                  <div className="mb-4 space-y-2">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="radio" name="cancelMode" checked={cancelMode === 'replacement'}
+                        onChange={() => setCancelMode('replacement')}
                         className="w-5 h-5 flex-shrink-0" />
                       <span className="text-sm font-semibold">Ersatztermin anbieten</span>
                     </label>
-
-                    {hasReplacement && (
-                      <div className="bg-yoga-bg rounded-yoga p-3 space-y-2">
+                    {cancelMode === 'replacement' && (
+                      <div className="bg-yoga-bg rounded-yoga p-3 space-y-2 ml-8">
                         <p className="text-xs text-yoga-text/50 mb-2">
                           Yogis werden direkt in den Ersatztermin eingebucht – ihr Credit bleibt verbraucht.
                         </p>
@@ -1282,9 +1326,28 @@ export default function AdminSessionPage() {
                       </div>
                     )}
 
-                    {!hasReplacement && (
-                      <p className="text-xs text-yoga-text/50">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="radio" name="cancelMode" checked={cancelMode === 'refund'}
+                        onChange={() => setCancelMode('refund')}
+                        className="w-5 h-5 flex-shrink-0" />
+                      <span className="text-sm font-semibold">Credit wird zurückgebucht</span>
+                    </label>
+                    {cancelMode === 'refund' && (
+                      <p className="text-xs text-yoga-text/50 ml-8">
                         Ohne Ersatztermin: Credits werden an alle Yogis zurückgebucht.
+                      </p>
+                    )}
+
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="radio" name="cancelMode" checked={cancelMode === 'reduce'}
+                        onChange={() => setCancelMode('reduce')}
+                        className="w-5 h-5 flex-shrink-0" />
+                      <span className="text-sm font-semibold">Keine Rückbuchung – Kurscredits reduzieren sich um 1</span>
+                    </label>
+                    {cancelMode === 'reduce' && (
+                      <p className="text-xs text-yoga-text/50 ml-8">
+                        Kein Ersatztermin, kein zusätzlicher Credit für die Yogis — stattdessen sinkt ihre
+                        Kurscredit-Gesamtzahl dauerhaft um 1 Stunde (z.B. bei Absage ohne Ersatz wegen Krankheit).
                       </p>
                     )}
                   </div>

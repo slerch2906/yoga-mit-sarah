@@ -63,6 +63,9 @@ export default function AdminDashboard() {
   const [showCancelForm, setShowCancelForm] = useState(false)
   const [replacementDate, setReplacementDate] = useState('')
   const [replacementTime, setReplacementTime] = useState('')
+  // Sarah-Wunsch 2026-08-18: dritter Absage-Weg — keine Rückbuchung, stattdessen
+  // sinkt die Kurscredit-total um 1. Schließt sich mit Ersatztermin aus.
+  const [reduceCredits, setReduceCredits] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   // Nachträglicher Ersatztermin für eine bereits abgesagte Stunde (vom Modal aus)
   const [showAddReplacement, setShowAddReplacement] = useState(false)
@@ -588,10 +591,16 @@ export default function AdminDashboard() {
     if (!selectedSession) return
     setCancelling(true)
 
+    // Sarah-Wunsch 2026-08-18: reduceCredits nur für course_session sinnvoll —
+    // Ersatztermin-Felder werden im UI bei reduceCredits ausgeblendet, hier
+    // zusätzlich defensiv abgesichert.
+    const isReduceMode = selectedSession.session_type === 'course_session' && reduceCredits
+
     // Stunde absagen
     await supabase.from('sessions').update({
       is_cancelled: true,
-      cancel_reason: replacementDate ? `Ersatztermin: ${replacementDate}` : 'Abgesagt'
+      cancel_reason: isReduceMode ? 'Abgesagt (Credits reduziert)' : (replacementDate ? `Ersatztermin: ${replacementDate}` : 'Abgesagt'),
+      credit_reduced_on_cancel: isReduceMode,
     }).eq('id', selectedSession.id)
 
     // Credits für alle aktiven Buchungen freigeben
@@ -741,6 +750,7 @@ export default function AdminDashboard() {
           replacementDate: replacementDate || undefined,
           replacementTime: replacementTime || undefined,
           sessionType: selectedSession.session_type,
+          creditReduced: isReduceMode,
         })
         if (replacementDate && replacementTime) {
           await Email.bookingConfirmed({
@@ -756,12 +766,28 @@ export default function AdminDashboard() {
       }
     }
 
+    // Reduce-Modus (Sarah 2026-08-18): keine Rückbuchung — stattdessen sinkt
+    // das total der betroffenen Kurs-Credits um 1 (analog admin/sessions/[id]).
+    if (isReduceMode) {
+      const reducedCreditIds = new Set<string>()
+      for (const b of activeBookings) {
+        if (!b.credit_id || reducedCreditIds.has(b.credit_id)) continue
+        reducedCreditIds.add(b.credit_id)
+        const { data: credit } = await supabase.from('credits')
+          .select('id, total').eq('id', b.credit_id).maybeSingle()
+        if (credit) {
+          await supabase.from('credits').update({ total: credit.total - 1 }).eq('id', credit.id)
+        }
+      }
+    }
+
     await supabase.from('audit_log').insert({
       action: 'session_cancelled',
       details: {
         session_id: selectedSession.id,
         session_type: selectedSession.session_type,
         replacement_date: replacementDate || null,
+        credit_reduced_on_cancel: isReduceMode,
         affected_yogis: activeBookings.length,
         source: 'dashboard',
       }
@@ -784,6 +810,7 @@ export default function AdminDashboard() {
     setSelectedSession(null)
     setReplacementDate('')
     setReplacementTime('')
+    setReduceCredits(false)
     setCancelling(false)
     loadData()
   }
@@ -792,6 +819,12 @@ export default function AdminDashboard() {
   // Ersatzstunde anlegen. Logik gespiegelt aus admin/sessions/[id]/handleAddLateReplacement.
   async function handleAddLateReplacementFromDashboard() {
     if (!selectedSession || !lateReplacementDate || !lateReplacementTime) return
+    // Sarah-Wunsch 2026-08-18: analog admin/sessions/[id] — kein nachträglicher
+    // Ersatztermin bei "Credits reduziert", sonst bleibt total dauerhaft zu niedrig.
+    if ((selectedSession as any).credit_reduced_on_cancel) {
+      alert('Für eine Stunde, die mit "Kurscredits reduzieren" abgesagt wurde, kann kein Ersatztermin angelegt werden.')
+      return
+    }
     setAddingReplacement(true)
 
     // Alle stornierten Buchungen dieser Stunde laden
@@ -1026,13 +1059,20 @@ export default function AdminDashboard() {
               {/* Bei ABGESAGTER Stunde: Ersatzstunde anlegen (sofern noch keine verknüpft ist).
                   Welle 3 (Sarah 2026-05-26): Ersatzstunden machen nur fuer course_session
                   Sinn — bei Einzelstunden/Events gibt es keinen Kurs-Kontext. */}
-              {selectedSession.is_cancelled && !selectedSession.replacement_session_id && !showAddReplacement && selectedSession.session_type === 'course_session' && (
+              {selectedSession.is_cancelled && (selectedSession as any).credit_reduced_on_cancel && (
+                <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 mb-3">
+                  <p className="text-sm text-yoga-amber-text">
+                    Ausgefallen – Kurscredits reduziert. Kein nachträglicher Ersatztermin möglich.
+                  </p>
+                </div>
+              )}
+              {selectedSession.is_cancelled && !selectedSession.replacement_session_id && !showAddReplacement && selectedSession.session_type === 'course_session' && !(selectedSession as any).credit_reduced_on_cancel && (
                 <button onClick={() => setShowAddReplacement(true)}
                   className="w-full btn-secondary text-sm mb-3 flex items-center justify-center gap-2">
                   <i className="ti ti-calendar-plus" />Ersatzstunde anlegen
                 </button>
               )}
-              {selectedSession.is_cancelled && showAddReplacement && (
+              {selectedSession.is_cancelled && showAddReplacement && !(selectedSession as any).credit_reduced_on_cancel && (
                 <div className="bg-yoga-gray border border-yoga-border rounded-yoga p-3 mb-3">
                   <p className="text-sm font-semibold mb-2">Ersatztermin für diese abgesagte Stunde</p>
                   <div className="grid grid-cols-2 gap-2 mb-3">
@@ -1291,7 +1331,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* Ersatztermin nur bei course_session (Welle 3) */}
-              {st === 'course_session' && (
+              {st === 'course_session' && !reduceCredits && (
                 <>
                   <p className="section-label">Ersatztermin (optional)</p>
                   <div className="grid grid-cols-2 gap-3 mb-4">
@@ -1318,9 +1358,31 @@ export default function AdminDashboard() {
                 </>
               )}
 
+              {/* Sarah-Wunsch 2026-08-18: dritter Absage-Weg — keine Rückbuchung,
+                  stattdessen sinkt die Kurscredit-total um 1. Schließt sich mit
+                  Ersatztermin aus (Felder werden bei Auswahl ausgeblendet). */}
+              {st === 'course_session' && !replacementDate && (
+                <label className="flex items-center gap-3 cursor-pointer mb-4">
+                  <input type="checkbox" checked={reduceCredits}
+                    onChange={e => setReduceCredits(e.target.checked)}
+                    className="w-5 h-5 flex-shrink-0" />
+                  <span className="text-sm font-semibold">Keine Rückbuchung – Kurscredits reduzieren sich um 1</span>
+                </label>
+              )}
+              {reduceCredits && (
+                <div className="bg-yoga-amber-bg border border-yoga-amber-text/20 rounded-yoga p-3 mb-4">
+                  <p className="text-sm text-yoga-amber-text">
+                    Kein Ersatztermin, kein zusätzlicher Credit — die Kurscredit-Gesamtzahl der betroffenen
+                    Yogis sinkt dauerhaft um 1 Stunde (z.B. bei Absage ohne Ersatz wegen Krankheit).
+                  </p>
+                </div>
+              )}
+
               <button onClick={cancelSession} disabled={cancelling} className="btn-danger mb-2">
                 {cancelling
                   ? 'Wird abgesagt...'
+                  : reduceCredits
+                  ? 'Absagen (Kurscredits reduzieren)'
                   : replacementDate && st === 'course_session'
                   ? 'Absagen & Ersatztermin anlegen'
                   : isEvent
@@ -1502,7 +1564,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   {(() => {
-                    if (s.is_cancelled) return <span className="badge badge-full">Abgesagt</span>
+                    if (s.is_cancelled) return <span className="badge badge-full">{s.credit_reduced_on_cancel ? 'Ausgefallen' : 'Abgesagt'}</span>
                     if (isPast) return <span className="badge bg-yoga-gray text-yoga-text/40">Vergangen</span>
                     // Welle 2.6: bei Events/Einzelstunden max_spots aus Session,
                     // sonst aus Container-Kurs (Kursstunden).

@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { getServerNow } from '@/lib/server-time'
 import { Email } from '@/lib/email'
 import { getCurrentUser } from '@/lib/auth'
-import { isExcluded, isCancelled } from '@/lib/session-status'
+import { isExcluded, isCancelled, isStarted } from '@/lib/session-status'
 import { selectCreditForBooking } from '@/lib/credit-selector'
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import AppHeader from '@/components/layout/AppHeader'
@@ -161,10 +161,17 @@ export default function SessionDetailPage() {
   // Prüft ob Yogi nach dieser Buchung noch genug Credits für alle Warteliste-Einträge hat.
   // Falls nicht: gibt die zu entfernenden Wartelisten zurück (älteste zuerst).
   async function checkWaitlistConflicts(userId: string): Promise<any[]> {
-    const { data: waitlists } = await supabase.from('waitlist')
+    const { data: rawWaitlists } = await supabase.from('waitlist')
       .select('id, position, created_at, session_id, session:sessions(date, time_start, name, session_type, course:courses(name))')
       .eq('user_id', userId).eq('type', 'waitlist').order('created_at')
-    if (!waitlists || waitlists.length === 0) return []
+    // Sarah-Fix 2026-08-18: verwaiste Wartelisten-Einträge für bereits gestartete
+    // Stunden (Yogi wurde nie nachgerückt, Stunde ist einfach vorbeigezogen) dürfen
+    // hier NICHT mitzählen — sonst blockiert ein längst vergangener Eintrag fälschlich
+    // eine neue Buchung ("Wartelisten-Konflikt" für eine Stunde, die gar nicht mehr
+    // stattfindet). Der Cron cleanup-stale-waitlist-entries räumt diese Einträge
+    // ohnehin alle 15 Min auf; dieser Filter greift zusätzlich sofort.
+    const waitlists = (rawWaitlists || []).filter((w: any) => !isStarted(w.session))
+    if (waitlists.length === 0) return []
     // Wieviele Credits stehen NACH dieser Buchung noch zur Verfügung?
     const creditsAfterBooking = Math.max(0, freeCredits - 1)
     // Wenn freeCredits-1 < waitlists.length, müssen die ältesten entfernt werden

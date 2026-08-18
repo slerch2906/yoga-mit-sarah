@@ -105,7 +105,7 @@ export const Email = {
   waitlistOfferLate: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; offerToken: string; isSingle?: boolean; sessionType?: string }) =>
     sendEmail('waitlist_offer_late', data),
 
-  sessionCancelled: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; reason?: string; replacementDate?: string; replacementTime?: string; isSingle?: boolean; sessionType?: string; creditReduced?: boolean }) =>
+  sessionCancelled: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; reason?: string; replacementDate?: string; replacementTime?: string; isSingle?: boolean; sessionType?: string; creditReduced?: boolean; isExternalNachholer?: boolean }) =>
     sendEmail('session_cancelled', data),
 
   sessionAdded: (data: { email: string; firstName: string; courseName: string; date: string; timeStart: string; durationMin: number; originalDate?: string; originalTime?: string; isSingle?: boolean; sessionType?: string }) =>

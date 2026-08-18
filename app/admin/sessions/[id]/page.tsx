@@ -784,11 +784,28 @@ export default function AdminSessionPage() {
       replacement_session_id: newSession.id,
     }).eq('id', id)
 
+    // Sarah-Wunsch 2026-08-18: auch beim nachträglich angelegten Ersatztermin
+    // nur echte Kursmitglieder automatisch übernehmen. Nachholer aus anderen
+    // Kursen bekamen ihr Credit schon bei der ursprünglichen Absage zurück
+    // (eigene Info-Mail damals) und werden hier einfach übersprungen.
+    let courseEnrolledUserIds: Set<string> | null = null
+    if (session?.session_type === 'course_session' && session?.course?.id) {
+      const { data: enr } = await supabase.from('enrollments').select('user_id').eq('course_id', session.course.id)
+      courseEnrolledUserIds = new Set((enr || []).map((e: any) => e.user_id))
+    }
+
     let enrolledCount = 0
     let skippedCount = 0
+    let skippedExternalCount = 0
 
     for (const booking of (cancelledBookings || [])) {
       if (!booking.credit_id) continue
+
+      const isCourseMember = !courseEnrolledUserIds || courseEnrolledUserIds.has(booking.user_id)
+      if (!isCourseMember) {
+        skippedExternalCount++
+        continue
+      }
 
       // Credit prüfen: muss existieren, noch gültig sein und freies Guthaben haben
       const { data: credit } = await supabase.from('credits')
@@ -845,6 +862,7 @@ export default function AdminSessionPage() {
         date: lateReplacementDate,
         yogis_enrolled: enrolledCount,
         yogis_skipped: skippedCount,
+        yogis_skipped_external: skippedExternalCount,
       }
     })
 
@@ -853,7 +871,10 @@ export default function AdminSessionPage() {
     const skipNote = skippedCount > 0
       ? ` ${skippedCount} Yogi(s) nicht eingebucht – Credit bereits in einer anderen Stunde verwendet.`
       : ''
-    alert(`Ersatztermin angelegt! ${enrolledCount} Yogi(s) eingebucht und informiert.${skipNote}`)
+    const externalNote = skippedExternalCount > 0
+      ? ` ${skippedExternalCount} externe(r) Nachholer nicht übernommen (kein Kursmitglied, Credit war bereits zurückgebucht).`
+      : ''
+    alert(`Ersatztermin angelegt! ${enrolledCount} Yogi(s) eingebucht und informiert.${skipNote}${externalNote}`)
     loadData()
   }
 
@@ -895,6 +916,17 @@ export default function AdminSessionPage() {
       credit_reduced_on_cancel: isReduceMode,
     }).eq('id', id)
 
+    // Sarah-Wunsch 2026-08-18: beim Ersatztermin nur echte Kursmitglieder
+    // automatisch übernehmen. Nachholer aus anderen Kursen (nicht in
+    // enrollments dieses Kurses) werden NICHT automatisch umgebucht — ihr
+    // Credit wird stattdessen ganz normal zurückgebucht (Trigger), sie
+    // bekommen eine eigene, freundliche Info-Mail statt der Ersatztermin-Mail.
+    let courseEnrolledUserIds: Set<string> | null = null
+    if (isCourseSession && replacementSessionId) {
+      const { data: enr } = await supabase.from('enrollments').select('user_id').eq('course_id', session.course.id)
+      courseEnrolledUserIds = new Set((enr || []).map((e: any) => e.user_id))
+    }
+
     // 3) Alle Buchungen stornieren
     for (const booking of bookings) {
       await supabase.from('bookings').update({
@@ -904,6 +936,9 @@ export default function AdminSessionPage() {
         cancelled_by: 'admin',
       }).eq('id', booking.id)
 
+      const isCourseMember = !courseEnrolledUserIds || courseEnrolledUserIds.has(booking.user_id)
+      let bookedIntoReplacement = false
+
       // Credit zurückbuchen ODER direkt in Ersatztermin einbuchen
       // Welle S2/H11 (Sarah 2026-05-27): Vor dem Re-Enroll prüfen, ob der
       // Credit zum Ersatztermin überhaupt gültig ist (8d-Nachhol-Fenster /
@@ -912,7 +947,7 @@ export default function AdminSessionPage() {
       // Wenn ungueltig: keine Buchung anlegen, stattdessen Yogi-Banner +
       // admin-Notification + Audit. Yogi muss dann selbst entscheiden /
       // sich melden.
-      if (replacementSessionId && booking.credit_id) {
+      if (replacementSessionId && booking.credit_id && isCourseMember) {
         const { data: credit } = await supabase.from('credits')
           .select('id, expires_at, valid_from, model, course_id')
           .eq('id', booking.credit_id).maybeSingle()
@@ -928,6 +963,7 @@ export default function AdminSessionPage() {
             type: booking.type,
             status: 'active',
           })
+          bookedIntoReplacement = true
         } else {
           // Credit ungueltig fuer Ersatztermin — keine automatische Buchung.
           // Credit wird durch trg_sync_credit_used wegen der vorherigen
@@ -997,6 +1033,10 @@ export default function AdminSessionPage() {
         const mailName = (session?.session_type && session.session_type !== 'course_session')
           ? (session?.name || '')
           : (session?.course?.name || '')
+        // Sarah-Wunsch 2026-08-18: Nachholer aus anderen Kursen, die NICHT
+        // automatisch in den Ersatztermin übernommen wurden, bekommen eine
+        // eigene, freundliche Info statt der "Ersatztermin"-Mail.
+        const isExternalNachholer = !!replacementSessionId && !isCourseMember
         await Email.sessionCancelled({
           email: booking.profile.email,
           firstName: booking.profile.first_name || 'Yogi',
@@ -1004,15 +1044,16 @@ export default function AdminSessionPage() {
           date: session?.date || '',
           timeStart: session?.time_start || '',
           reason: reason || undefined,
-          replacementDate: hasReplacement ? replacementDate : undefined,
-          replacementTime: hasReplacement ? replacementTime : undefined,
+          replacementDate: (hasReplacement && !isExternalNachholer) ? replacementDate : undefined,
+          replacementTime: (hasReplacement && !isExternalNachholer) ? replacementTime : undefined,
           sessionType: session?.session_type,
           creditReduced: isReduceMode,
+          isExternalNachholer,
         })
 
-        // Falls Ersatztermin: auch Buchungsbestätigung für neuen Termin
-        // (Ersatztermin gibt es nur bei course_session — siehe Welle 2.10)
-        if (replacementSessionId) {
+        // Falls Ersatztermin UND tatsächlich übernommen: auch Buchungsbestätigung
+        // für den neuen Termin (Ersatztermin gibt es nur bei course_session).
+        if (replacementSessionId && bookedIntoReplacement) {
           await Email.bookingConfirmed({
             email: booking.profile.email,
             firstName: booking.profile.first_name || 'Yogi',

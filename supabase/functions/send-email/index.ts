@@ -258,14 +258,21 @@ serve(async (req) => {
         // stattdessen sinkt die Kurscredit-Gesamtzahl dauerhaft um 1 (eine Stunde weniger
         // zu zahlen). Muss VOR den anderen Fällen geprüft werden, sonst würde faelschlich
         // "Credit wird gutgeschrieben" behauptet.
-        if (data.creditReduced) afterBlock = `${hl(`<p style="margin:0;font-size:14px">❌ Es wird <strong>kein Credit gutgeschrieben</strong> — diese Stunde entfällt ersatzlos.</p><p style="margin:8px 0 0;font-size:14px;color:#3a5a30">✅ Stattdessen reduziert sich deine Kurscredit-Gesamtzahl automatisch um 1 — du zahlst für diesen Kurs eine Stunde weniger.</p>`,'#f0e6e6')}${btn('Meine Buchungen',APP_URL+'/meine')}`
+        // Sarah-Wunsch 2026-08-18: Nachholer aus anderen Kursen werden beim
+        // Ersatztermin NICHT automatisch umgebucht (nur echte Kursmitglieder).
+        // Eigener freundlicher Text statt der "Ersatztermin"-Formulierung.
+        if (data.isExternalNachholer) afterBlock = `${hl(`<p style="margin:0;font-size:14px">Da es sich nicht um deinen eigenen Kurs handelt, trage ich dich nicht automatisch in den neuen Ersatztermin ein.</p><p style="margin:8px 0 0;font-size:14px;color:#3a5a30">✅ Dein Credit wurde bereits automatisch zurückgebucht — du kannst es jederzeit für eine andere passende Stunde verwenden.</p>`,'#e8ede6')}${btn('Meine Buchungen',APP_URL+'/meine')}`
+        else if (data.creditReduced) afterBlock = `${hl(`<p style="margin:0;font-size:14px">❌ Es wird <strong>kein Credit gutgeschrieben</strong> — diese Stunde entfällt ersatzlos.</p><p style="margin:8px 0 0;font-size:14px;color:#3a5a30">✅ Stattdessen reduziert sich deine Kurscredit-Gesamtzahl automatisch um 1 — du zahlst für diesen Kurs eine Stunde weniger.</p>`,'#f0e6e6')}${btn('Meine Buchungen',APP_URL+'/meine')}`
         else if (hasRep) afterBlock = `${hl(`<p style="margin:0 0 8px;font-size:14px;font-weight:bold;color:#3a5a30">Ersatztermin: ${fmtDate(data.replacementDate, data.replacementTime)}</p><p style="margin:0;font-size:13px">Dein Credit wird automatisch auf den Ersatztermin eingebucht.</p>`,'#e8ede6')}${btn('Meine Buchungen',APP_URL+'/meine')}`
         else if (isFreeEvent) afterBlock = `<p style="font-size:15px">Da das Event kostenlos war, ist keine weitere Aktion nötig. Ich melde mich, falls es einen Nachhol-Termin gibt.</p>`
         else if (isPaidEvent) afterBlock = `<p style="font-size:15px">Eine bereits geleistete Bezahlung erstatte ich dir extern (PayPal / Überweisung). Ich melde mich persönlich bei dir.</p>`
         else if (isContainer) afterBlock = `<p style="font-size:15px">✅ Dein Credit wurde dir automatisch gutgeschrieben.</p>`
         else afterBlock = `<p style="font-size:15px">✅ Dein Credit wird dir automatisch gutgeschrieben.</p><p style="font-size:15px">Sobald eine Ersatzstunde eingetragen wird, wirst du automatisch eingebucht – außer du hast den gutgeschriebenen Credit bereits in einer anderen Stunde verwendet.</p>`
         // Welle S1/H7: reason war XSS-Vektor — jetzt escape.
-        html = base(`<p style="font-size:15px">Hallo ${fn},</p><p style="font-size:15px">leider muss ich ${isEvent ? 'dieses Event' : 'diese Stunde'} absagen:</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">${KL}: ${cn}</p>${data.reason?`<p style="margin:4px 0;font-size:14px">💬 ${reason}</p>`:''}`,'#f0e6e6')}${afterBlock}${LG}`)
+        const cancelIntro = data.isExternalNachholer
+          ? 'leider muss ich die folgende Stunde absagen, in der du zum Nachholen eingetragen warst:'
+          : `leider muss ich ${isEvent ? 'dieses Event' : 'diese Stunde'} absagen:`
+        html = base(`<p style="font-size:15px">Hallo ${fn},</p><p style="font-size:15px">${cancelIntro}</p>${hl(`<p style="margin:4px 0;font-size:14px">📅 <strong>${fmtDate(data.date,data.timeStart)}</strong></p><p style="margin:4px 0;font-size:14px">${KL}: ${cn}</p>${data.reason?`<p style="margin:4px 0;font-size:14px">💬 ${reason}</p>`:''}`,'#f0e6e6')}${afterBlock}${LG}`)
         break
       }
       case 'session_added': {

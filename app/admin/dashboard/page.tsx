@@ -143,41 +143,90 @@ export default function AdminDashboard() {
     const weekStart = addDays(monday, weekOffset * 7)
     const weekEnd = addDays(weekStart, 6)
 
-    // Weekly sessions
-    // Sarah-Wunsch 2026-08-18: location mitladen (Uhrzeit/Location-ändern-
-    // Formular muss den effektiven Kurs-Location-Default kennen).
-    const { data: sessionData } = await supabase
-      .from('sessions')
-      .select('*, course:courses(name, max_spots, is_active, location), bookings!bookings_session_id_fkey(id, status, user_id, profile:profiles(first_name, last_name))')
-      // Welle 2.6: session.name + session_type sind via `*` mit dabei — Display-Name
-      // bevorzugt session.name (SYS-Container-Name würde sonst durchschlagen).
-      .gte('date', berlinDateStr(weekStart))
-      .lte('date', berlinDateStr(weekEnd))
-      .order('date').order('time_start')
+    // Sarah 2026-06-02: Kacheln messen REINE YOGI-AKTIVITÄT in der angezeigten Woche —
+    // gezählt nach ZEITPUNKT DER AKTION (audit_log.created_at), nicht nach Stand der
+    // Stunden. Admin-Aktionen (Ein-/Austragen, Einladungs-Einschreibung) zählen NICHT.
+    //   Buchungen   = Yogi hat selbst gebucht          (booking_created)
+    //   Abmeldungen = Yogi hat sich selbst abgemeldet  (booking_cancelled)
+    //   Warteliste  = Yogi hat sich auf WL gesetzt      (waitlist_joined)
+    // Identische Logik wie die Detailseite /admin/stats/[type] (Konsistenz Kachel↔Klick).
+    const weekStartTs = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate(), 0, 0, 0).toISOString()
+    const weekEndExclTs = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 7, 0, 0, 0).toISOString()
+    const countWeekAction = async (act: string) => {
+      const { count } = await supabase.from('audit_log')
+        .select('id', { count: 'exact', head: true })
+        .eq('action', act)
+        .gte('created_at', weekStartTs).lt('created_at', weekEndExclTs)
+      return count || 0
+    }
+
+    // Performance-Fix 2026-08-18 (Sarah): die vier Abfrage-Gruppen unten sind
+    // voneinander unabhängig (verschiedene Tabellen, kein gemeinsamer
+    // Zwischenwert) — liefen bisher nacheinander, jetzt parallel.
+    const [
+      { data: sessionData },
+      [bkCnt, abCnt, wlCnt],
+      { data: notifs },
+      [{ count: refundsCount }, { count: openCount }],
+    ] = await Promise.all([
+      // Weekly sessions
+      // Sarah-Wunsch 2026-08-18: location mitladen (Uhrzeit/Location-ändern-
+      // Formular muss den effektiven Kurs-Location-Default kennen).
+      supabase
+        .from('sessions')
+        .select('*, course:courses(name, max_spots, is_active, location), bookings!bookings_session_id_fkey(id, status, user_id, profile:profiles(first_name, last_name))')
+        // Welle 2.6: session.name + session_type sind via `*` mit dabei — Display-Name
+        // bevorzugt session.name (SYS-Container-Name würde sonst durchschlagen).
+        .gte('date', berlinDateStr(weekStart))
+        .lte('date', berlinDateStr(weekEnd))
+        .order('date').order('time_start'),
+      Promise.all([
+        countWeekAction('booking_created'),
+        countWeekAction('booking_cancelled'),
+        countWeekAction('waitlist_joined'),
+      ]),
+      // Ungelesene Benachrichtigungen
+      supabase.from('admin_notifications')
+        .select('*').eq('read', false).order('created_at', { ascending: false }).limit(10),
+      // Sarah-Wunsch 2026-05-24: Offene Kursabbruch-Aufgaben zählen
+      // refunds = Yogi wählte Erstattung, noch nicht überwiesen
+      // openChoices = Token nicht verfallen, Yogi hat noch nicht gewählt
+      Promise.all([
+        supabase.from('course_cancellation_responses')
+          .select('id', { count: 'exact', head: true })
+          .eq('choice', 'erstattung').eq('refund_paid', false),
+        supabase.from('course_cancellation_responses')
+          .select('id', { count: 'exact', head: true })
+          .is('choice', null).gte('expires_at', new Date().toISOString()),
+      ]),
+    ])
+    setStats({ bookings: bkCnt, cancellations: abCnt, waitlist: wlCnt })
+    setNotifications(notifs || [])
+    setPendingCancellations({ refunds: refundsCount || 0, openChoices: openCount || 0 })
 
     // Ersatzstunden-Mapping: welche Sessions sind die Ersatzstunden für eine abgesagte?
     // Wir suchen alle Sessions deren replacement_session_id auf eine sichtbare Session zeigt
     // → dann wissen wir: diese sichtbare Session IST eine Ersatzstunde.
-    const sessionIds = (sessionData || []).map((s: any) => s.id)
-
     // Sarah-Wunsch 2026-08-18: Wartelisten-Anzahl pro Stunde in der Wochenübersicht,
     // analog zu "X ausgetragen" — nur echte Warteliste (type='waitlist'), keine
     // Notify-Subscriber.
+    // Diese zwei Abfragen hängen zwar von sessionIds oben ab, sind aber
+    // untereinander unabhängig → parallel.
+    const sessionIds = (sessionData || []).map((s: any) => s.id)
     let waitlistCountMap: Record<string, number> = {}
+    let originMap: Record<string, any> = {}
     if (sessionIds.length > 0) {
-      const { data: wlRows } = await supabase.from('waitlist')
-        .select('session_id').eq('type', 'waitlist').in('session_id', sessionIds)
+      const [{ data: wlRows }, { data: origins }] = await Promise.all([
+        supabase.from('waitlist')
+          .select('session_id').eq('type', 'waitlist').in('session_id', sessionIds),
+        supabase
+          .from('sessions')
+          .select('id, date, time_start, replacement_session_id, course:courses(name)')
+          .in('replacement_session_id', sessionIds),
+      ])
       for (const w of (wlRows || []) as any[]) {
         waitlistCountMap[w.session_id] = (waitlistCountMap[w.session_id] || 0) + 1
       }
-    }
-
-    let originMap: Record<string, any> = {}
-    if (sessionIds.length > 0) {
-      const { data: origins } = await supabase
-        .from('sessions')
-        .select('id, date, time_start, replacement_session_id, course:courses(name)')
-        .in('replacement_session_id', sessionIds)
       for (const o of (origins || []) as any[]) {
         if (o.replacement_session_id) originMap[o.replacement_session_id] = o
       }
@@ -204,48 +253,6 @@ export default function AdminDashboard() {
         original_session: originMap[s.id] || null,
       }))
     setSessions(displayed)
-
-    // Sarah 2026-06-02: Kacheln messen REINE YOGI-AKTIVITÄT in der angezeigten Woche —
-    // gezählt nach ZEITPUNKT DER AKTION (audit_log.created_at), nicht nach Stand der
-    // Stunden. Admin-Aktionen (Ein-/Austragen, Einladungs-Einschreibung) zählen NICHT.
-    //   Buchungen   = Yogi hat selbst gebucht          (booking_created)
-    //   Abmeldungen = Yogi hat sich selbst abgemeldet  (booking_cancelled)
-    //   Warteliste  = Yogi hat sich auf WL gesetzt      (waitlist_joined)
-    // Identische Logik wie die Detailseite /admin/stats/[type] (Konsistenz Kachel↔Klick).
-    const weekStartTs = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate(), 0, 0, 0).toISOString()
-    const weekEndExclTs = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 7, 0, 0, 0).toISOString()
-    const countWeekAction = async (act: string) => {
-      const { count } = await supabase.from('audit_log')
-        .select('id', { count: 'exact', head: true })
-        .eq('action', act)
-        .gte('created_at', weekStartTs).lt('created_at', weekEndExclTs)
-      return count || 0
-    }
-    const [bkCnt, abCnt, wlCnt] = await Promise.all([
-      countWeekAction('booking_created'),
-      countWeekAction('booking_cancelled'),
-      countWeekAction('waitlist_joined'),
-    ])
-    setStats({ bookings: bkCnt, cancellations: abCnt, waitlist: wlCnt })
-
-    // Ungelesene Benachrichtigungen laden
-    const { data: notifs } = await supabase.from('admin_notifications')
-      .select('*').eq('read', false).order('created_at', { ascending: false }).limit(10)
-    setNotifications(notifs || [])
-
-    // Sarah-Wunsch 2026-05-24: Offene Kursabbruch-Aufgaben zählen
-    // refunds = Yogi wählte Erstattung, noch nicht überwiesen
-    // openChoices = Token nicht verfallen, Yogi hat noch nicht gewählt
-    // Welle S3/M13 (Sarah 2026-05-27): parallel statt seriell.
-    const [{ count: refundsCount }, { count: openCount }] = await Promise.all([
-      supabase.from('course_cancellation_responses')
-        .select('id', { count: 'exact', head: true })
-        .eq('choice', 'erstattung').eq('refund_paid', false),
-      supabase.from('course_cancellation_responses')
-        .select('id', { count: 'exact', head: true })
-        .is('choice', null).gte('expires_at', new Date().toISOString()),
-    ])
-    setPendingCancellations({ refunds: refundsCount || 0, openChoices: openCount || 0 })
 
     setLoading(false)
   }

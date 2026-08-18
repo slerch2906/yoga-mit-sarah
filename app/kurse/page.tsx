@@ -67,6 +67,12 @@ export default function KursePage() {
   const [isNewYogi, setIsNewYogi] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [loading, setLoading] = useState(true)
+  // Performance-Fix 2026-08-18 (Sarah): solange noch nicht feststeht, ob der
+  // eingeloggte Nutzer Admin ist, NICHTS von der Yogi-Ansicht rendern — sonst
+  // blitzt kurz die Yogi-BottomNav auf, bevor zu /admin/dashboard umgeleitet
+  // wird ("Nav-Flackern"). true wird NUR im Yogi-Fall gesetzt; im Admin-/AGB-/
+  // Login-Redirect-Fall bleibt es false, bis der Browser wegnavigiert.
+  const [roleChecked, setRoleChecked] = useState(false)
   // Welle 6 (Sarah 2026-05-27): "Sarah trägt dich ein"-Banner wegklickbar.
   // Sarah 2026-06-02: zentrale DB-Persistenz (useHintDismissals) — logout-fest +
   // geraeteuebergreifend, gleicher Mechanismus wie alle anderen Hinweise.
@@ -97,6 +103,7 @@ export default function KursePage() {
         }
         setProfile(prof)
         setUserId(user.id)
+        setRoleChecked(true)
 
         // Onboarding-Tour zeigen wenn noch nicht durchlaufen
         if (!prof?.is_admin && prof?.onboarding_completed === false) {
@@ -119,6 +126,9 @@ export default function KursePage() {
       } catch (e) {
         console.error('Init error:', e)
         setLoading(false)
+        // Fehlerfall: trotzdem rendern (wie bisher) statt für immer blank zu
+        // bleiben — der roleChecked-Gate unten würde die Seite sonst leer lassen.
+        setRoleChecked(true)
       }
     }
     init()
@@ -284,6 +294,17 @@ export default function KursePage() {
     onSwipeRight: () => goWeek(-1),
   })
 
+  // Performance-Fix 2026-08-18: solange die Rolle noch nicht feststeht (oder
+  // ein Redirect nach /admin/dashboard, /rechtliches oder /login unterwegs
+  // ist), nichts rendern — verhindert das kurze Aufblitzen der Yogi-BottomNav
+  // bei Admins.
+  if (!roleChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" />
+      </div>
+    )
+  }
   // Admin wird in init() nach /admin/dashboard umgeleitet — hier nichts von der
   // Yogi-Ansicht rendern, damit nichts aufblitzt.
   if (profile?.is_admin) return null

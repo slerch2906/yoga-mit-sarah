@@ -104,6 +104,7 @@ test.describe('Ersatzstunde: Nachträglicher Ersatztermin → Yogis automatisch 
   test.use({ storageState: 'tests/.auth/admin.json' })
 
   let sessionId: string
+  let courseId: string
   let yogi1Id: string
   let creditId: string | undefined
 
@@ -114,6 +115,13 @@ test.describe('Ersatzstunde: Nachträglicher Ersatztermin → Yogis automatisch 
 
     const course = await createTestCourse({ name: `${E2E_PREFIX} Ersatz-Auto-Test`, sessionCount: 1 })
     sessionId = course.sessionIds[0]
+    courseId = course.courseId
+
+    // Sarah-Wunsch 2026-08-18: seit dem "nur Kursmitglieder"-Fix wird beim
+    // Ersatztermin per enrollments geprüft, ob der Yogi wirklich im Kurs
+    // eingeschrieben ist — dieser Test simuliert genau den Kursmitglied-
+    // Fall (im Gegensatz zu einem externen Nachholer), daher enrollments-Eintrag.
+    await db.from('enrollments').insert({ user_id: yogi1Id, course_id: courseId })
 
     creditId = await giveYogiSingleCredit(yogi1Id, 3)
 
@@ -133,6 +141,7 @@ test.describe('Ersatzstunde: Nachträglicher Ersatztermin → Yogis automatisch 
   test.afterAll(async () => {
     const db = await getAdminClient()
     await db.from('credits').delete().eq('user_id', yogi1Id).eq('model', 'single')
+    await db.from('enrollments').delete().eq('course_id', courseId)
     const { data: sess } = await db.from('sessions').select('course_id').eq('id', sessionId).maybeSingle()
     if (sess?.course_id) {
       const { data: allSessions } = await db.from('sessions').select('id').eq('course_id', sess.course_id)
@@ -195,6 +204,7 @@ test.describe('Ersatzstunde: Yogi hat Credit bereits verbraucht → wird übersp
 
   let sessionId: string
   let session2Id: string
+  let courseId: string
   let yogi2Id: string
   let creditId: string | undefined
 
@@ -207,6 +217,12 @@ test.describe('Ersatzstunde: Yogi hat Credit bereits verbraucht → wird übersp
     const course = await createTestCourse({ name: `${E2E_PREFIX} Ersatz-Skip-Test`, sessionCount: 2 })
     sessionId = course.sessionIds[0]
     session2Id = course.sessionIds[1]
+    courseId = course.courseId
+
+    // Sarah-Wunsch 2026-08-18: Kursmitglied simulieren (siehe Beschreibung oben
+    // im "Nachträglicher Ersatztermin"-Block) — dieser Test prüft explizit den
+    // Credit-Skip-Grund, nicht den Kursmitglieds-Skip-Grund.
+    await db.from('enrollments').insert({ user_id: yogi2Id, course_id: courseId })
 
     // NUR 1 Credit – damit Yogi nach Session 2 keinen mehr übrig hat
     creditId = await giveYogiSingleCredit(yogi2Id, 1)
@@ -236,6 +252,7 @@ test.describe('Ersatzstunde: Yogi hat Credit bereits verbraucht → wird übersp
   test.afterAll(async () => {
     const db = await getAdminClient()
     await db.from('credits').delete().eq('user_id', yogi2Id).eq('model', 'single')
+    await db.from('enrollments').delete().eq('course_id', courseId)
     const { data: sess } = await db.from('sessions').select('course_id').eq('id', sessionId).maybeSingle()
     if (sess?.course_id) {
       const { data: allSessions } = await db.from('sessions').select('id').eq('course_id', sess.course_id)

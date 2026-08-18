@@ -72,6 +72,14 @@ export default function AdminDashboard() {
   const [lateReplacementDate, setLateReplacementDate] = useState('')
   const [lateReplacementTime, setLateReplacementTime] = useState('')
   const [addingReplacement, setAddingReplacement] = useState(false)
+  // Sarah-Wunsch 2026-08-18: Uhrzeit/Location einer Stunde ändern + Teilnehmer
+  // informieren, auch direkt aus dem Dashboard-Stunden-Modal heraus (nicht nur
+  // von der separaten /admin/sessions/[id]-Seite aus erreichbar).
+  const [showDashNotifyForm, setShowDashNotifyForm] = useState(false)
+  const [dashNotifyTime, setDashNotifyTime] = useState('')
+  const [dashNotifyLocation, setDashNotifyLocation] = useState('')
+  const [dashNotifyMessage, setDashNotifyMessage] = useState('')
+  const [sendingDashNotify, setSendingDashNotify] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -132,9 +140,11 @@ export default function AdminDashboard() {
     const weekEnd = addDays(weekStart, 6)
 
     // Weekly sessions
+    // Sarah-Wunsch 2026-08-18: location mitladen (Uhrzeit/Location-ändern-
+    // Formular muss den effektiven Kurs-Location-Default kennen).
     const { data: sessionData } = await supabase
       .from('sessions')
-      .select('*, course:courses(name, max_spots, is_active), bookings!bookings_session_id_fkey(id, status, user_id, profile:profiles(first_name, last_name))')
+      .select('*, course:courses(name, max_spots, is_active, location), bookings!bookings_session_id_fkey(id, status, user_id, profile:profiles(first_name, last_name))')
       // Welle 2.6: session.name + session_type sind via `*` mit dabei — Display-Name
       // bevorzugt session.name (SYS-Container-Name würde sonst durchschlagen).
       .gte('date', berlinDateStr(weekStart))
@@ -451,6 +461,89 @@ export default function AdminDashboard() {
       ...(waitlist || []).map((w: any) => ({ ...w, _type: 'waitlist' })),
     ])
     setSelectedSession(session)
+  }
+
+  // Sarah-Wunsch 2026-08-18: Formular für Uhrzeit-/Location-Änderung öffnen —
+  // gleiche Logik wie auf /admin/sessions/[id], hier direkt aus dem Dashboard-
+  // Stunden-Modal heraus nutzbar. Location zeigt den effektiven Wert
+  // (Session-Override oder Kurs-Default).
+  function openDashNotifyForm() {
+    if (!selectedSession) return
+    setDashNotifyTime((selectedSession.time_start || '').slice(0, 5))
+    setDashNotifyLocation(selectedSession.location ?? selectedSession.course?.location ?? '')
+    setDashNotifyMessage('')
+    setShowDashNotifyForm(true)
+  }
+
+  async function handleSendDashNotify() {
+    if (!selectedSession) return
+    const oldTime = selectedSession.time_start || ''
+    const newTimeFull = dashNotifyTime.length === 5 ? dashNotifyTime + ':00' : dashNotifyTime
+    const timeChanged = !!dashNotifyTime && newTimeFull !== oldTime
+    const oldLocation = (selectedSession.location ?? selectedSession.course?.location ?? '').trim()
+    const newLocation = dashNotifyLocation.trim()
+    const locationChanged = newLocation !== oldLocation
+    const message = dashNotifyMessage.trim()
+
+    if (!timeChanged && !locationChanged && !message) {
+      alert('Bitte die Uhrzeit oder Location ändern, oder eine Nachricht eingeben.')
+      return
+    }
+
+    setSendingDashNotify(true)
+    try {
+      const patch: any = {}
+      if (timeChanged) patch.time_start = newTimeFull
+      if (locationChanged) patch.location = newLocation || null
+      if (Object.keys(patch).length > 0) {
+        const { error } = await supabase.from('sessions').update(patch).eq('id', selectedSession.id)
+        if (error) { alert('Fehler: ' + error.message); setSendingDashNotify(false); return }
+      }
+
+      // Alle aktuell aktiv Gebuchten — bewusst NICHT über enrollments, damit
+      // auch Nachholer/Drop-ins (nicht im Kurs eingeschrieben) informiert werden.
+      const activeBookings = sessionBookings.filter(b => b._type === 'booking' && b.status === 'active')
+      const displayName = selectedSession.name || selectedSession.course?.name || ''
+      let recipientCount = 0
+      for (const b of activeBookings) {
+        const prof = b.profile
+        if (!prof?.email || prof.is_dummy) continue
+        recipientCount++
+        await Email.sessionUpdateNotice({
+          email: prof.email,
+          firstName: prof.first_name || 'Yogi',
+          courseName: displayName,
+          date: selectedSession.date,
+          oldTime: timeChanged ? oldTime : undefined,
+          newTime: timeChanged ? newTimeFull : undefined,
+          oldLocation: locationChanged ? (oldLocation || '—') : undefined,
+          newLocation: locationChanged ? newLocation : undefined,
+          message: message || undefined,
+          sessionType: selectedSession.session_type,
+        })
+      }
+
+      await supabase.from('audit_log').insert({
+        action: 'session_participants_notified',
+        details: {
+          session_id: selectedSession.id, session_type: selectedSession.session_type, name: displayName,
+          session_date: selectedSession.date, session_time: patch.time_start || selectedSession.time_start,
+          time_changed: timeChanged, old_time: timeChanged ? oldTime : undefined, new_time: timeChanged ? newTimeFull : undefined,
+          location_changed: locationChanged, old_location: locationChanged ? oldLocation : undefined, new_location: locationChanged ? newLocation : undefined,
+          has_message: !!message, recipient_count: recipientCount, source: 'dashboard',
+        }
+      })
+
+      setShowDashNotifyForm(false)
+      alert(`Gespeichert — ${recipientCount} Teilnehmer wurden per Mail informiert.`)
+      // Detail-Panel + Wochenliste mit den neuen Werten aktualisieren.
+      loadSessionDetail({ ...selectedSession, ...patch })
+      loadData()
+    } catch (e: any) {
+      alert('Fehler: ' + (e?.message || e))
+    } finally {
+      setSendingDashNotify(false)
+    }
   }
 
   async function searchDashYogis(q: string) {
@@ -1300,8 +1393,18 @@ export default function AdminDashboard() {
                 </div>
               )}
 
+              {/* Sarah-Wunsch 2026-08-18: Uhrzeit/Location ändern + Teilnehmer
+                  informieren, direkt aus dem Dashboard-Stunden-Modal — für ALLE
+                  Stundentypen inkl. normale Kursstunden. */}
               {!selectedSession.is_cancelled && (
-                <button onClick={() => setShowCancelForm(true)} className="btn-danger mt-4">
+                <button onClick={openDashNotifyForm}
+                  className="w-full text-sm font-semibold bg-yoga-bg hover:bg-yoga-card text-yoga-text border border-yoga-border2 rounded-yoga py-2.5 mt-4">
+                  <i className="ti ti-bell-ringing mr-1" /> Stunde ändern
+                </button>
+              )}
+
+              {!selectedSession.is_cancelled && (
+                <button onClick={() => setShowCancelForm(true)} className="btn-danger mt-2">
                   {/* Welle 3 (Sarah 2026-05-26): Button-Text differenziert */}
                   <i className="ti ti-calendar-x mr-1" />
                   {selectedSession.session_type === 'event_free' || selectedSession.session_type === 'event_paid'
@@ -1309,6 +1412,44 @@ export default function AdminDashboard() {
                     : ' Stunde absagen'}
                 </button>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Sarah-Wunsch 2026-08-18: Uhrzeit/Location ändern + Nachricht an alle
+            aktuell gebuchten Teilnehmer (auch Nachholer, nicht nur Kursmitglieder). */}
+        {showDashNotifyForm && selectedSession && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay" onClick={() => setShowDashNotifyForm(false)}>
+            <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-bold">Uhrzeit/Location ändern</h3>
+                <button onClick={() => setShowDashNotifyForm(false)} className="bg-transparent border-0 cursor-pointer text-yoga-text/40">
+                  <i className="ti ti-x text-xl" />
+                </button>
+              </div>
+              <p className="text-sm text-yoga-text/60 mb-4">
+                Alle Yogis mit einer aktiven Buchung für diese Stunde (auch Nachholer, nicht nur Kursmitglieder) werden per Mail informiert.
+              </p>
+              <form onSubmit={(e) => { e.preventDefault(); handleSendDashNotify() }} className="space-y-3">
+                <div>
+                  <label className="field-label">Uhrzeit</label>
+                  <input className="field-input" type="time" value={dashNotifyTime}
+                    onChange={e => setDashNotifyTime(e.target.value)} />
+                </div>
+                <div>
+                  <label className="field-label">Location</label>
+                  <input className="field-input" value={dashNotifyLocation}
+                    onChange={e => setDashNotifyLocation(e.target.value)} placeholder="z.B. Rooftop / Studio" />
+                </div>
+                <div>
+                  <label className="field-label">Nachricht an die Teilnehmer (optional)</label>
+                  <textarea className="field-input" rows={3} value={dashNotifyMessage}
+                    onChange={e => setDashNotifyMessage(e.target.value)} placeholder="z.B. Wegen der Hitze verlegen wir die Stunde..." />
+                </div>
+                <button type="submit" disabled={sendingDashNotify} className="btn-primary w-full disabled:opacity-50">
+                  {sendingDashNotify ? 'Wird gespeichert & versendet...' : 'Speichern & Teilnehmer informieren'}
+                </button>
+              </form>
             </div>
           </div>
         )}

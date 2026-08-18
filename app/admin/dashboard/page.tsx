@@ -47,6 +47,10 @@ export default function AdminDashboard() {
   const [sessions, setSessions] = useState<any[]>([])
   const [selectedSession, setSelectedSession] = useState<any>(null)
   const [sessionBookings, setSessionBookings] = useState<any[]>([])
+  // Sarah-Wunsch 2026-08-18: user_ids, die im Kurs der aktuell geöffneten Stunde
+  // eingeschrieben sind — null = nicht anwendbar (Einzelstunde/Event, kein Kurs).
+  // Alles was aktiv gebucht, aber NICHT hier drin ist, ist "Extern" (Nachholer).
+  const [courseEnrolledUserIds, setCourseEnrolledUserIds] = useState<Set<string> | null>(null)
   const [showDashAddYogi, setShowDashAddYogi] = useState(false)
   // Sarah-Wunsch 2026-05-25: 3h-Frist-Modal auch im Dashboard (gleiches Pattern wie /admin/sessions/[id])
   // Welle 4 (Sarah 2026-05-26): sessionType im cancelChoice-State, damit
@@ -449,7 +453,7 @@ export default function AdminDashboard() {
       .select('*, profile:profiles(first_name, last_name, email, is_dummy)')
       .eq('session_id', session.id)
       .order('created_at')
-    
+
     const { data: waitlist } = await supabase
       .from('waitlist')
       .select('*, profile:profiles(first_name, last_name, email, is_dummy)')
@@ -461,6 +465,18 @@ export default function AdminDashboard() {
       ...(waitlist || []).map((w: any) => ({ ...w, _type: 'waitlist' })),
     ])
     setSelectedSession(session)
+
+    // Sarah-Wunsch 2026-08-18: "Extern" hervorheben — Yogis mit einer aktiven
+    // Buchung, die aber NICHT im Kurs eingeschrieben sind (also nicht in der
+    // WhatsApp-Gruppe), reine Nachholer. Nur bei echten Kursstunden sinnvoll
+    // (bei Einzelstunden/Events ist ohnehin jeder ein Drop-in).
+    const courseId = session.course_id || session.course?.id
+    if (session.session_type === 'course_session' && courseId) {
+      const { data: enr } = await supabase.from('enrollments').select('user_id').eq('course_id', courseId)
+      setCourseEnrolledUserIds(new Set((enr || []).map((e: any) => e.user_id)))
+    } else {
+      setCourseEnrolledUserIds(null)
+    }
   }
 
   // Sarah-Wunsch 2026-08-18: Formular für Uhrzeit-/Location-Änderung öffnen —
@@ -1264,24 +1280,47 @@ export default function AdminDashboard() {
                 </button>
               )}
 
-              {/* Angemeldete Yogis */}
-              <p className="section-label">Angemeldet ({sessionBookings.filter(b => b._type === 'booking' && b.status === 'active').length})</p>
-              {sessionBookings.filter(b => b._type === 'booking' && b.status === 'active').map(b => (
-                <div key={b.id} className="card mb-2 flex items-center justify-between gap-2">
-                  {/* Sarah-Fix 2026-05-28: echter Link statt button+router.push —
-                      navigiert zuverlässig zum Yogi-Profil. */}
-                  <Link
-                    href={`/admin/yogis/${b.user_id}`}
-                    className="flex-1 text-left no-underline text-yoga-text cursor-pointer hover:opacity-70 transition-opacity min-w-0">
-                    <div className="text-sm font-semibold">{b.profile?.first_name} {b.profile?.last_name}</div>
-                    <div className="text-xs text-yoga-text/50 truncate">{b.profile?.email}</div>
-                  </Link>
-                  <button onClick={(e) => { e.stopPropagation(); cancelBookingForYogi(b.id, b.credit_id, selectedSession.id) }}
-                    className="text-xs bg-yoga-red-bg text-yoga-red-text border-0 rounded-full px-2.5 py-1 cursor-pointer font-semibold flex-shrink-0">
-                    Austragen
-                  </button>
-                </div>
-              ))}
+              {/* Angemeldete Yogis — Sarah-Wunsch 2026-08-18: bei Kursstunden
+                  aufgeteilt in Kursmitglieder ("Angemeldet") und Nachholer, die
+                  NICHT im Kurs eingeschrieben sind ("Extern" — nicht in der
+                  WhatsApp-Gruppe, ggf. extra informieren). */}
+              {(() => {
+                const activeBookings = sessionBookings.filter(b => b._type === 'booking' && b.status === 'active')
+                const courseMembers = courseEnrolledUserIds
+                  ? activeBookings.filter(b => courseEnrolledUserIds.has(b.user_id))
+                  : activeBookings
+                const externalMembers = courseEnrolledUserIds
+                  ? activeBookings.filter(b => !courseEnrolledUserIds.has(b.user_id))
+                  : []
+                const renderRow = (b: any) => (
+                  <div key={b.id} className="card mb-2 flex items-center justify-between gap-2">
+                    {/* Sarah-Fix 2026-05-28: echter Link statt button+router.push —
+                        navigiert zuverlässig zum Yogi-Profil. */}
+                    <Link
+                      href={`/admin/yogis/${b.user_id}`}
+                      className="flex-1 text-left no-underline text-yoga-text cursor-pointer hover:opacity-70 transition-opacity min-w-0">
+                      <div className="text-sm font-semibold">{b.profile?.first_name} {b.profile?.last_name}</div>
+                      <div className="text-xs text-yoga-text/50 truncate">{b.profile?.email}</div>
+                    </Link>
+                    <button onClick={(e) => { e.stopPropagation(); cancelBookingForYogi(b.id, b.credit_id, selectedSession.id) }}
+                      className="text-xs bg-yoga-red-bg text-yoga-red-text border-0 rounded-full px-2.5 py-1 cursor-pointer font-semibold flex-shrink-0">
+                      Austragen
+                    </button>
+                  </div>
+                )
+                return (
+                  <>
+                    <p className="section-label">Angemeldet ({courseMembers.length})</p>
+                    {courseMembers.map(renderRow)}
+                    {externalMembers.length > 0 && (
+                      <>
+                        <p className="section-label mt-3">Extern ({externalMembers.length})</p>
+                        {externalMembers.map(renderRow)}
+                      </>
+                    )}
+                  </>
+                )
+              })()}
 
               {/* Ausgetragen */}
               {sessionBookings.filter(b => b._type === 'booking' && b.status === 'cancelled').length > 0 && (

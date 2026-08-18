@@ -5,9 +5,14 @@
  *
  * Gleiche Logik wie tests/e2e/admin/67-uhrzeit-location-aendern.spec.ts,
  * hier über das Dashboard-Modal statt die eigenständige Stunden-Seite.
+ *
+ * Zusätzlich (Sarah-Wunsch 2026-08-18): Teilnehmer, die eine aktive Buchung
+ * haben, aber NICHT im Kurs eingeschrieben sind (reine Nachholer, nicht in
+ * der WhatsApp-Gruppe), erscheinen unter einer eigenen Überschrift "Extern"
+ * — exakt gleich formatiert wie "Angemeldet", keine Extra-Hervorhebung.
  */
 import { test, expect } from '@playwright/test'
-import { createTestCourse, E2E_PREFIX } from '../../utils/seed'
+import { createTestCourse, E2E_PREFIX, giveYogiSingleCredit } from '../../utils/seed'
 import { getUserIdByEmail, getAdminClient } from '../../utils/db'
 import * as dotenv from 'dotenv'
 
@@ -17,14 +22,18 @@ test.describe('[E2E] Dashboard: "Stunde ändern" über Stunde absagen', () => {
   test.use({ storageState: 'tests/.auth/admin.json' })
 
   let yogi1Id: string
+  let yogi2Id: string
   let courseId: string
   let sessionId: string
   let creditId: string
+  let singleCreditId: string
 
   test.beforeAll(async () => {
     yogi1Id = (await getUserIdByEmail(process.env.TEST_YOGI1_EMAIL!))!
+    yogi2Id = (await getUserIdByEmail(process.env.TEST_YOGI2_EMAIL!))!
     const db = await getAdminClient()
     await db.from('credits').delete().eq('user_id', yogi1Id).eq('model', 'course')
+    await db.from('credits').delete().eq('user_id', yogi2Id).eq('model', 'single')
 
     // "Diese Woche" im Dashboard: Montag der aktuellen Woche + 1 Tag, damit die
     // Stunde sicher im Standard-Wochenfenster des Dashboards liegt.
@@ -44,17 +53,49 @@ test.describe('[E2E] Dashboard: "Stunde ändern" über Stunde absagen', () => {
     await db.from('bookings').insert({
       user_id: yogi1Id, session_id: sessionId, credit_id: creditId, type: 'course', status: 'active',
     })
+
+    // yogi2: Nachholer/Drop-in — aktiv gebucht, aber NICHT im Kurs eingeschrieben.
+    singleCreditId = (await giveYogiSingleCredit(yogi2Id, 1))!
+    await db.from('bookings').insert({
+      user_id: yogi2Id, session_id: sessionId, credit_id: singleCreditId, type: 'single', status: 'active',
+    })
   })
 
   test.afterAll(async () => {
     const db = await getAdminClient()
     await db.from('bookings').delete().eq('session_id', sessionId)
     await db.from('enrollments').delete().eq('course_id', courseId)
-    await db.from('credits').delete().eq('id', creditId)
+    await db.from('credits').delete().in('id', [creditId, singleCreditId])
     await db.from('audit_log').delete().eq('action', 'session_participants_notified')
       .eq('details->>session_id', sessionId)
     await db.from('sessions').delete().eq('id', sessionId)
     await db.from('courses').delete().eq('id', courseId)
+  })
+
+  test('"Extern" zeigt Nachholer ohne Kurs-Enrollment, gleich formatiert wie "Angemeldet"', async ({ page }) => {
+    await page.goto('/admin/dashboard')
+    await page.waitForLoadState('networkidle')
+    await page.getByText(`${E2E_PREFIX} Dashboard-Stunde-Aendern`).first().click()
+
+    await expect(page.getByText('Angemeldet (1)')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText('Extern (1)')).toBeVisible({ timeout: 5_000 })
+
+    // Kursmitglied (yogi1) steht unter "Angemeldet", Nachholer (yogi2) unter "Extern".
+    const angemeldetHeading = page.getByText('Angemeldet (1)')
+    const externHeading = page.getByText('Extern (1)')
+    const angemeldetBox = await angemeldetHeading.boundingBox()
+    const externBox = await externHeading.boundingBox()
+    expect(angemeldetBox && externBox && angemeldetBox.y < externBox.y, '"Extern" muss unter "Angemeldet" stehen').toBe(true)
+
+    // Gleiche Formatierung: beide Überschriften nutzen dieselbe CSS-Klasse (section-label).
+    const angemeldetClass = await angemeldetHeading.getAttribute('class')
+    const externClass = await externHeading.getAttribute('class')
+    expect(externClass).toContain('section-label')
+    expect(externClass?.replace(/\bmt-3\b/g, '').trim()).toBe(angemeldetClass?.replace(/\bmt-3\b/g, '').trim())
+
+    // yogi2 (Nachholer) erscheint namentlich, yogi1 (Kursmitglied) auch.
+    await expect(page.getByText('Test Yogi1')).toBeVisible()
+    await expect(page.getByText('Test Yogi2')).toBeVisible()
   })
 
   test('"Stunde ändern" sitzt über "Stunde absagen" und funktioniert', async ({ page }) => {
@@ -91,7 +132,9 @@ test.describe('[E2E] Dashboard: "Stunde ändern" über Stunde absagen', () => {
       .select('*').eq('action', 'session_participants_notified')
       .eq('details->>session_id', sessionId).order('created_at', { ascending: false }).limit(1).maybeSingle()
     expect(audit, 'audit_log-Eintrag fehlt').toBeTruthy()
-    expect(audit!.details.recipient_count).toBe(1)
+    // Sarah-Wunsch 2026-08-18: beforeAll bucht jetzt zusätzlich yogi2 als
+    // externen Nachholer (für den "Extern"-Test) — beide zählen als Empfänger.
+    expect(audit!.details.recipient_count).toBe(2)
     expect(audit!.details.source).toBe('dashboard')
   })
 })

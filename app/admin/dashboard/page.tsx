@@ -145,6 +145,19 @@ export default function AdminDashboard() {
     // Wir suchen alle Sessions deren replacement_session_id auf eine sichtbare Session zeigt
     // → dann wissen wir: diese sichtbare Session IST eine Ersatzstunde.
     const sessionIds = (sessionData || []).map((s: any) => s.id)
+
+    // Sarah-Wunsch 2026-08-18: Wartelisten-Anzahl pro Stunde in der Wochenübersicht,
+    // analog zu "X ausgetragen" — nur echte Warteliste (type='waitlist'), keine
+    // Notify-Subscriber.
+    let waitlistCountMap: Record<string, number> = {}
+    if (sessionIds.length > 0) {
+      const { data: wlRows } = await supabase.from('waitlist')
+        .select('session_id').eq('type', 'waitlist').in('session_id', sessionIds)
+      for (const w of (wlRows || []) as any[]) {
+        waitlistCountMap[w.session_id] = (waitlistCountMap[w.session_id] || 0) + 1
+      }
+    }
+
     let originMap: Record<string, any> = {}
     if (sessionIds.length > 0) {
       const { data: origins } = await supabase
@@ -171,6 +184,7 @@ export default function AdminDashboard() {
         ...s,
         active_count: s.bookings.filter((b: any) => b.status === 'active').length,
         cancelled_count: s.bookings.filter((b: any) => b.status === 'cancelled').length,
+        waitlist_count: waitlistCountMap[s.id] || 0,
         // Ersatzstunden-Info: wenn diese Session als Ersatz für eine andere angelegt wurde
         is_replacement: !!originMap[s.id],
         original_session: originMap[s.id] || null,
@@ -1558,7 +1572,11 @@ export default function AdminDashboard() {
                   <div className="text-xs text-yoga-text/55 mt-0.5">
                     {s.time_start?.slice(0,5)}
                     {!s.is_cancelled && !isPast && s.cancelled_count > 0 && (
-                      <> · <i className="ti ti-x" /> {s.cancelled_count} ausgetragen</>
+                      <> · {s.cancelled_count} ausgetragen</>
+                    )}
+                    {/* Sarah-Wunsch 2026-08-18: Wartelisten-Anzahl, nur wenn > 0 */}
+                    {!s.is_cancelled && !isPast && s.waitlist_count > 0 && (
+                      <> · {s.waitlist_count} Warteliste</>
                     )}
                   </div>
                 </div>

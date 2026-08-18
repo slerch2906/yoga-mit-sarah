@@ -7,7 +7,7 @@ import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import { selectCreditForBooking } from '@/lib/credit-selector'
 import { escapeForOrFilter } from '@/lib/search-sanitize'
 import { isCourseEnded } from '@/lib/session-status'
-import { berlinTodayStr, berlinDateStr, parseSessionDateTimeBerlin } from '@/lib/session-time'
+import { berlinTodayStr, berlinDateStr, parseSessionDateTimeBerlin, courseCreditExpiryBerlin } from '@/lib/session-time'
 import { createClient } from '@/lib/supabase/client'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
@@ -1371,8 +1371,10 @@ export default function AdminKursePage() {
       return st ? st.getTime() > nowMsAddYogi : true
     })
     const sessionCount = sessionList.length
-    const expiresAt = new Date(course.date_end || new Date())
-    expiresAt.setDate(expiresAt.getDate() + 8)
+    // Bugfix (Sarah 2026-08-18): courseCreditExpiryBerlin statt reiner
+    // Kalender-Addition, damit der komplette 8. Tag nach Kursende zaehlt
+    // (23:59 Uhr Berlin statt ca. 1-2 Uhr nachts).
+    const expiresAt = courseCreditExpiryBerlin(course.date_end || berlinTodayStr())
 
     // Enrollment anlegen
     await supabase.from('enrollments').upsert({ user_id: yogi.id, course_id: course.id, enrolled_from_unit: 1 })
@@ -2013,8 +2015,10 @@ export default function AdminKursePage() {
       }
 
       // Credits vergeben
-      const expiresAt = new Date(targetCourse.date_end)
-      expiresAt.setDate(expiresAt.getDate() + 8)
+      // Bugfix (Sarah 2026-08-18): courseCreditExpiryBerlin statt reiner
+      // Kalender-Addition, damit der komplette 8. Tag nach Kursende zaehlt
+      // (23:59 Uhr Berlin statt ca. 1-2 Uhr nachts).
+      const expiresAt = courseCreditExpiryBerlin(targetCourse.date_end)
       // Bug-Fix (Sarah 2026-05-28): Credit-ID merken und an die Bookings haengen.
       // Vorher wurde der Credit zwar angelegt, aber die Bookings bekamen KEIN
       // credit_id → der Trigger trg_sync_credit_used konnte nie hochzaehlen →

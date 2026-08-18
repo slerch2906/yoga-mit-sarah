@@ -62,6 +62,29 @@ export function berlinDateStr(d: Date): string {
   return d.toLocaleDateString('en-CA', { timeZone: 'Europe/Berlin' })
 }
 
+/**
+ * Bugfix (Sarah 2026-08-18): 8-Tage-Nachholfrist soll den GANZEN 8. Tag gelten,
+ * nicht nur bis Mitternacht.
+ *
+ * Vorher wurde das Ablaufdatum eines Kurs-Credits als reines Kalenderdatum
+ * berechnet (`new Date(dateStr); setDate(+8)`), was ohne Uhrzeit automatisch
+ * auf Mitternacht UTC fiel — in Berliner Zeit also ca. 1-2 Uhr NACHTS des
+ * 8. Tages. Dadurch war praktisch der komplette 8. Tag blockiert, sobald eine
+ * Stunde nach ca. 2 Uhr morgens beginnt (bei Abendstunden also immer).
+ *
+ * Dieser Helper liefert stattdessen 23:59:59 Uhr BERLINER Zeit am 8. Tag nach
+ * dem übergebenen Datum — der ganze Tag zählt. Kalenderarithmetik läuft in UTC
+ * (DST-sicher, reine Datums-Addition ohne Uhrzeit-Bezug), erst danach wird die
+ * Zielzeit als Berliner Wandkalenderzeit verankert (siehe parseSessionDateTimeBerlin).
+ */
+export function courseCreditExpiryBerlin(lastActiveDateStr: string): Date {
+  const [y, mo, d] = lastActiveDateStr.split('-').map(Number)
+  const plus8 = new Date(Date.UTC(y, mo - 1, d + 8))
+  const targetDateStr = plus8.toISOString().split('T')[0]
+  return parseSessionDateTimeBerlin(targetDateStr, '23:59:59')
+    ?? new Date(`${targetDateStr}T23:59:59`)
+}
+
 export function parseSessionDateTimeBerlin(
   date: string | null | undefined,
   time: string | null | undefined,

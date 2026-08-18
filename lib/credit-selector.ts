@@ -13,10 +13,9 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { parseSessionDateTimeBerlin } from './session-time'
+import { parseSessionDateTimeBerlin, courseCreditExpiryBerlin } from './session-time'
 
 const TEN_DAYS_MS = 10 * 24 * 60 * 60 * 1000
-const EIGHT_DAYS_MS = 8 * 24 * 60 * 60 * 1000
 
 export type CreditPickResult =
   | { ok: true; creditId: string; originSessionId: string | null; usedModel: string }
@@ -237,8 +236,11 @@ async function tryCourseCredit(
       ?? new Date(`${cb.session.date}T${cb.session.time_start}`)).getTime()
     const windowStart = originDt - TEN_DAYS_MS
     const courseEnd = cb.session.course?.date_end
+    // Bugfix (Sarah 2026-08-18): courseCreditExpiryBerlin liefert 23:59:59 Uhr
+    // Berliner Zeit am 8. Tag nach Kursende (kalendertag-sicher, DST-fest) —
+    // der komplette 8. Tag zaehlt, nicht nur bis zu einer festen Uhrzeit.
     const windowEnd = courseEnd
-      ? new Date(`${courseEnd}T23:59:59`).getTime() + EIGHT_DAYS_MS
+      ? courseCreditExpiryBerlin(courseEnd).getTime()
       : Number.POSITIVE_INFINITY
 
     if (sessionDt < windowStart) {

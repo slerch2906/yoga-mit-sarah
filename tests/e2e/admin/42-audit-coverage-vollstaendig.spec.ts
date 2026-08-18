@@ -73,6 +73,8 @@ const ALL_ACTIONS: string[] = [
   'waitlist_joined',
   'waitlist_promoted',
   'waitlist_offer_late_accepted',
+  // Bugfix (Sarah 2026-08-18): verwaister Wartelisten-Eintrag (15-Min-Cron)
+  'waitlist_stale_entry_removed',
   // Welle 2 — Events / Einzelstunden / Container-Sessions
   'single_session_created',
   'single_session_updated',
@@ -94,6 +96,8 @@ const ALL_ACTIONS: string[] = [
   // Kursabbruch
   'course_cancelled',
   'course_rollover',
+  // Bugfix (Sarah 2026-08-18): Kursende + Credit-Nachholfrist bei Ersatztermin
+  'course_date_end_and_credits_extended',
   'yogi_course_cancellation_choice',
   // Auto-Refunds
   'token_expired_auto_refund',
@@ -116,6 +120,9 @@ const ALL_ACTIONS: string[] = [
 // einzelnen Yogi-Kontext haben. ACTION_LABELS-Mapping bleibt trotzdem Pflicht.
 const SYSTEM_ONLY_ACTIONS = new Set<string>([
   'course_rollover',     // System schiebt Kurs in Folgekurs — kein Yogi-Bezug
+  // Bugfix (Sarah 2026-08-18): Kursende-Verlaengerung betrifft den ganzen Kurs
+  // (potenziell mehrere Yogis), kein user_id-Bezug im audit_log-Eintrag.
+  'course_date_end_and_credits_extended',
   'admin_bulk_mail',     // Admin verschickt an viele — wird ohne user_id geloggt
   // Welle S2/S3 (Sarah 2026-05-27): 8d-Cleanup-Cron loescht abgelaufene Kurs-
   // Credits + erstellt Audit-Eintrag ohne user_id (System-Bereinigung).

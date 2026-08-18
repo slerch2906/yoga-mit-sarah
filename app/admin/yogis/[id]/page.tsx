@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Email } from '@/lib/email'
 import { isActive, isStarted, countActiveFutureUnits, isExcluded, cancelledActorLabel } from '@/lib/session-status'
-import { berlinTodayStr, parseSessionDateTimeBerlin } from '@/lib/session-time'
+import { berlinTodayStr, parseSessionDateTimeBerlin, courseCreditExpiryBerlin } from '@/lib/session-time'
 import { promoteWaitlistOrOfferLate } from '@/lib/waitlist-promote'
 import AppHeader from '@/components/layout/AppHeader'
 import BottomNav from '@/components/layout/BottomNav'
@@ -168,11 +168,13 @@ export default function AdminYogiDetailPage() {
 
   function getExpiryDate(course: any) {
     // Ablaufdatum aus AKTIVEN Sessions (excluded/cancelled ignorieren).
-    const dates = (course.sessions || []).filter(isActive).map((s: any) => new Date(s.date))
-    if (dates.length === 0) return new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
-    const last = new Date(Math.max(...dates.map((d: Date) => d.getTime())))
-    last.setDate(last.getDate() + 8)
-    return last
+    // Bugfix (Sarah 2026-08-18): courseCreditExpiryBerlin statt reiner
+    // Kalender-Addition — sonst faellt das Ablaufdatum auf ca. 1-2 Uhr nachts
+    // Berliner Zeit statt 23:59 Uhr, und der komplette 8. Tag ist blockiert.
+    const dateStrs = (course.sessions || []).filter(isActive).map((s: any) => s.date).filter(Boolean)
+    if (dateStrs.length === 0) return new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+    const lastStr = [...dateStrs].sort().at(-1) as string
+    return courseCreditExpiryBerlin(lastStr)
   }
 
   async function handleDeleteYogi() {
@@ -1184,6 +1186,9 @@ export default function AdminYogiDetailPage() {
       case 'waitlist_auto_removed': {
         const cn = d.course_name || courseName
         return { text: `Yogi automatisch von Warteliste entfernt (letzter Credit verbraucht)${cn ? ` — ${cn}` : ''}`, subject: '' }
+      }
+      case 'waitlist_stale_entry_removed': {
+        return { text: `Verwaister Wartelisten-Eintrag entfernt (Stunde bereits begonnen, nie nachgerückt)`, subject: '' }
       }
       case 'admin_dsgvo_deletion': {
         const reason = d.reason ? ` (Grund: ${d.reason})` : ''

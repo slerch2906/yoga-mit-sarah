@@ -61,7 +61,7 @@ test.describe('Zeitzonen-Welle 2: überall Berlin (DST-sicher)', () => {
     // ohne es zu importieren -> "berlinDateStr is not defined" -> weisse Seite beim
     // Kurs-Anlegen. next build faengt das NICHT (typescript.ignoreBuildErrors: true).
     // Dieser Test prueft den Import/Aufruf-Abgleich fuer alle Berlin-Helfer projektweit.
-    const HELPERS = ['berlinTodayStr', 'berlinDateStr', 'parseSessionDateTimeBerlin']
+    const HELPERS = ['berlinTodayStr', 'berlinDateStr', 'parseSessionDateTimeBerlin', 'courseCreditExpiryBerlin']
     const dirs = ['app', 'lib', 'components']
     const walk = (dir: string): string[] => {
       const full = path.join(ROOT, dir)

@@ -34,6 +34,8 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   // Fall 3 (Sarah 2026-05-29): automatisches Entfernen von ANDEREN Wartelisten,
   // wenn der nachgerückte Yogi seinen letzten freien Credit aufgebraucht hat.
   waitlist_auto_removed:          { label: 'Von Warteliste entfernt (letzter Credit verbraucht)', color: 'text-yoga-amber-text' },
+  // Bugfix (Sarah 2026-08-18): verwaister Wartelisten-Eintrag nach Stundenbeginn (15-Min-Cron)
+  waitlist_stale_entry_removed:   { label: 'Von Warteliste entfernt (Stunde bereits begonnen)', color: 'text-yoga-amber-text' },
   // ── Welle 2: Events / Einzelstunden / Container-Sessions ─────────────
   single_session_created:         { label: 'Einzelstunde angelegt',          color: 'text-yoga-green-text' },
   single_session_updated:         { label: 'Einzelstunde bearbeitet',        color: 'text-yoga-amber-text' },
@@ -51,6 +53,8 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   cascade_replacement_cancelled:  { label: 'Ersatzstunde (Cascade) abgesagt',color: 'text-yoga-red-text' },
   course_cancelled:               { label: 'Kurs abgebrochen',               color: 'text-yoga-red-text' },
   course_rollover:                { label: 'Folgekurs angelegt (Rollover)',  color: 'text-yoga-green-text' },
+  // Bugfix (Sarah 2026-08-18): Kursende + Credit-Nachholfrist bei nachtraeglich verlinktem Ersatztermin
+  course_date_end_and_credits_extended: { label: 'Kursende automatisch verlängert (Ersatztermin)', color: 'text-yoga-green-text' },
   yogi_course_cancellation_choice:{ label: 'Yogi-Wahl bei Kursabbruch',      color: 'text-yoga-amber-text' },
   token_expired_auto_refund:      { label: 'Token abgelaufen — Auto-Refund', color: 'text-yoga-amber-text' },
   guthaben_2y_auto_refund:        { label: 'Guthaben 2J abgelaufen — Refund',color: 'text-yoga-amber-text' },

@@ -48,6 +48,8 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   admin_added_yogi_to_session:    { label: 'Yogi zu Stunde hinzugefügt',     color: 'text-yoga-green-text' },
   admin_promoted_waitlist_yogi:   { label: 'Waitlist-Yogi nachgerückt (Admin)', color: 'text-yoga-green-text' },
   session_open_toggled:           { label: 'Stunde/Event freigegeben/gesperrt', color: 'text-yoga-amber-text' },
+  // Sarah-Wunsch 2026-08-18: Uhrzeit/Location einer Stunde geändert + Teilnehmer informiert
+  session_participants_notified:  { label: 'Uhrzeit/Location geändert (Teilnehmer informiert)', color: 'text-yoga-amber-text' },
   // ── Welle 1: Ersatzstunden / Kursabbruch ─────────────────────────────
   replacement_session_added:      { label: 'Ersatzstunde angelegt',          color: 'text-yoga-green-text' },
   cascade_replacement_cancelled:  { label: 'Ersatzstunde (Cascade) abgesagt',color: 'text-yoga-red-text' },

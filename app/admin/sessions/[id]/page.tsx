@@ -55,6 +55,18 @@ export default function AdminSessionPage() {
   // Hartes DELETE wenn keine aktiven Bookings; sonst Hinweis "vorher absagen".
   const [deleting, setDeleting] = useState(false)
 
+  // Sarah-Wunsch 2026-08-18: Uhrzeit/Location einer einzelnen Stunde ändern +
+  // alle aktuell gebuchten Teilnehmer per Mail informieren (auch Nachholer,
+  // die nicht regulär im Kurs eingeschrieben sind — anders als die bestehende
+  // Kurs-weite Uhrzeit-Änderung, die nur Enrollments erreicht). Funktioniert
+  // für ALLE Stundentypen inkl. course_session (bewusste Ausnahme vom
+  // "Bearbeiten"-Formular oben, das Block-Kursstunden ausschließt).
+  const [showNotifyForm, setShowNotifyForm] = useState(false)
+  const [notifyTime, setNotifyTime] = useState('')
+  const [notifyLocation, setNotifyLocation] = useState('')
+  const [notifyMessage, setNotifyMessage] = useState('')
+  const [sendingNotify, setSendingNotify] = useState(false)
+
   useEffect(() => { loadData() }, [id])
 
   async function searchYogis(q: string) {
@@ -419,7 +431,10 @@ export default function AdminSessionPage() {
       // KEIN self-referenzierender Subquery (PostgREST → 400). Replacement separat unten.
       // Welle 2.5 (Sarah 2026-05-26): bring_along + difficulty + alle session-eigenen
       // Felder werden via `*` mitgeladen. course bringt nur Container-Metadaten.
-      supabase.from('sessions').select('*, course:courses(name, id, is_free, image_url)').eq('id', id).single(),
+      // Sarah-Wunsch 2026-08-18: location mitladen (Uhrzeit/Location-ändern-Formular
+      // muss den effektiven Kurs-Location-Default kennen, wenn die Session selbst
+      // kein location-Override hat).
+      supabase.from('sessions').select('*, course:courses(name, id, is_free, image_url, location)').eq('id', id).single(),
       supabase.from('bookings')
         .select('*, profile:profiles(email, first_name, last_name)')
         .eq('session_id', id).eq('status', 'active'),
@@ -609,6 +624,89 @@ export default function AdminSessionPage() {
       external_participants_count: session.external_participants_count ?? 0,
     })
     setShowEditForm(true)
+  }
+
+  // Sarah-Wunsch 2026-08-18: Formular für Uhrzeit-/Location-Änderung + Nachricht
+  // öffnen. Location zeigt den effektiven Wert (Session-Override oder Kurs-
+  // Default), analog zur Anzeige in app/kurse/page.tsx (s.location ?? course.location).
+  function openNotifyForm() {
+    if (!session) return
+    setNotifyTime((session.time_start || '').slice(0, 5))
+    setNotifyLocation(session.location ?? session.course?.location ?? '')
+    setNotifyMessage('')
+    setShowNotifyForm(true)
+  }
+
+  async function handleSendNotify() {
+    if (!session) return
+    const oldTime = session.time_start || ''
+    const newTimeFull = notifyTime.length === 5 ? notifyTime + ':00' : notifyTime
+    const timeChanged = !!notifyTime && newTimeFull !== oldTime
+    const oldLocation = (session.location ?? session.course?.location ?? '').trim()
+    const newLocation = notifyLocation.trim()
+    const locationChanged = newLocation !== oldLocation
+    const message = notifyMessage.trim()
+
+    if (!timeChanged && !locationChanged && !message) {
+      alert('Bitte die Uhrzeit oder Location ändern, oder eine Nachricht eingeben.')
+      return
+    }
+
+    setSendingNotify(true)
+    try {
+      const patch: any = {}
+      if (timeChanged) patch.time_start = newTimeFull
+      if (locationChanged) patch.location = newLocation || null
+      if (Object.keys(patch).length > 0) {
+        const { error } = await supabase.from('sessions').update(patch).eq('id', id)
+        if (error) { alert('Fehler: ' + error.message); setSendingNotify(false); return }
+      }
+
+      // Alle aktuell aktiv Gebuchten — bewusst NICHT über enrollments, damit
+      // auch Nachholer/Drop-ins (nicht im Kurs eingeschrieben) informiert werden.
+      const { data: activeBookings } = await supabase.from('bookings')
+        .select('user_id, profile:profiles(email, first_name, is_dummy)')
+        .eq('session_id', id).eq('status', 'active')
+
+      const displayName = session.name || session.course?.name || ''
+      let recipientCount = 0
+      for (const b of (activeBookings || []) as any[]) {
+        const prof = b.profile
+        if (!prof?.email || prof.is_dummy) continue
+        recipientCount++
+        await Email.sessionUpdateNotice({
+          email: prof.email,
+          firstName: prof.first_name || 'Yogi',
+          courseName: displayName,
+          date: session.date,
+          oldTime: timeChanged ? oldTime : undefined,
+          newTime: timeChanged ? newTimeFull : undefined,
+          oldLocation: locationChanged ? (oldLocation || '—') : undefined,
+          newLocation: locationChanged ? newLocation : undefined,
+          message: message || undefined,
+          sessionType: session.session_type,
+        })
+      }
+
+      await supabase.from('audit_log').insert({
+        action: 'session_participants_notified',
+        details: {
+          session_id: id, session_type: session.session_type, name: displayName,
+          session_date: session.date, session_time: patch.time_start || session.time_start,
+          time_changed: timeChanged, old_time: timeChanged ? oldTime : undefined, new_time: timeChanged ? newTimeFull : undefined,
+          location_changed: locationChanged, old_location: locationChanged ? oldLocation : undefined, new_location: locationChanged ? newLocation : undefined,
+          has_message: !!message, recipient_count: recipientCount,
+        }
+      })
+
+      setShowNotifyForm(false)
+      alert(`Gespeichert — ${recipientCount} Teilnehmer wurden per Mail informiert.`)
+      loadData()
+    } catch (e: any) {
+      alert('Fehler: ' + (e?.message || e))
+    } finally {
+      setSendingNotify(false)
+    }
   }
 
   // Welle 2.6 (Sarah 2026-05-26): Hard-DELETE einer Einzelstunde/Event.
@@ -1121,6 +1219,15 @@ export default function AdminSessionPage() {
               <i className="ti ti-share mr-1" /> Stunde teilen (WhatsApp / Email)
             </button>
           )}
+          {/* Sarah-Wunsch 2026-08-18: Uhrzeit/Location ändern + Teilnehmer per Mail
+              informieren — für ALLE Stundentypen inkl. course_session (bewusste
+              Ausnahme vom "Bearbeiten"-Formular unten). */}
+          {!session?.is_cancelled && (
+            <button onClick={openNotifyForm}
+              className="mt-2 w-full text-sm font-semibold bg-yoga-bg hover:bg-yoga-card text-yoga-text border border-yoga-border2 rounded-yoga py-2">
+              <i className="ti ti-bell-ringing mr-1" /> Uhrzeit/Location ändern & Teilnehmer informieren
+            </button>
+          )}
           {/* Welle 2.5 (Sarah 2026-05-26): Bearbeiten-Button für Einzelstunden/Events.
               Block-Kursstunden werden über den Kurs verwaltet — kein Edit hier. */}
           {!session?.is_cancelled && session?.session_type && session.session_type !== 'course_session' && (
@@ -1476,6 +1583,44 @@ export default function AdminSessionPage() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Sarah-Wunsch 2026-08-18: Uhrzeit/Location ändern + Nachricht an alle
+          aktuell gebuchten Teilnehmer (auch Nachholer, nicht nur Kursmitglieder). */}
+      {showNotifyForm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end modal-overlay" onClick={() => setShowNotifyForm(false)}>
+          <div className="bg-yoga-card w-full rounded-t-2xl p-5 pb-10 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold">Uhrzeit/Location ändern</h3>
+              <button onClick={() => setShowNotifyForm(false)} className="bg-transparent border-0 cursor-pointer text-yoga-text/40">
+                <i className="ti ti-x text-xl" />
+              </button>
+            </div>
+            <p className="text-sm text-yoga-text/60 mb-4">
+              Alle Yogis mit einer aktiven Buchung für diese Stunde (auch Nachholer, nicht nur Kursmitglieder) werden per Mail informiert.
+            </p>
+            <form onSubmit={(e) => { e.preventDefault(); handleSendNotify() }} className="space-y-3">
+              <div>
+                <label className="field-label">Uhrzeit</label>
+                <input className="field-input" type="time" value={notifyTime}
+                  onChange={e => setNotifyTime(e.target.value)} />
+              </div>
+              <div>
+                <label className="field-label">Location</label>
+                <input className="field-input" value={notifyLocation}
+                  onChange={e => setNotifyLocation(e.target.value)} placeholder="z.B. Rooftop / Studio" />
+              </div>
+              <div>
+                <label className="field-label">Nachricht an die Teilnehmer (optional)</label>
+                <textarea className="field-input" rows={3} value={notifyMessage}
+                  onChange={e => setNotifyMessage(e.target.value)} placeholder="z.B. Wegen der Hitze verlegen wir die Stunde..." />
+              </div>
+              <button type="submit" disabled={sendingNotify} className="btn-primary w-full disabled:opacity-50">
+                {sendingNotify ? 'Wird gespeichert & versendet...' : 'Speichern & Teilnehmer informieren'}
+              </button>
+            </form>
           </div>
         </div>
       )}

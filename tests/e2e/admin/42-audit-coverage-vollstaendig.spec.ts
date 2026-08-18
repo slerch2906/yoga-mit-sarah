@@ -87,6 +87,8 @@ const ALL_ACTIONS: string[] = [
   'admin_added_yogi_to_session',
   'admin_promoted_waitlist_yogi',
   'session_open_toggled',
+  // Bugfix (Sarah 2026-08-18): Uhrzeit/Location einer Stunde geändert + Teilnehmer informiert
+  'session_participants_notified',
   // Welle 4.7 — Kurs-Mutationen
   'course_created',
   'course_updated',
@@ -120,6 +122,9 @@ const ALL_ACTIONS: string[] = [
 // einzelnen Yogi-Kontext haben. ACTION_LABELS-Mapping bleibt trotzdem Pflicht.
 const SYSTEM_ONLY_ACTIONS = new Set<string>([
   'course_rollover',     // System schiebt Kurs in Folgekurs — kein Yogi-Bezug
+  // Bugfix (Sarah 2026-08-18): Uhrzeit/Location-Änderung betrifft potenziell
+  // mehrere Yogis gleichzeitig, kein user_id-Bezug im audit_log-Eintrag.
+  'session_participants_notified',
   // Bugfix (Sarah 2026-08-18): Kursende-Verlaengerung betrifft den ganzen Kurs
   // (potenziell mehrere Yogis), kein user_id-Bezug im audit_log-Eintrag.
   'course_date_end_and_credits_extended',

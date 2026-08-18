@@ -278,6 +278,26 @@ serve(async (req) => {
         subject = `Uhrzeitänderung: ${data.courseName}`
         html = base(`<p style="font-size:15px">Hallo ${fn},</p><p style="font-size:15px">die Uhrzeit für deine Stunden hat sich geändert:</p>${hl(`<p style="margin:4px 0;font-size:14px">Kurs: <strong>${cn}</strong></p><p style="margin:8px 0 4px;font-size:14px">Bisher: <strong>${esc(data.oldTime?.slice(0,5))} Uhr</strong></p><p style="margin:4px 0;font-size:14px;color:#3a5a30">Neu: <strong>${esc(data.newTime?.slice(0,5))} Uhr</strong></p>`)}${btn('Meine Stunden',APP_URL+'/meine')}${LG}`)
         break
+      case 'session_update_notice': {
+        // Sarah-Wunsch 2026-08-18: EINE einzelne Stunde ändert Uhrzeit/Location
+        // und/oder bekommt eine Freitext-Nachricht — erreicht alle aktuell
+        // aktiv Gebuchten dieser Stunde (auch Nachholer ohne Enrollment).
+        const timeChanged = !!data.newTime
+        const locChanged = !!data.newLocation
+        const hasMsg = !!data.message
+        if (timeChanged && locChanged) subject = `Achtung - Uhrzeit und Location deiner Yogastunde haben sich geändert`
+        else if (timeChanged) subject = `Achtung - Die Uhrzeit deiner Yogastunde hat sich geändert`
+        else if (locChanged) subject = `Achtung - Die Location deiner Yogastunde hat sich geändert`
+        else subject = `Info zu deiner Yogastunde`
+        const changeRows =
+          (timeChanged ? `<p style="margin:8px 0 4px;font-size:14px">Bisher: <strong>${esc(data.oldTime?.slice(0,5))} Uhr</strong></p><p style="margin:4px 0;font-size:14px;color:#3a5a30">Neu: <strong>${esc(data.newTime?.slice(0,5))} Uhr</strong></p>` : '') +
+          (locChanged ? `<p style="margin:8px 0 4px;font-size:14px">Bisher: <strong>${esc(data.oldLocation)}</strong></p><p style="margin:4px 0;font-size:14px;color:#3a5a30">Neu: <strong>${esc(data.newLocation)}</strong></p>` : '')
+        const displayTime = timeChanged ? data.newTime : undefined
+        const infoBlock = hl(`<p style="margin:0;font-size:14px">📅 <strong>${fmtDate(data.date, displayTime)}</strong></p><p style="margin:4px 0 0;font-size:14px">${KL}: ${cn}</p>${changeRows}`, (timeChanged || locChanged) ? '#f0e6e6' : '#f5f2f0')
+        const msgBlock = hasMsg ? hl(`<p style="margin:0;font-size:14px">💬 ${esc(data.message)}</p>`, '#e8ede6') : ''
+        html = base(`<p style="font-size:15px">Hallo ${fn},</p><p style="font-size:15px">es gibt eine Änderung zu deiner Stunde:</p>${infoBlock}${msgBlock}${btn('Meine Buchungen',APP_URL+'/meine')}${LG}`)
+        break
+      }
       case 'course_cancelled': {
         subject = `Kurs abgesagt: ${data.courseName}`
         const isAllR = data.refundMode === 'all_refund'

@@ -137,6 +137,13 @@ export const Email = {
   courseTimeChanged: (data: { email: string; firstName: string; courseName: string; oldTime: string; newTime: string }) =>
     sendEmail('course_time_changed', data),
 
+  // Sarah-Wunsch 2026-08-18: Uhrzeit/Location EINER einzelnen Stunde geändert
+  // (nicht kursweit) + optionale Freitext-Nachricht. Erreicht ALLE aktuell
+  // aktiv Gebuchten dieser Stunde, auch Nachholer ohne Kurs-Enrollment
+  // (anders als courseTimeChanged, das nur Enrollments erreicht).
+  sessionUpdateNotice: (data: { email: string; firstName: string; courseName: string; date: string; oldTime?: string; newTime?: string; oldLocation?: string; newLocation?: string; message?: string; isSingle?: boolean; sessionType?: string }) =>
+    sendEmail('session_update_notice', data),
+
   courseCancelled: (data: { email: string; firstName: string; courseName: string; reason: string; remainingSessions: number; refundMode: string; guthabenUrl: string | null }) =>
     sendEmail('course_cancelled', data),
 

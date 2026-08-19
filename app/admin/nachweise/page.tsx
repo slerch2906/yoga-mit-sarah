@@ -46,7 +46,19 @@ export default function NachweisePage() {
     document.body.removeChild(a)
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" /></div>
+  // Performance-Fix 2026-08-18 (Sarah): Header + BottomNav bleiben auch
+  // während des Ladens sichtbar (statt die ganze Seite durch einen Spinner
+  // zu ersetzen) — verhindert das "alles baut sich neu auf"-Gefühl beim
+  // Seitenwechsel.
+  if (loading) return (
+    <div className="max-w-md mx-auto min-h-screen">
+      <AppHeader title="AGB-Nachweise" isAdmin />
+      <div className="flex items-center justify-center py-20">
+        <i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" />
+      </div>
+      <BottomNav isAdmin />
+    </div>
+  )
 
   return (
     <div className="max-w-md mx-auto min-h-screen">

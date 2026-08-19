@@ -27,10 +27,15 @@ test.describe('Anwesenheit: Übersicht', () => {
 
     // Entweder Liste oder Empty-State – beide Texte können gleichzeitig im DOM sein
     // (Header "Heutige Stunden" + "Heute keine Stunden" als Empty-State). Wir prüfen
-    // nur dass IRGENDEINER von beiden sichtbar ist via count().
-    const hasContent = await page.getByText(/heutige stunden/i).count()
-    const hasEmpty = await page.getByText(/heute keine stunden/i).count()
-    expect(hasContent + hasEmpty, 'Page muss mind. eine Anzeige haben').toBeGreaterThan(0)
+    // nur dass IRGENDEINER von beiden sichtbar ist.
+    // Performance-Fix 2026-08-18 (Sarah): der Header ist jetzt schon während des
+    // Ladens sichtbar (statt erst danach) — "Heading sichtbar" ist daher kein
+    // verlässliches Signal mehr, dass die Daten schon da sind. Mit toBeVisible()
+    // (statt .count()) wird auf den eigentlichen Inhalt gewartet, nicht nur der
+    // aktuelle Zustand geprüft.
+    await expect(
+      page.getByText(/heutige stunden/i).or(page.getByText(/heute keine stunden/i)).first()
+    ).toBeVisible({ timeout: 8_000 })
   })
 })
 

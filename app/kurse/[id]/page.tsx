@@ -612,7 +612,19 @@ export default function SessionDetailPage() {
     router.push('/kurse')
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" /></div>
+  // Performance-Fix 2026-08-18 (Sarah): Header bleibt auch während des Ladens
+  // sichtbar. BottomNav bewusst NICHT hier — auf dieser Seite ist vor dem
+  // Laden noch nicht bekannt ob Admin oder Yogi, ein falsch geratenes Menü
+  // würde kurz aufblitzen (genau das Nav-Flash-Problem, das wir schon gefixt
+  // haben).
+  if (loading) return (
+    <div className="max-w-md mx-auto min-h-screen">
+      <AppHeader title="" isAdmin={false} />
+      <div className="flex items-center justify-center py-20">
+        <i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" />
+      </div>
+    </div>
+  )
   if (!session) return null
 
   const course = (session as any).course

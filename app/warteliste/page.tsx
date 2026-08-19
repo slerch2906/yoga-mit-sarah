@@ -45,7 +45,18 @@ export default function WartelistePage() {
     setWaitlistItems(prev => prev.filter(w => w.id !== id))
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" /></div>
+  // Performance-Fix 2026-08-18 (Sarah): Header bleibt auch während des Ladens
+  // sichtbar. BottomNav bewusst NICHT hier — vor dem Laden ist noch nicht
+  // bekannt ob Admin oder Yogi, ein falsch geratenes Menü würde kurz
+  // aufblitzen (genau das Nav-Flash-Problem, das wir schon gefixt haben).
+  if (loading) return (
+    <div className="max-w-md mx-auto min-h-screen">
+      <AppHeader title="Warteliste" isAdmin={false} />
+      <div className="flex items-center justify-center py-20">
+        <i className="ti ti-loader-2 animate-spin text-3xl text-yoga-text/40" />
+      </div>
+    </div>
+  )
 
   return (
     <div className="max-w-md mx-auto min-h-screen">

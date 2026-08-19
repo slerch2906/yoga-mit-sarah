@@ -5,7 +5,7 @@ const FROM_EMAIL = 'Mail@yogamitsarah.me'
 const FROM_NAME = 'Yoga mit Sarah'
 const ADMIN_EMAIL = 'Mail@yogamitsarah.me'
 const APP_URL = 'https://kurse.yogamitsarah.me'
-const LOGO = 'https://yogamitsarah.me/wp-content/uploads/2025/09/Logo-300x300.png'
+const LOGO = APP_URL + '/logo.png'
 const TZ = 'Europe/Berlin'
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-function-secret' }
 

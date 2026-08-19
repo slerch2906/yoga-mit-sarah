@@ -13,7 +13,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
-const FALLBACK_AVATAR = 'https://yogamitsarah.me/wp-content/uploads/2025/09/Logo-300x300.png'
+const FALLBACK_AVATAR = '/logo.png'
 
 export default function AdminAnnouncementBubble() {
   const [message, setMessage] = useState<string | null>(null)

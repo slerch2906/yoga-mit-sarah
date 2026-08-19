@@ -152,7 +152,7 @@ export default function PasswortResetPage() {
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <img src="https://yogamitsarah.me/wp-content/uploads/2025/09/Logo-300x300.png"
+          <img src="/logo.png"
             alt="Yoga mit Sarah" className="w-20 h-20 object-contain mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-yoga-text mb-1">Neues Passwort</h1>
           <p className="text-sm text-yoga-text/50">Bitte gib dein neues Passwort ein.</p>

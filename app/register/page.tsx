@@ -212,7 +212,7 @@ function RegisterInner() {
     <div className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-sm">
         <div className="text-center mb-6">
-          <img src="https://yogamitsarah.me/wp-content/uploads/2025/09/Logo-300x300.png" alt="Logo"
+          <img src="/logo.png" alt="Logo"
             className="w-20 h-20 object-contain mx-auto mb-4" />
           <h1 className="text-2xl font-bold mb-1">Willkommen!</h1>
           <p className="text-sm text-yoga-text/50">Sarah hat dich eingeladen.</p>

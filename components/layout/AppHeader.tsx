@@ -34,12 +34,9 @@ export default function AppHeader({ title, subtitle, rightElement, isAdmin, show
       </div>
       <div className="relative z-10 w-[73px] h-[73px] flex-shrink-0 flex items-center justify-center">
         <img
-          src="https://yogamitsarah.me/wp-content/uploads/2025/09/Logo-300x300.png"
+          src="/logo.png"
           alt="Yoga mit Sarah Logo"
           className="w-[73px] h-[73px] object-contain"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = '/logo.png'
-          }}
         />
       </div>
     </div>

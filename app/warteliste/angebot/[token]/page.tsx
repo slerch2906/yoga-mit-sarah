@@ -35,7 +35,7 @@ export default function WaitlistOfferPage() {
     <div className="min-h-screen flex items-center justify-center p-6 bg-yoga-bg">
       <div className="w-full max-w-sm">
         <div className="text-center mb-6">
-          <img src="https://yogamitsarah.me/wp-content/uploads/2025/09/Logo-300x300.png"
+          <img src="/logo.png"
             alt="Logo" className="w-16 h-16 object-contain mx-auto mb-3 rounded-full" />
           <h1 className="text-xl font-bold">Yoga mit Sarah</h1>
         </div>

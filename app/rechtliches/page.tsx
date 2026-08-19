@@ -177,7 +177,7 @@ export default function RechtlichesPage() {
       {/* Header */}
       <div className="px-5 pt-5 pb-4 border-b border-yoga-border bg-yoga-bg sticky top-0 z-10">
         <div className="flex items-center gap-3 mb-3">
-          <img src="https://yogamitsarah.me/wp-content/uploads/2025/09/Logo-300x300.png"
+          <img src="/logo.png"
             alt="Logo" className="w-10 h-10 object-contain" />
           <div>
             <p className="text-base font-bold">Yoga mit Sarah</p>

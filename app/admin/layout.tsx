@@ -146,7 +146,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <div className="hidden md:flex min-h-screen" style={{ background: 'var(--yoga-bg)' }}>
         <div className="w-56 flex-shrink-0 border-r flex flex-col fixed h-full" style={{ background: 'var(--yoga-card)', borderColor: 'var(--yoga-border2)' }}>
           <div className="p-5 border-b flex items-center gap-3" style={{ borderColor: 'var(--yoga-border)' }}>
-            <img src="https://yogamitsarah.me/wp-content/uploads/2025/09/Logo-300x300.png" alt="Logo" className="w-9 h-9 object-contain" />
+            <img src="/logo.png" alt="Logo" className="w-9 h-9 object-contain" />
             <div>
               <div className="font-bold text-sm" style={{ color: 'var(--yoga-text)' }}>Yoga mit Sarah</div>
               <div className="text-xs opacity-50" style={{ color: 'var(--yoga-text)' }}>Admin</div>

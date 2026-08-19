@@ -77,12 +77,14 @@ test.describe('[E2E] Dashboard: "Stunde ändern" über Stunde absagen', () => {
     await page.waitForLoadState('networkidle')
     await page.getByText(`${E2E_PREFIX} Dashboard-Stunde-Aendern`).first().click()
 
-    await expect(page.getByText('Angemeldet (1)')).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByText('Extern (1)')).toBeVisible({ timeout: 5_000 })
+    // Sarah-Wunsch 2026-08-19: N/Gesamt in beiden Überschriften (2 Anmeldungen
+    // insgesamt: 1 Kursmitglied + 1 externer Nachholer).
+    await expect(page.getByText('Angemeldet (1/2)')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText('Extern (1/2)')).toBeVisible({ timeout: 5_000 })
 
     // Kursmitglied (yogi1) steht unter "Angemeldet", Nachholer (yogi2) unter "Extern".
-    const angemeldetHeading = page.getByText('Angemeldet (1)')
-    const externHeading = page.getByText('Extern (1)')
+    const angemeldetHeading = page.getByText('Angemeldet (1/2)')
+    const externHeading = page.getByText('Extern (1/2)')
     const angemeldetBox = await angemeldetHeading.boundingBox()
     const externBox = await externHeading.boundingBox()
     expect(angemeldetBox && externBox && angemeldetBox.y < externBox.y, '"Extern" muss unter "Angemeldet" stehen').toBe(true)

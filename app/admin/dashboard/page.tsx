@@ -1366,13 +1366,18 @@ export default function AdminDashboard() {
                     </button>
                   </div>
                 )
+                // Sarah-Wunsch 2026-08-19: Gesamtanmeldungen auf einen Blick — bei
+                // "Angemeldet" und "Extern" steht jeweils N/Gesamt, damit klar ist
+                // wie viele insgesamt angemeldet sind, ohne addieren zu müssen.
+                // Freie Plätze bleiben bewusst nur auf der Übersichtsseite (X/Y).
+                const totalActive = courseMembers.length + externalMembers.length
                 return (
                   <>
-                    <p className="section-label">Angemeldet ({courseMembers.length})</p>
+                    <p className="section-label">Angemeldet ({courseMembers.length}/{totalActive})</p>
                     {courseMembers.map(renderRow)}
                     {externalMembers.length > 0 && (
                       <>
-                        <p className="section-label mt-3">Extern ({externalMembers.length})</p>
+                        <p className="section-label mt-3">Extern ({externalMembers.length}/{totalActive})</p>
                         {externalMembers.map(renderRow)}
                       </>
                     )}

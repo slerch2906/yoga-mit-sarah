@@ -59,13 +59,18 @@ export default function SessionDetailPage() {
     const user = await getCurrentUser()
     if (!user) { window.location.href = '/login'; return }
 
-    const [{ data: prof }, { data: sess }, { data: myBook }, { data: myWait }, { data: allCredits }] = await Promise.all([
+    // Sarah-Bug-Fix 2026-08-21: my_waitlist_positions() liefert die live aus der
+    // Anstell-Reihenfolge berechnete Position. Die gespeicherte Spalte
+    // waitlist.position wurde beim Verlassen der Liste nie nachgezogen und
+    // konnte dadurch doppelt vergeben sein.
+    const [{ data: prof }, { data: sess }, { data: myBook }, { data: myWait }, { data: allCredits }, { data: livePos }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       // KEIN self-referenzierender Subquery (PostgREST gibt 400). Replacement separat unten laden.
       supabase.from('sessions').select('*, course:courses(*)').eq('id', id).single(),
       supabase.from('bookings').select('*').eq('session_id', id).eq('user_id', user.id).eq('status', 'active').maybeSingle(),
       supabase.from('waitlist').select('*').eq('session_id', id).eq('user_id', user.id).maybeSingle(),
       supabase.from('credits').select('*').eq('user_id', user.id).gt('expires_at', new Date().toISOString()),
+      supabase.rpc('my_waitlist_positions'),
     ])
 
     // Replacement-Session separat laden (Self-Join via PostgREST war fehlerhaft → 400)
@@ -109,7 +114,11 @@ export default function SessionDetailPage() {
     setProfile(prof)
     setSession(sess ? { ...sess, replacement, origin } : sess)
     setMyBooking(myBook)
-    setMyWaitlist(myWait)
+    // Live-Position aus der RPC ueberschreibt die (moeglicherweise veraltete)
+    // gespeicherte position. Fallback auf die alte Spalte, falls die RPC nichts
+    // liefert (z.B. type='notify' — dort gibt es gar keine Position).
+    const myLivePos = (livePos || []).find((p: any) => p.waitlist_id === myWait?.id)
+    setMyWaitlist(myWait ? { ...myWait, position: myLivePos?.live_position ?? myWait.position } : myWait)
     // Welle 2.5: session.max_spots Vorrang (Events/Einzelstunden), Fallback course.
     // Welle 2.11 (Sarah 2026-05-26): external_participants_count mit abziehen.
     // Sarah hatte 12 frei gesehen obwohl Admin externe Teilnehmer eingetragen hatte.

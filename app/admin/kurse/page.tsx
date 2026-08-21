@@ -1662,10 +1662,13 @@ export default function AdminKursePage() {
         .eq('session_id', s.id)
         .eq('status', 'active')
         .order('created_at'),
+      // Sarah-Bug-Fix 2026-08-21: NICHT mehr nach der gespeicherten position
+      // sortieren — die wurde beim Verlassen der Liste nie nachgezogen und konnte
+      // doppelt vergeben sein. Massgeblich ist die Anstell-Reihenfolge
+      // (created_at); die angezeigte Nummer wird daraus live berechnet.
       supabase.from('waitlist')
         .select('id, user_id, position, type, created_at, profile:profiles(id, first_name, last_name, email, is_dummy)')
         .eq('session_id', s.id)
-        .order('position', { ascending: true, nullsFirst: false })
         .order('created_at'),
     ])
     setSessionBookings(bookings || [])
@@ -3495,6 +3498,10 @@ export default function AdminKursePage() {
             {(() => {
               const onWaitlist = sessionWaitlist.filter((w: any) => w.type !== 'notify' && w.position != null)
               const onNotify = sessionWaitlist.filter((w: any) => w.type === 'notify' || w.position == null)
+              // Sarah-Bug-Fix 2026-08-21: angezeigte Nummer live aus der
+              // Anstell-Reihenfolge (sessionWaitlist ist nach created_at sortiert)
+              // statt aus der veralteten gespeicherten position.
+              const livePos = new Map<string, number>(onWaitlist.map((w: any, i: number) => [w.id, i + 1]))
               return (
                 <>
                   {onWaitlist.length > 0 && (
@@ -3506,7 +3513,7 @@ export default function AdminKursePage() {
                             onClick={() => { setParticipantsSession(null); setSessionBookings([]); setSessionWaitlist([]); router.push(`/admin/yogis/${w.profile?.id || w.user_id}`) }}
                             className="flex-1 text-left hover:opacity-70 transition-opacity bg-transparent border-0 cursor-pointer min-w-0">
                             <div className="text-sm font-semibold flex items-center gap-2">
-                              {w.position != null && <span className="text-xs text-yoga-text/50 font-normal">#{w.position}</span>}
+                              <span className="text-xs text-yoga-text/50 font-normal">#{livePos.get(w.id)}</span>
                               <span className="truncate">{w.profile?.first_name} {w.profile?.last_name}</span>
                               {w.profile?.is_dummy && (
                                 <span className="text-xs bg-yoga-text text-white rounded-full px-2 py-0.5 font-normal">Dummy</span>

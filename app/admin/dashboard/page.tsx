@@ -461,11 +461,14 @@ export default function AdminDashboard() {
       .eq('session_id', session.id)
       .order('created_at')
 
+    // Sarah-Bug-Fix 2026-08-21: nach Anstell-Reihenfolge sortieren statt nach der
+    // gespeicherten position (die wurde beim Verlassen der Liste nie nachgezogen
+    // und konnte doppelt vergeben sein). Nummer wird unten live daraus berechnet.
     const { data: waitlist } = await supabase
       .from('waitlist')
       .select('*, profile:profiles(first_name, last_name, email, is_dummy)')
       .eq('session_id', session.id)
-      .order('position')
+      .order('created_at')
 
     setSessionBookings([
       ...(bookings || []).map((b: any) => ({ ...b, _type: 'booking' })),
@@ -1407,6 +1410,10 @@ export default function AdminDashboard() {
               {(() => {
                 const onWaitlist = sessionBookings.filter(b => b._type === 'waitlist' && b.type !== 'notify' && b.position != null)
                 const onNotify = sessionBookings.filter(b => b._type === 'waitlist' && (b.type === 'notify' || b.position == null))
+                // Sarah-Bug-Fix 2026-08-21: Nummer live aus der Anstell-Reihenfolge
+                // (Liste ist nach created_at sortiert) statt aus der veralteten
+                // gespeicherten position.
+                const livePos = new Map<string, number>(onWaitlist.map((w: any, i: number) => [w.id, i + 1]))
                 return (
                   <>
                     {onWaitlist.length > 0 && (
@@ -1418,7 +1425,7 @@ export default function AdminDashboard() {
                               href={`/admin/yogis/${w.user_id}`}
                               className="flex-1 text-left no-underline text-yoga-text cursor-pointer hover:opacity-70 transition-opacity min-w-0">
                               <div className="text-sm font-semibold flex items-center gap-2">
-                                <span className="text-xs text-yoga-text/50 font-normal">#{w.position}</span>
+                                <span className="text-xs text-yoga-text/50 font-normal">#{livePos.get(w.id)}</span>
                                 <span>{w.profile?.first_name} {w.profile?.last_name}</span>
                                 {w.profile?.is_dummy && (
                                   <span className="text-xs bg-yoga-text text-white rounded-full px-2 py-0.5 font-normal">Dummy</span>

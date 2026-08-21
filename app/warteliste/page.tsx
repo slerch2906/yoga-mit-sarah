@@ -21,11 +21,17 @@ export default function WartelistePage() {
       const user = await getCurrentUser()
       if (!user) { window.location.href = '/login'; return }
 
-      const [{ data: prof }, { data: wl }] = await Promise.all([
+      // Sarah-Bug-Fix 2026-08-21: Position wird NICHT mehr aus waitlist.position
+      // gelesen (die wurde beim Anstellen einmal gesetzt und beim Verlassen der
+      // Liste nie nachgezogen → doppelte Nummern). Stattdessen liefert
+      // my_waitlist_positions() die live berechnete Position aus der
+      // Anstell-Reihenfolge.
+      const [{ data: prof }, { data: wl }, { data: livePos }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase.from('waitlist')
           .select('*, session:sessions(*, course:courses(name))')
           .eq('user_id', user.id).order('created_at'),
+        supabase.rpc('my_waitlist_positions'),
       ])
       const agb = await getCurrentAgbVersion(supabase)
       const currentOrder = agb?.sort_order ?? 1
@@ -33,7 +39,13 @@ export default function WartelistePage() {
         window.location.href = '/rechtliches'; return
       }
       setProfile(prof)
-      setWaitlistItems(wl || [])
+      const posById = new Map<string, number>(
+        (livePos || []).map((p: any) => [p.waitlist_id, p.live_position])
+      )
+      setWaitlistItems((wl || []).map((w: any) => ({
+        ...w,
+        position: posById.get(w.id) ?? w.position,
+      })))
     } catch (e) {
       console.error(e)
     }

@@ -1200,7 +1200,11 @@ export default function AdminYogiDetailPage() {
         return { text: `Yogi automatisch von Warteliste entfernt (letzter Credit verbraucht)${cn ? ` — ${cn}` : ''}`, subject: '' }
       }
       case 'waitlist_stale_entry_removed': {
-        return { text: `Verwaister Wartelisten-Eintrag entfernt (Stunde bereits begonnen, nie nachgerückt)`, subject: '' }
+        // 2026-08-21: Der Eintrag nannte bisher keine Stunde — im Protokoll war
+        // nicht nachvollziehbar, WELCHER Wartelistenplatz entfernt wurde. Die
+        // Bereinigung schreibt die session_id mit, also wird sie wie bei den
+        // uebrigen Wartelisten-Eintraegen als Termin angezeigt.
+        return { text: `Verwaister Wartelisten-Eintrag entfernt (Stunde bereits begonnen, nie nachgerückt)`, subject: termin }
       }
       case 'admin_dsgvo_deletion': {
         const reason = d.reason ? ` (Grund: ${d.reason})` : ''
@@ -1219,6 +1223,30 @@ export default function AdminYogiDetailPage() {
         return { text: `Email-Update fehlgeschlagen (${d.error || 'unbekannt'}) — Rollback versucht`, subject: '' }
       case 'waitlist_offer_rollback':
         return { text: `Warteliste-Angebot zurückgerollt (${d.reason || 'unbekannt'})`, subject: termin }
+      // ── Nachgetragen 2026-08-21 ────────────────────────────────────────────
+      // Diese Vorgaenge waren im globalen Protokoll (/admin/protokoll) laengst
+      // sauber beschriftet, im Protokoll des EINZELNEN Yogis fielen sie aber auf
+      // den default-Case — dort stand woertlich "… keine lesbare Beschreibung
+      // verfuegbar". Die Texte sind bewusst dieselben wie in ACTION_LABELS,
+      // damit beide Ansichten denselben Vorgang gleich benennen.
+      case 'session_participants_notified':
+        return { text: `Uhrzeit/Location geändert — Teilnehmer wurden informiert`, subject: termin }
+      case 'course_date_end_and_credits_extended': {
+        const cn = d.course_name || courseName
+        return { text: `Kursende automatisch verlängert (Ersatztermin)${cn ? ` — ${cn}` : ''}`, subject: termin }
+      }
+      case 'course_credits_auto_expired': {
+        const cn = d.course_name || courseName
+        return { text: `8-Tage-Cleanup: Kurs + Credits gelöscht${cn ? ` — ${cn}` : ''}`, subject: '' }
+      }
+      case 'inactivity_cleanup_dryrun':
+        return { text: `Inaktivitäts-Check (Trockenlauf)${d.months_inactive ? ` — Grenze: ${d.months_inactive} Monate` : ''}`, subject: '' }
+      case 'inactivity_cleanup':
+        return { text: `Inaktive Konten gelöscht${d.deleted_count != null ? ` (${d.deleted_count})` : ''}`, subject: '' }
+      case 'yogi_auto_deleted_inactive':
+        return { text: `Konto automatisch gelöscht — ${d.months_inactive || 24} Monate inaktiv`, subject: '' }
+      case 'inactivity_cleanup_error':
+        return { text: `Inaktivitäts-Löschung fehlgeschlagen${d.error ? ` — ${d.error}` : ''}`, subject: '' }
       default:
         return { text: `${entry.action} — keine lesbare Beschreibung verfügbar (bitte Mapping ergänzen)`, subject: '' }
     }

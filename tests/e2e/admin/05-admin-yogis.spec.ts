@@ -74,9 +74,9 @@ test.describe('Admin Yogiverwaltung', () => {
   test('Yogi-Profil: Yogi aus Liste gefunden', async ({ page }) => {
     const yogisPage = new AdminYogisPage(page)
     await yogisPage.goto()
-    // E2E Test-Yogi1 muss in der Liste sichtbar sein
-    await yogisPage.expectYogiVisible(
-      process.env.TEST_YOGI1_EMAIL!.split('@')[0]
-    )
+    // Aktualisiert 2026-08-21: Die E-Mail wurde am 01.06. bewusst aus der
+    // Uebersichtskarte entfernt ("Karte kleiner", Sarah-Wunsch) — sie steht nur
+    // noch im Yogi-Detail. Die Liste zeigt den Namen, danach wird gesucht.
+    await yogisPage.expectYogiVisible('Test Yogi1')
   })
 })

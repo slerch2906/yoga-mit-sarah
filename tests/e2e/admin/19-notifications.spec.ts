@@ -694,12 +694,17 @@ test.describe('[E2E] Welle F: heutige UI-Fixes', () => {
     expect(banner).toMatch(/Punktekarte/)
   })
 
-  test('Banner: X-Button + localStorage-Dismiss', async () => {
+  test('Banner: X-Button + Wegklicken wird gemerkt', async () => {
     const banner = read('components/YogiCreditExpiryBanner.tsx')
     expect(banner).toMatch(/ti-x/)
-    expect(banner).toMatch(/yogi-credit-expiry-dismissed/)
-    expect(banner).toMatch(/localStorage/)
     expect(banner).toMatch(/aria-label="Hinweis schließen"/)
+    // Aktualisiert 2026-08-21: Das Wegklicken lag frueher im localStorage
+    // (Schluessel 'yogi-credit-expiry-dismissed'). Seit dem Umbau auf zentrale
+    // DB-Persistenz (useHintDismissals) ist es logout-fest und geraeteuebergreifend
+    // — Schluessel 'credit_expiry:<id>'. Geprueft wird die Eigenschaft
+    // "Wegklicken wird dauerhaft gemerkt", nicht mehr der Speicherort.
+    expect(banner, 'nutzt die zentrale Hinweis-Merkfunktion').toMatch(/useHintDismissals|dismissHint/)
+    expect(banner, 'merkt sich pro Credit-Hinweis').toMatch(/credit_expiry:/)
   })
 
   test('Banner: Linker Streifen (border-l-4) ENTFERNT', async () => {

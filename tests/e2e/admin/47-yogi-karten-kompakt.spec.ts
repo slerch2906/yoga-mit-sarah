@@ -30,7 +30,11 @@ test.describe('Admin-Yogi-Liste: kompakte Karten', () => {
   test('Name fett + klein (text-sm font-bold), Untertitel klein (text-xs)', () => {
     const src = read(SRC)
     const idx = src.indexOf("router.push(`/admin/yogis/${yogi.id}`)")
-    const card = src.slice(idx, idx + 900)
+    // 2026-08-21: Fenster von 900 auf 1600 Zeichen erweitert. Die Karte ist seit
+    // dem Dummy-Badge und den Credits-/Kurs-Zeilen laenger geworden, dadurch lag
+    // der Untertitel ausserhalb des Ausschnitts — der Test meldete einen Fehler,
+    // obwohl die Formatierung unveraendert korrekt ist.
+    const card = src.slice(idx, idx + 1600)
     expect(card, 'Name: text-sm font-bold').toMatch(/text-sm font-bold/)
     expect(card, 'Untertitel: text-xs').toMatch(/text-xs text-yoga-text\/50/)
     // Nicht mehr die grosse Variante:

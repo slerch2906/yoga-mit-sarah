@@ -299,10 +299,12 @@ test.describe('[E2E] Yogi-Löschung v6: Plätze sofort frei', () => {
 
   test('Email an Sarah (admin_dsgvo_deletion) wird gesendet', () => {
     // 2026-05-25: Refactor auf zentralen Email-Helper (Bug-Fix: direkter fetch
-    // ohne x-function-secret hatte 401 produziert). Page nutzt jetzt
-    // Email.adminDsgvoDeletion(); der Type-String lebt in lib/email.ts.
-    const src = read('app/admin/yogis/[id]/page.tsx')
-    expect(src).toMatch(/Email\.adminDsgvoDeletion/)
+    // ohne x-function-secret hatte 401 produziert).
+    // Aktualisiert 2026-08-21: Seit dem Umbau vom 01.06. verschickt die Route
+    // /api/delete-account die Mail server-seitig (RLS-immun, einheitlich fuer
+    // Selbst- und Admin-Loeschung) — nicht mehr die Yogi-Detailseite.
+    const route = read('app/api/delete-account/route.ts')
+    expect(route, 'Admin-Info-Mail wird server-seitig verschickt').toMatch(/Email\.adminDsgvoDeletion/)
     const helper = read('lib/email.ts')
     expect(helper).toMatch(/admin_dsgvo_deletion/)
   })
@@ -338,8 +340,13 @@ test.describe('[E2E] Geburtsdatum: DB-Schema + Register-Pflicht + Anzeige', () =
     const src = read('app/register/page.tsx')
     expect(src).toMatch(/label.*field-label.*>Geburtsdatum \*</)
     expect(src).toMatch(/type=['"`]date['"`]/)
-    // max-Attribut limitiert auf heute (verhindert Zukunfts-Datum direkt im Picker)
-    expect(src).toMatch(/max=\{[\s\S]*?toISOString\(\)\.split\('T'\)\[0\]/)
+    // max-Attribut limitiert auf heute (verhindert Zukunfts-Datum direkt im Picker).
+    // Aktualisiert 2026-08-21: Frueher inline via toISOString().split('T')[0],
+    // seit der Berlin-Zeitzonen-Umstellung ueber den Helper berlinTodayStr().
+    // Beide Schreibweisen sind zulaessig — geprueft wird, DASS max auf heute steht.
+    expect(src, 'max-Attribut auf heute begrenzt').toMatch(
+      /max=\{(?:berlinTodayStr\(\)|[\s\S]*?toISOString\(\)\.split\('T'\)\[0\])/
+    )
     // HTML required Attribut
     expect(src).toMatch(/value=\{birthdate\}[\s\S]{0,300}required/)
   })

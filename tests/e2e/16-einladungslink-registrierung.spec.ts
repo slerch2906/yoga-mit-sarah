@@ -10,6 +10,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { getServiceClient, getAdminClient } from '../utils/db'
+import { waitForRegistrationRedirect } from '../utils/register'
 import * as dotenv from 'dotenv'
 
 dotenv.config({ path: '.env.test' })
@@ -166,7 +167,7 @@ test.describe('Registrierung: Erfolgreicher Flow', () => {
     await page.getByRole('button', { name: /konto erstellen.*loslegen/i }).click()
 
     // Weiterleitung zu /rechtliches
-    await page.waitForURL(/\/rechtliches/, { timeout: 30_000 })
+    await waitForRegistrationRedirect(page)
     await page.waitForTimeout(1_500)
 
     // DB-Check

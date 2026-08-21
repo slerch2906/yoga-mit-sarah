@@ -61,13 +61,24 @@ test.describe('[E2E] Live-Bugfixes 2026-05-30', () => {
     expect(src.slice(promoIdx, promoIdx + 400)).toMatch(/subject:\s*termin/)
   })
 
-  test('[E2E] Bug2: Dashboard-Kacheln rollen die Stunden DIESER Woche auf', () => {
+  test('[E2E] Bug2: Dashboard-Kacheln beziehen sich auf DIESE Woche', () => {
     const src = fs.readFileSync(path.join(process.cwd(), 'app/admin/dashboard/page.tsx'), 'utf8')
-    // Stats aus den angezeigten Wochen-Stunden + Warteliste auf die Wochen-Sessions gefiltert
-    expect(src.includes('weekSessionIds')).toBe(true)
-    expect(src.includes(".in('session_id', weekSessionIds)")).toBe(true)
-    expect(src.includes('bookingsThisWeek')).toBe(true)
-    expect(src.includes('cancellationsThisWeek')).toBe(true)
+    // Aktualisiert 2026-08-21: Die urspruengliche Umsetzung (weekSessionIds /
+    // bookingsThisWeek — Roll-up ueber die Stunden der Woche) wurde am 02.06.
+    // bewusst ersetzt. Die Kacheln messen jetzt REINE YOGI-AKTIVITAET im
+    // angezeigten Wochenfenster, gezaehlt nach Zeitpunkt der Aktion im
+    // Protokoll — Admin-Aktionen zaehlen nicht mit. Der Test prueft weiterhin
+    // die Kern-Eigenschaft "Kacheln sind auf die angezeigte Woche begrenzt",
+    // nur eben an der aktuellen Umsetzung.
+    expect(src, 'Zaehlung pro Woche vorhanden').toMatch(/countWeekAction/)
+    expect(src, 'Wochenfenster begrenzt die Zaehlung').toMatch(
+      /gte\('created_at', weekStartTs\)[\s\S]{0,40}lt\('created_at', weekEndExclTs\)/
+    )
+    for (const action of ['booking_created', 'booking_cancelled', 'waitlist_joined']) {
+      expect(src, `Kachel-Aktion ${action} wird gezaehlt`).toMatch(
+        new RegExp(`countWeekAction\\('${action}'\\)`)
+      )
+    }
   })
 
   test('[E2E] Bug4: Kachel-Detail (/admin/stats) zeigt echten Titel statt SYS-Container', () => {

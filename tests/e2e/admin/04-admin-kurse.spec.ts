@@ -72,8 +72,15 @@ test.describe('Admin Kursverwaltung', () => {
     await dashboard.goto()
     await dashboard.goToNextWeek()
     await dashboard.goToNextWeek()
-    // Ab Woche +2 muss Format "D. – D. Monat" sein, nicht "Mo, D. Monat"
-    await dashboard.expectWeekRange(/\d+\.\s*–\s*\d+\./)
+    // Ab Woche +2 muss eine SPANNE stehen ("D. – D. Monat"), nicht ein einzelner
+    // Tag ("Mo, D. Monat").
+    //
+    // Korrigiert 2026-08-21: Die Regex kannte nur die Spanne innerhalb eines
+    // Monats. Liegt die Woche +2 ueber einen Monatswechsel, schreibt die App
+    // "31. August – 6. September" — dann steht der Monatsname zwischen den
+    // Zahlen und der Test schlug rein datumsabhaengig fehl. Beide Schreibweisen
+    // sind jetzt erlaubt.
+    await dashboard.expectWeekRange(/\d+\.(?:\s*[A-Za-zÄÖÜäöü]+)?\s*–\s*\d+\.\s*[A-Za-zÄÖÜäöü]+/)
   })
 
   test('Kurs-Rollover: Ausgeschlossene Stunden bekommen keine Buchungen', async ({ page }) => {

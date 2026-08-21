@@ -17,16 +17,25 @@ import { test, expect } from '@playwright/test'
 let edgeFunctionSource: string = ''
 
 test.beforeAll(async () => {
-  // Source-Snapshot der deployten Edge Function (v46) — siehe tests/fixtures/README.md
   const fs = require('fs')
   const path = require('path')
-  // __dirname ist tests/e2e/ → fixture liegt eine Ebene höher in fixtures/
-  const snapshot = path.join(__dirname, '..', 'fixtures', 'send-email-snapshot.txt')
-  if (fs.existsSync(snapshot)) {
-    edgeFunctionSource = fs.readFileSync(snapshot, 'utf-8')
+
+  // Sarah 2026-08-21: Frueher wurde ein eingefrorener Snapshot der Edge Function
+  // geprueft (tests/fixtures/send-email-snapshot.txt, Stand v46 vom 01.06.).
+  // Die Vorlage hat sich seitdem mehrfach geaendert — der Snapshot lief aus dem
+  // Ruder und meldete Fehler fuer Texte, die im echten Code laengst korrekt sind.
+  // Da die Edge Function inzwischen im Repo liegt, wird jetzt direkt die ECHTE
+  // Quelle geprueft. Damit kann der Test nicht mehr veralten.
+  const real = path.join(__dirname, '..', '..', 'supabase', 'functions', 'send-email', 'index.ts')
+  if (fs.existsSync(real)) {
+    edgeFunctionSource = fs.readFileSync(real, 'utf-8')
+  } else {
+    // Fallback: alter Snapshot (falls die Funktion mal ausgelagert wird)
+    const snapshot = path.join(__dirname, '..', 'fixtures', 'send-email-snapshot.txt')
+    if (fs.existsSync(snapshot)) edgeFunctionSource = fs.readFileSync(snapshot, 'utf-8')
   }
   if (!edgeFunctionSource) {
-    console.warn(`[27-email-plausibilitaet] Snapshot nicht gefunden unter ${snapshot}`)
+    console.warn('[27-email-plausibilitaet] Edge-Function-Quelle nicht gefunden')
   }
 })
 

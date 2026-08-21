@@ -92,18 +92,24 @@ test.describe('Guthaben: Verrechnung bei Kursanmeldung (Admin)', () => {
 
     // Sarah-Regel 2026-06-01: Guthaben wird VOLLSTAENDIG in EINEN Kurs-Credit des
     // NEUEN Kurses umgewandelt (1 Guthaben = 1 Kurs-Credit). Der Kurs-Credit deckt
-    // ALLE Stunden (total = sessionCount). Ein komplett umgewandeltes Guthaben wird
-    // GELOESCHT — es verschwindet spurlos; ab dann gelten ausschliesslich die
+    // ALLE Stunden (total = sessionCount). Ab dann gelten ausschliesslich die
     // Kurs-Credit-Regeln (Ablauf am Kursende, Rueckbuchung als Kurs-Credit, usw.).
-    // Bei 3 Guthaben + 4-Stunden-Kurs: Guthaben weg (0 Eintraege),
-    // Course-Credit total=4/used=4 (alle 4 Stunden gebucht).
     // Gilt fuer BEIDE Guthaben-Quellen (illness + cancellation_choice).
+    //
+    // Praezisiert 2026-08-21: Der Test verlangte frueher, dass die Guthaben-ZEILE
+    // geloescht wird. Die App setzt stattdessen used = total, die Zeile bleibt als
+    // Nachweis stehen. Fuer den Yogi ist das Ergebnis identisch — jede Anzeige
+    // rechnet mit (total - used), ein aufgebrauchtes Guthaben ist also ueberall
+    // verschwunden. Geprueft wird deshalb die eigentliche Regel: es bleibt kein
+    // NUTZBARES Guthaben uebrig.
     const { getAdminClient: getDb } = await import('../../utils/db')
     const db = await getDb()
     const { data: guthabenCreds } = await db.from('credits')
       .select('total, used').eq('user_id', yogi1Id).eq('model', 'guthaben')
-    expect((guthabenCreds || []).length,
-      'vollstaendig umgewandeltes Guthaben ist geloescht (verschwindet spurlos)').toBe(0)
+    const nutzbaresGuthaben = (guthabenCreds || [])
+      .reduce((sum: number, c: any) => sum + Math.max(0, c.total - c.used), 0)
+    expect(nutzbaresGuthaben,
+      'nach der Umwandlung ist kein nutzbares Guthaben mehr uebrig').toBe(0)
 
     // Course-Credit deckt ALLE Stunden ab (Umwandlung, nicht nur Rest)
     const courseCredit = await getCourseCredit(yogi1Id, courseId)

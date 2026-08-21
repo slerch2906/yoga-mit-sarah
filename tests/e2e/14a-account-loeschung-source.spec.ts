@@ -34,36 +34,44 @@ test.describe('[E2E] DSGVO Account-Löschung — Source-Smoke', () => {
     expect(src).toMatch(/first_name|last_name/)
   })
 
-  test('Admin-Notification "account_deleted_dsgvo" wird erstellt', async () => {
-    const src = read('app/profil/page.tsx')
-    expect(src).toMatch(/account_deleted_dsgvo|admin_dsgvo_deletion/i)
+  // ── Aktualisiert 2026-08-21 ──────────────────────────────────────────────
+  // Die DSGVO-Mails und die Admin-Benachrichtigung liefen frueher clientseitig
+  // in app/profil bzw. app/admin/yogis/[id]. Seit dem Umbau vom 2026-06-01
+  // laufen sie SERVER-SEITIG in /api/delete-account (Service-Rolle, RLS-immun,
+  // einheitlich fuer Selbst- und Admin-Loeschung). Die Tests pruefen deshalb
+  // jetzt die Route — die Schutzabsicht ("die Mails duerfen nie verlorengehen")
+  // bleibt unveraendert. Gegenrichtung (Client darf es NICHT mehr tun) prueft
+  // tests/e2e/61-dsgvo-loeschung-admin-mail.spec.ts.
+  test('Admin-Notification "account_deleted_dsgvo" wird erstellt (server-seitig)', async () => {
+    const src = read('app/api/delete-account/route.ts')
+    expect(src).toMatch(/account_deleted_dsgvo/)
   })
 
   // Sarah-Befund 2026-05-25: direkter fetch zur Edge Function ohne x-function-secret
   // hat zu 401-Fehler gefuehrt — Admin-Email kam nie an. Loesung: zentraler Email-Helper.
   // Diese Tests verhindern Rueckfall in das direkte-fetch-Pattern.
-  test('Profil-Loeschung nutzt zentralen Email-Helper (kein direkter fetch send-email)', async () => {
-    const src = read('app/profil/page.tsx')
-    expect(src).toMatch(/Email\.adminDsgvoDeletion/)
-    // Kein direkter fetch auf send-email mehr (waere ohne x-function-secret und wuerde 401)
-    expect(src).not.toMatch(/fetch\([^)]*\/functions\/v1\/send-email/)
+  test('Loeschung nutzt zentralen Email-Helper (kein direkter fetch send-email)', async () => {
+    const route = read('app/api/delete-account/route.ts')
+    expect(route).toMatch(/Email\.adminDsgvoDeletion/)
+    // Kein direkter fetch auf send-email (waere ohne x-function-secret und wuerde 401)
+    expect(route).not.toMatch(/fetch\([^)]*\/functions\/v1\/send-email/)
+    for (const p of ['app/profil/page.tsx', 'app/admin/yogis/[id]/page.tsx']) {
+      expect(read(p), `${p} darf send-email nicht direkt aufrufen`)
+        .not.toMatch(/fetch\([^)]*\/functions\/v1\/send-email/)
+    }
   })
 
-  test('Admin-Yogi-Loeschung nutzt zentralen Email-Helper', async () => {
-    const src = read('app/admin/yogis/[id]/page.tsx')
-    expect(src).toMatch(/Email\.adminDsgvoDeletion/)
-    expect(src).not.toMatch(/fetch\([^)]*\/functions\/v1\/send-email/)
-  })
-
-  // Yogi-Bestaetigungs-Email VOR dem finalen Auth-Delete (DSGVO Art. 12)
-  test('Yogi bekommt Bestaetigungs-Email vor Auth-Delete (Profil)', async () => {
-    const src = read('app/profil/page.tsx')
+  // Yogi-Bestaetigungs-Email VOR dem finalen Auth-Delete (DSGVO Art. 12 — danach
+  // ist die Adresse weg). Gilt fuer BEIDE Loeschwege, weil beide dieselbe Route nutzen.
+  test('Yogi bekommt Bestaetigungs-Email vor dem Auth-Delete', async () => {
+    const src = read('app/api/delete-account/route.ts')
     expect(src).toMatch(/Email\.accountDeletedYogi/)
-  })
-
-  test('Yogi bekommt Bestaetigungs-Email vor Auth-Delete (Admin loescht)', async () => {
-    const src = read('app/admin/yogis/[id]/page.tsx')
-    expect(src).toMatch(/Email\.accountDeletedYogi/)
+    const mailIdx = src.indexOf('Email.accountDeletedYogi')
+    const deleteIdx = src.indexOf('auth/v1/admin/users')
+    expect(mailIdx, 'accountDeletedYogi gefunden').toBeGreaterThan(-1)
+    expect(deleteIdx, 'Auth-Delete gefunden').toBeGreaterThan(-1)
+    expect(mailIdx < deleteIdx,
+      'Bestaetigungsmail MUSS vor dem Auth-Delete raus — danach ist die Adresse geloescht').toBe(true)
   })
 
   test('lib/email.ts hat neue Helper adminDsgvoDeletion + accountDeletedYogi', async () => {
@@ -74,19 +82,10 @@ test.describe('[E2E] DSGVO Account-Löschung — Source-Smoke', () => {
     expect(src).toMatch(/account_deleted_yogi/)
   })
 
-  // ── Sarah-Welle 2026-05-25 (Workflow #6): Reihenfolge accountDeletedYogi VOR Auth-Delete ──
-  test('Profil-Pfad: accountDeletedYogi() wird VOR delete-account-Call ausgefuehrt', async () => {
-    const src = read('app/profil/page.tsx')
-    // Reihenfolge: Email.accountDeletedYogi(...) ... /api/delete-account
-    const re = /Email\.accountDeletedYogi[\s\S]+\/api\/delete-account/
-    expect(re.test(src), 'accountDeletedYogi MUSS vor /api/delete-account aufgerufen werden — sonst keine Email mehr nach Auth-Delete').toBe(true)
-  })
-
-  test('Admin-Yogi-Loesch-Pfad: accountDeletedYogi() wird VOR delete-account-Call ausgefuehrt', async () => {
-    const src = read('app/admin/yogis/[id]/page.tsx')
-    const re = /Email\.accountDeletedYogi[\s\S]+\/api\/delete-account/
-    expect(re.test(src), 'accountDeletedYogi MUSS vor /api/delete-account aufgerufen werden — sonst keine Email mehr nach Auth-Delete').toBe(true)
-  })
+  // Hinweis 2026-08-21: Die frueheren zwei Tests "accountDeletedYogi VOR
+  // /api/delete-account" (je einer fuer Profil- und Admin-Pfad) sind entfallen.
+  // Seit die Mail in der Route selbst verschickt wird, ist die Reihenfolge dort
+  // festgelegt und wird oben in einem Test fuer beide Wege geprueft.
 
   test('/api/delete-account ruft auth/v1/admin/users/<id> DELETE auf (server-side Auth-Delete)', async () => {
     const src = read('app/api/delete-account/route.ts')
@@ -99,9 +98,13 @@ test.describe('[E2E] DSGVO Account-Löschung — Source-Smoke', () => {
   //    Der Admin-Loeschpfad schickte ihn NICHT → 401 → Auth-User + E-Mail blieben
   //    bestehen (Adresse nicht mehr registrierbar), Fehler wurde verschluckt.
   //    BEIDE Pfade MUESSEN den Token senden; der Admin-Pfad MUSS Fehlschlag melden. ──
+  // Fix 2026-08-21: Vorher wurde die ERSTE Fundstelle von '/api/delete-account'
+  // genommen — das ist inzwischen ein erklaerender Kommentar, nicht der Aufruf.
+  // Dadurch schlug die Bearer-Pruefung fehl, obwohl der Token korrekt gesendet
+  // wird. Jetzt wird gezielt der fetch-Aufruf gesucht.
   function deleteAccountCallBlock(src: string): string {
-    const idx = src.indexOf('/api/delete-account')
-    expect(idx, '/api/delete-account-Aufruf gefunden').toBeGreaterThan(-1)
+    const idx = src.search(/fetch\(\s*['"`]\/api\/delete-account['"`]/)
+    expect(idx, 'fetch-Aufruf auf /api/delete-account gefunden').toBeGreaterThan(-1)
     return src.slice(idx, idx + 320)
   }
 

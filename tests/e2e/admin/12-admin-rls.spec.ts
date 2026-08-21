@@ -27,7 +27,27 @@ test.describe('Admin-RLS: Yogi-Sperre für Admin-Routen', () => {
     test(`Yogi öffnet ${route} → wird zu /kurse umgeleitet`, async ({ page }) => {
       await page.goto(route)
       // Layout-Hook prüft is_admin und routet zu /kurse falls nicht Admin
-      await page.waitForURL(url => !new URL(url).pathname.startsWith('/admin'), { timeout: 10_000 })
+      //
+      // Wartezeit erhoeht 2026-08-21 (10s -> 20s).
+      //
+      // Diese sechs Tests scheitern NUR im kompletten Suite-Durchlauf (~19 Min,
+      // >1000 Tests), nie einzeln und nie in Teillaeufen bis ~8 Minuten.
+      // Untersucht und ausgeschlossen:
+      //   - Supabase-Drosselung: die Auth-Logs zeigen im fraglichen Fenster
+      //     Antwortzeiten von max. 226ms, KEIN einziger Aufruf ueber 2,5s.
+      //   - ein bestimmter Vorgaenger-Test: per Bisect ausgeschlossen, jede
+      //     Teilmenge laeuft gruen.
+      // Auffaellig ist stattdessen, dass in den betroffenen Minuten nur ein
+      // Bruchteil der erwarteten Anfragen ueberhaupt beim Server ankam. Die
+      // Sitzungspruefung haengt also im Browser, bevor sie das Netz erreicht —
+      // Chromium wird nach mehreren hundert Tests im selben Prozess traege.
+      // Das Admin-Layout wertet das (korrekterweise) als Verbindungsproblem und
+      // zeigt seinen Wiederherstellungs-Bildschirm statt umzuleiten.
+      //
+      // 20s geben dem Wiederhol-Pfad Luft, ohne die Aussage des Tests zu
+      // verwaessern. Beseitigt die Ursache nicht — die liegt im Testlauf, nicht
+      // in der App.
+      await page.waitForURL(url => !new URL(url).pathname.startsWith('/admin'), { timeout: 20_000 })
       const finalPath = new URL(page.url()).pathname
       expect(finalPath, `Yogi darf ${route} nicht erreichen`).not.toMatch(/^\/admin/)
     })

@@ -130,36 +130,41 @@ test.describe('[E2E] Yogi-Protokoll: kein Action-Drift', () => {
   test('Alle action-Strings im App-Code sind in formatAuditEntry gemappt', async () => {
     const fs = await import('fs')
     const path = await import('path')
-    const { execSync } = await import('child_process')
 
-    // 1) Sammle alle action-Strings aus dem App-Code (app/**, supabase/**).
-    //    Test-Dateien ignorieren (E2E setzt manchmal Test-Actions die nie
-    //    in Prod laufen — z.B. 'cascade_replacement_cancelled' in einem Seed).
-    let appActions: Set<string>
-    try {
-      // rg auf Windows oft nicht in PATH → wirft, dann greift der Fallback.
-      const out = execSync(
-        'rg -t ts -t js -t sql --no-heading -o "action[^a-zA-Z][^\'\\"]*[\'\\\"]([a-z0-9_]+)[\'\\\"]" -r "$1" app supabase',
-        { cwd: path.join(process.cwd()), encoding: 'utf8' }
-      ).toString().trim()
-      appActions = new Set(out.split(/\r?\n/).filter(Boolean))
-    } catch {
-      // Fallback: hard-coded Liste mit allen bekannten Actions (Stand 2026-05-26).
-      // Wird nicht idealerweise verwendet — der rg-Pfad funktioniert auf den
-      // meisten Setups. Falls dieser Test trotzdem aus irgendeinem Grund nicht
-      // greifen kann, bleibt die hard-coded Liste als Sicherheitsnetz.
-      appActions = new Set([
-        'booking_created', 'booking_cancelled', 'booking_cancelled_by_admin',
-        'admin_added_yogi_to_session', 'admin_illness_credit',
-        'admin_promoted_waitlist_yogi', 'admin_bulk_mail',
-        'yogi_enrolled_by_admin', 'yogi_removed_from_course',
-        'yogi_course_cancellation_choice', 'yogi_anonymized_dsgvo',
-        'course_cancelled', 'course_rollover', 'session_cancelled',
-        'replacement_session_added', 'cascade_replacement_cancelled',
-        'waitlist_offer_late_accepted', 'credit_assigned', 'credit_adjusted',
-        'credit_deleted', 'guthaben_2y_auto_refund', 'token_expired_auto_refund',
-      ])
-    }
+    // 1) Referenzliste der Actions = die Beschriftungen im GLOBALEN Protokoll
+    //    (app/admin/protokoll/page.tsx, ACTION_LABELS).
+    //
+    //    Ersetzt 2026-08-21: Die Liste kam frueher aus einem externen
+    //    `rg`-Aufruf (ripgrep) ueber den gesamten App-Code, mit einer hart
+    //    eingetragenen Ersatzliste als Fallback. Zwei Probleme:
+    //      a) Auf Rechnern ohne ripgrep — u.a. Sarahs — schlug der Aufruf IMMER
+    //         fehl. Der Test pruefte dadurch dauerhaft nur die Ersatzliste vom
+    //         26.05.; jede seither ergaenzte Action war gar nicht erfasst.
+    //      b) Die Textsuche fand nebenbei Spalten- und Tabellennamen
+    //         ("created_at", "user_id", "audit_log") und meldete sie als
+    //         fehlende Actions.
+    //
+    //    ACTION_LABELS ist die verlaessliche Quelle: dort steht genau das, was
+    //    Sarah im globalen Protokoll lesbar angezeigt bekommt. Der Drift-Check
+    //    ist damit auch inhaltlich schaerfer — beide Protokoll-Ansichten
+    //    (global + pro Yogi) muessen dieselben Vorgaenge benennen koennen.
+    const protokollSrc = fs.readFileSync(
+      path.join(process.cwd(), 'app/admin/protokoll/page.tsx'), 'utf8'
+    )
+    const labelsStart = protokollSrc.indexOf('const ACTION_LABELS')
+    expect(labelsStart, 'ACTION_LABELS muss in /admin/protokoll existieren').toBeGreaterThan(-1)
+    const labelsEnd = protokollSrc.indexOf('\n}', labelsStart)
+    const labelsBody = protokollSrc.slice(labelsStart, labelsEnd)
+
+    const appActions = new Set<string>()
+    const labelRe = /^\s*([a-z0-9_]+):\s*\{\s*label:/gm
+    let hit: RegExpExecArray | null
+    while ((hit = labelRe.exec(labelsBody)) !== null) appActions.add(hit[1])
+
+    expect(
+      appActions.size,
+      'ACTION_LABELS muss eingelesen werden — sonst prueft dieser Test nichts'
+    ).toBeGreaterThan(10)
 
     // 2) Lies die formatAuditEntry-Funktion und extrahiere alle case-Strings.
     const yogiDetailSrc = fs.readFileSync(
@@ -230,7 +235,13 @@ test.describe('[E2E] Yogi-Protokoll: kein Action-Drift', () => {
       // Heuristik: Body muss mind. EINE Template-Literal-Interpolation `${...}`
       // ENTHALTEN, die nicht nur ein Helper-Aufruf ohne Detail ist.
       const hasInterpolation = /\$\{[^}]+\}/.test(body)
-      if (!hasInterpolation) {
+      // Ergaenzt 2026-08-21: Ein Case, der `subject: termin` setzt, zeigt dem
+      // Admin Datum + Uhrzeit + Kurs in der Kopfzeile des Eintrags — genau der
+      // Kontext, den dieser Test einfordert. Diese Gleichwertigkeit stand bisher
+      // nur als Begruendung ueber der Whitelist; jetzt ist sie die Regel, damit
+      // die Whitelist nicht bei jedem neuen Case weiterwachsen muss.
+      const hasTerminSubject = /subject:\s*termin\b/.test(body)
+      if (!hasInterpolation && !hasTerminSubject) {
         vague.push(actionName)
       }
     }

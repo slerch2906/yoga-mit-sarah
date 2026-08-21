@@ -244,6 +244,120 @@ export async function giveYogiSingleCredit(userId: string, count = 5) {
   return data?.id
 }
 
+// ── System-Container ──────────────────────────────────────────────────────────
+
+/**
+ * Stellt sicher, dass die SYS-Container-Kurse existieren (Sarah 2026-08-21).
+ *
+ * Einzelstunden und Events haengen technisch an unsichtbaren "Container"-Kursen.
+ * Auf Prod entstehen die automatisch, sobald man die erste Einzelstunde bzw. das
+ * erste Event anlegt. Auf Staging waren sie NIE vorhanden, weil dort nie eine
+ * ueber die Oberflaeche erstellt wurde — dadurch schlugen rund ein Dutzend Tests
+ * fehl, die Events/Einzelstunden anlegen wollen (course_id war undefined →
+ * Session-Insert lieferte null → "Cannot read properties of null").
+ *
+ * Idempotent: legt nur an, was fehlt. Namen und Felder entsprechen exakt dem
+ * Prod-Bestand, damit die Tests dieselbe Ausgangslage vorfinden.
+ */
+export async function ensureSystemContainers() {
+  // Service-Client: Stammdaten-Setup ist unabhaengig von RLS-Regeln fuer Admins.
+  const db = getServiceClient()
+  const { data: existing } = await db.from('courses')
+    .select('id, name').eq('is_system_container', true)
+  const have = new Set((existing || []).map((c: any) => c.name))
+
+  const CONTAINERS = [
+    { name: 'SYS · Einzelstunden',    total_units: 0 },
+    { name: 'SYS · Events (kostenlos)', total_units: 1 },
+    { name: 'SYS · Events (Credit)',    total_units: 1 },
+    { name: 'SYS · Events (bezahlt)',   total_units: 2 },
+  ]
+
+  const missing = CONTAINERS.filter(c => !have.has(c.name))
+  if (missing.length === 0) return
+
+  const today = new Date().toISOString().slice(0, 10)
+  await db.from('courses').insert(missing.map(c => ({
+    name: c.name,
+    weekday: 'Montag',
+    time_start: '00:00:00',
+    duration_min: 60,
+    max_spots: 99,
+    total_units: c.total_units,
+    date_start: today,
+    date_end: today,
+    is_active: true,
+    is_single: false,
+    is_open: false,
+    is_free: false,
+    is_system_container: true,
+  })))
+  console.log(`  ✓ SYS-Container ergaenzt: ${missing.map(c => c.name).join(', ')}`)
+}
+
+/**
+ * Stellt die uebrigen Stammdaten sicher, die auf Prod existieren, auf Staging
+ * aber nie angelegt wurden (Sarah 2026-08-21). Gleiche Ursache wie bei den
+ * SYS-Containern: entsteht auf Prod durch normale Nutzung, auf Staging nie.
+ *
+ *  - agb_versions: ohne Eintraege schlagen alle AGB-/Re-Acceptance-Tests fehl
+ *  - admin_announcement: Single-Row-Tabelle (id=1) fuer die Sarah-Sprechblase
+ *
+ * Idempotent — legt nur an, was fehlt, und ueberschreibt nichts.
+ */
+export async function ensureBaselineData() {
+  // Service-Client (nicht der Admin-Client): admin_announcement erlaubt per RLS
+  // kein INSERT durch angemeldete Admins — die Zeile entsteht auf Prod ueber eine
+  // Migration. Fuer Stammdaten im Test-Setup ist die Service-Rolle korrekt.
+  const db = getServiceClient()
+
+  // AGB-Versionen (Wortlaut identisch zum Prod-Bestand)
+  const { data: agb } = await db.from('agb_versions').select('sort_order')
+  if (!agb || agb.length === 0) {
+    await db.from('agb_versions').insert([
+      { label: 'Dezember 2025', changelog: 'Erste Version der AGB.', sort_order: 1 },
+      {
+        label: 'Juni 2026',
+        changelog: 'Stornofrist für Kurse vereinfacht: kostenfreie Stornierung bis 14 Tage vor '
+          + 'Kursbeginn — danach gilt „gebucht ist gebucht" (volle Kursgebühr). Ersatzteilnehmer '
+          + 'jederzeit möglich. (Die frühere 30-€-Zwischenstufe im Fenster 13–7 Tage entfällt.)',
+        sort_order: 2,
+      },
+    ])
+    console.log('  ✓ agb_versions ergaenzt (Dezember 2025 + Juni 2026)')
+  }
+
+  // Sprechblasen-Zeile (Single-Row, id=1) — inaktiv, damit nichts angezeigt wird.
+  // message ist NOT NULL → leerer String statt null.
+  const { data: ann } = await db.from('admin_announcement').select('id').limit(1)
+  if (!ann || ann.length === 0) {
+    const { error } = await db.from('admin_announcement')
+      .insert({ id: 1, message: '', is_active: false })
+    if (error) console.warn('  ! admin_announcement konnte nicht angelegt werden:', error.message)
+    else console.log('  ✓ admin_announcement-Zeile ergaenzt (inaktiv)')
+  }
+
+  // Testnutzer auf die AKTUELLE AGB-Version heben (Sarah 2026-08-21).
+  // Die App leitet jeden Nutzer mit veralteter agb_version zwangsweise auf
+  // /rechtliches um. ensureTestUser setzt agb_version nicht — solange die
+  // Tabelle leer war, fiel das nicht auf. Sobald es mehr als eine Version gibt,
+  // landen sonst ALLE UI-Tests auf der Rechtliches-Seite statt auf ihrem Ziel.
+  // Deshalb hier zentral nachziehen, passend zur jeweils hoechsten Version.
+  const { data: cur } = await db.from('agb_versions')
+    .select('sort_order, label').order('sort_order', { ascending: false }).limit(1).maybeSingle()
+  const currentOrder = (cur as any)?.sort_order
+  if (currentOrder) {
+    const emails = [
+      process.env.TEST_ADMIN_EMAIL, process.env.TEST_YOGI1_EMAIL, process.env.TEST_YOGI2_EMAIL,
+    ].filter(Boolean) as string[]
+    const { error } = await db.from('profiles')
+      .update({ agb_version: currentOrder, legal_accepted_at: new Date().toISOString() })
+      .in('email', emails)
+    if (error) console.warn('  ! agb_version der Testnutzer nicht gesetzt:', error.message)
+    else console.log(`  ✓ Testnutzer auf AGB-Version ${currentOrder} gesetzt`)
+  }
+}
+
 // ── Bereinigung ───────────────────────────────────────────────────────────────
 
 export async function cleanupAllE2EData() {

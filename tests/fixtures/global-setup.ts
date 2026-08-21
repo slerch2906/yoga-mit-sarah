@@ -10,7 +10,7 @@ import { chromium, FullConfig } from '@playwright/test'
 import * as dotenv from 'dotenv'
 import * as fs from 'fs'
 import * as path from 'path'
-import { ensureTestUser, cleanupAllE2EData } from '../utils/seed'
+import { ensureTestUser, cleanupAllE2EData, ensureSystemContainers, ensureBaselineData } from '../utils/seed'
 
 dotenv.config({ path: '.env.test' })
 
@@ -109,6 +109,14 @@ export default async function globalSetup(config: FullConfig) {
   // Alte Testdaten bereinigen (jetzt kann sich der Admin sicher anmelden)
   console.log('\n🧹 Alte Testdaten bereinigen...')
   await cleanupAllE2EData()
+
+  // Sarah 2026-08-21: SYS-Container sicherstellen. Einzelstunden/Events haengen
+  // an diesen unsichtbaren Kursen; auf Staging fehlten sie komplett, wodurch
+  // rund ein Dutzend Tests scheiterte. NACH dem Cleanup, damit sie nicht
+  // versehentlich mit weggeraeumt werden.
+  console.log('\n📦 Stammdaten pruefen...')
+  await ensureSystemContainers()
+  await ensureBaselineData()
 
   // Browser-Sessions (eingeloggte Zustände) speichern
   console.log('\n🔐 Browser-Sessions einloggen und speichern...')

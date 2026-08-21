@@ -33,7 +33,7 @@ test.describe('[E2E-Logic] Charity-Booking — Workflow ohne Credit', () => {
 
   test.beforeAll(async () => {
     const db = getServiceClient()
-    yogi1Id = (await ensureTestUser('test.yogi1@yogamitsarah.me', 'TestYogi2024!sicher'))
+    yogi1Id = (await ensureTestUser(process.env.TEST_YOGI1_EMAIL!, process.env.TEST_YOGI1_PASSWORD!))
     // Charity-Kurs anlegen: is_single=true, is_free=true
     const dateStr = futureDateStr(7)
     const { data: course } = await db.from('courses').insert({
@@ -120,8 +120,8 @@ test.describe('[E2E-Logic] Charity-Waitlist — Auto-Promote ohne Credit', () =>
 
   test.beforeAll(async () => {
     const db = getServiceClient()
-    yogi1Id = (await ensureTestUser('test.yogi1@yogamitsarah.me', 'TestYogi2024!sicher'))
-    yogi2Id = (await ensureTestUser('test.yogi2@yogamitsarah.me', 'TestYogi2024!sicher'))
+    yogi1Id = (await ensureTestUser(process.env.TEST_YOGI1_EMAIL!, process.env.TEST_YOGI1_PASSWORD!))
+    yogi2Id = (await ensureTestUser(process.env.TEST_YOGI2_EMAIL!, process.env.TEST_YOGI2_PASSWORD!))
     const dateStr = futureDateStr(7)
     const { data: course } = await db.from('courses').insert({
       name: `${tag} Charity-Voll`,
@@ -311,8 +311,8 @@ test.describe('[E2E-Logic] fn_notify_cancellation_complete — Trigger-Logik', (
 
   test.beforeAll(async () => {
     const db = getServiceClient()
-    yogi1Id = (await ensureTestUser('test.yogi1@yogamitsarah.me', 'TestYogi2024!sicher'))
-    yogi2Id = (await ensureTestUser('test.yogi2@yogamitsarah.me', 'TestYogi2024!sicher'))
+    yogi1Id = (await ensureTestUser(process.env.TEST_YOGI1_EMAIL!, process.env.TEST_YOGI1_PASSWORD!))
+    yogi2Id = (await ensureTestUser(process.env.TEST_YOGI2_EMAIL!, process.env.TEST_YOGI2_PASSWORD!))
     const dateStr = futureDateStr(30)
     const { data: course } = await db.from('courses').insert({
       name: `${E2E_PREFIX}-Trigger-Test-${Date.now()}`,

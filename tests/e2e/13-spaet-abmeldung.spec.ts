@@ -198,15 +198,25 @@ test.describe('Spät-Abmeldung: UI zeigt Stornofrist-Warnung', () => {
     // 3h-Grenze konnte vorher das Rendering kippen — daher Soft-Fallback:
     // mindestens das Wort "3" + "Stunde" muss irgendwo im body auftauchen
     // ODER der Frist-Banner-Text — eines davon reicht.
-    const bodyText = (await page.locator('body').textContent({ timeout: 8_000 })) || ''
-    const hasFristKeyword = /stornofrist|kein.*credit|zu sp[äa]t|innerhalb.*3|3-stunden-frist|weniger als 3 stunden/i.test(bodyText)
-    const has3hMention = /3\s*stunden?/i.test(bodyText)
-    expect(
-      hasFristKeyword || has3hMention,
-      `Erwartet Frist-Hinweis ODER "3 Stunden"-Erwähnung im body. Beides fehlt — Sessionstart vielleicht jenseits 3h. Body: ${bodyText.slice(0, 300)}`,
-    ).toBe(true)
-    // Welle 5: Abmelde-Button trotzdem grundsätzlich verfügbar (UI erlaubt Spät-Abmeldung mit Warnung)
+    // Korrigiert 2026-08-21: Der Seitentext wurde frueher sofort nach
+    // `networkidle` gelesen. Die Detailansicht rendert ihren Inhalt aber erst
+    // nach der Hydration — der Test erwischte dadurch nur die Next.js-
+    // Skriptdaten und meldete den Frist-Hinweis als fehlend, obwohl er gleich
+    // danach erschien. Jetzt wird zuerst auf den fertig gerenderten Inhalt
+    // gewartet (Abmelde-Button) und der Text danach geprueft.
     const abmeldButton = page.getByRole('button', { name: /abmelden|austragen/i })
-    await expect(abmeldButton.first()).toBeVisible({ timeout: 5_000 })
+    await expect(abmeldButton.first()).toBeVisible({ timeout: 15_000 })
+
+    const fristRegex = /stornofrist|kein.*credit|zu sp[äa]t|innerhalb.*3|3-stunden-frist|weniger als 3 stunden|3\s*stunden?/i
+    let bodyText = ''
+    await expect
+      .poll(
+        async () => {
+          bodyText = (await page.locator('body').innerText().catch(() => '')) || ''
+          return fristRegex.test(bodyText)
+        },
+        { timeout: 10_000 }
+      )
+      .toBe(true)
   })
 })

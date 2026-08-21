@@ -41,8 +41,13 @@ export class AdminYogisPage {
 
   async submitInvite() {
     await this.page.getByRole('button', { name: /einladungslink/i }).click()
+    // 2026-08-21: Ohne .first() traf dieser Ausdruck nach einer ERFOLGREICHEN
+    // Einladung drei Elemente gleichzeitig (Seitenueberschrift "Einladung
+    // erstellt", Panel-Ueberschrift "Einladung erstellt!" und den Knopf "Link
+    // kopieren") — Playwright bricht dann mit einem Eindeutigkeits-Fehler ab.
+    // Der Test schlug also ausgerechnet dann fehl, wenn alles funktioniert hat.
     await expect(
-      this.page.getByText(/einladung.*erstellt|link.*kopier|erfolgreich/i)
+      this.page.getByText(/einladung.*erstellt|link.*kopier|erfolgreich/i).first()
     ).toBeVisible({ timeout: 10_000 })
   }
 
@@ -55,10 +60,19 @@ export class AdminYogisPage {
   // ── Kurs-Dropdown ─────────────────────────────────────────────────────────
 
   async expectCourseDropdownContains(text: string) {
+    // 2026-08-21: Das Dropdown wird erst nach der Hydration per Supabase-Query
+    // gefuellt — `networkidle` ist da schon vorbei. Ein einmaliges Auslesen war
+    // deshalb flaky (mal leer, mal befuellt). Jetzt wird gepollt.
     const dropdown = this.page.getByRole('combobox')
-    const options = await dropdown.locator('option').allTextContents()
-    const found = options.some(o => o.toLowerCase().includes(text.toLowerCase()))
-    expect(found, `Kurs-Dropdown enthält nicht: "${text}"`).toBe(true)
+    await expect
+      .poll(
+        async () => {
+          const options = await dropdown.locator('option').allTextContents()
+          return options.some(o => o.toLowerCase().includes(text.toLowerCase()))
+        },
+        { message: `Kurs-Dropdown enthält nicht: "${text}"`, timeout: 10_000 }
+      )
+      .toBe(true)
   }
 
   // ── Yogi-Profil ───────────────────────────────────────────────────────────

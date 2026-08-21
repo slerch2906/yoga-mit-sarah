@@ -129,9 +129,15 @@ test.describe('Stunde absagen: Kurscredits reduzieren statt Rückbuchung', () =>
     await page.goto('/admin/kurse')
     await page.waitForLoadState('networkidle')
 
-    await expect(page.getByText(`${E2E_PREFIX} Credits-Reduzieren-Test`).first()).toBeVisible({ timeout: 8_000 })
-    // Einziger Testkurs auf der Seite (isolierte Testdaten) — "Termine" klappt die Stundenliste auf.
-    await page.getByRole('button', { name: /termine/i }).first().click()
-    await expect(page.getByText(/ausgefallen \(credits reduziert\)/i).first()).toBeVisible({ timeout: 8_000 })
+    // Korrigiert 2026-08-21: Der Test ging davon aus, sein Kurs sei der einzige
+    // auf der Seite, und klickte auf den ERSTEN "Termine"-Knopf ueberhaupt.
+    // Sobald ein anderer Test parallel einen Kurs angelegt hatte, klappte er
+    // die falsche Stundenliste auf und fand sein Label nicht. Allein lief er
+    // gruen, im kompletten Durchlauf rot. Der Knopf wird jetzt innerhalb der
+    // Karte des eigenen Kurses gesucht.
+    const courseCard = page.locator('.card', { hasText: `${E2E_PREFIX} Credits-Reduzieren-Test` }).first()
+    await expect(courseCard).toBeVisible({ timeout: 8_000 })
+    await courseCard.getByRole('button', { name: /termine/i }).first().click()
+    await expect(courseCard.getByText(/ausgefallen \(credits reduziert\)/i).first()).toBeVisible({ timeout: 8_000 })
   })
 })

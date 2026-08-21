@@ -13,6 +13,7 @@ import * as dotenv from 'dotenv'
 import { getAdminClient, getServiceClient, getUserIdByEmail } from '../utils/db'
 import { createTestCourse, E2E_PREFIX } from '../utils/seed'
 import { LoginPage } from '../page-objects/LoginPage'
+import { waitForRegistrationRedirect } from '../utils/register'
 
 dotenv.config({ path: '.env.test' })
 
@@ -92,7 +93,7 @@ test.describe('[E2E] Coverage: Einladung mit Kurs → Auto-Einbuchung', () => {
     await page.locator('input[type="date"]').fill(bd.toISOString().split('T')[0])
     await page.getByRole('button', { name: /konto erstellen.*loslegen/i }).click()
 
-    await page.waitForURL(/\/rechtliches/, { timeout: 30_000 })
+    await waitForRegistrationRedirect(page)
     await page.waitForTimeout(2_000) // Enrollment/Buchungen laufen nach signUp asynchron
 
     const db = await getAdminClient()
@@ -148,7 +149,15 @@ test.describe('[E2E] Coverage: AGB-Re-Akzeptanz → Redirect', () => {
       // 2) AGB künstlich "veralten"
       await s.from('profiles').update({ agb_version: currentOrder - 1 }).eq('id', yogi1Id)
       // 3) /profil → Konsequenz: Redirect auf /rechtliches (Re-Akzeptanz erzwungen)
-      await page.goto('/profil')
+      //
+      // Korrigiert 2026-08-21: Genau dieser Redirect laesst `page.goto` mit
+      // net::ERR_ABORTED abbrechen — der Seitenaufruf wird ja unterbrochen,
+      // weil die App sofort weiterleitet. Der Abbruch ist hier also das
+      // ERWARTETE Verhalten und kein Fehler. Er wird verschluckt; geprueft
+      // wird danach das Ziel der Weiterleitung.
+      await page.goto('/profil').catch((err: any) => {
+        if (!/ERR_ABORTED/.test(String(err?.message))) throw err
+      })
       await page.waitForURL(/\/rechtliches/, { timeout: 15_000 })
       await expect(page).toHaveURL(/\/rechtliches/)
     } finally {
